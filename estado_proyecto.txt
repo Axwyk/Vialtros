@@ -1,0 +1,81 @@
+﻿====================================================
+  VIALTROS -- ESTADO DEL PROYECTO
+  Ultima actualizacion: 5 de abril de 2026
+====================================================
+
+
+=== LISTO ===
+
+BACKEND
+  1.  Modelo User personalizado con roles (admin, driver, user)
+  2.  Modelos: Driver, Passenger, Route, Tracking, PickupStatus
+  3.  Autenticacion JWT (login / refresh token)
+  4.  API endpoint: /api/token/ (obtener tokens)
+  5.  API endpoint: /api/users/me/ (datos del usuario autenticado)
+  6.  API endpoint: /api/dashboard/ (estadisticas: rutas, usuarios, trackings)
+  7.  WebSocket para tracking en tiempo real (Django Channels + Daphne)
+  8.  Django Admin con UserAdmin personalizado
+  9.  Serializers completos: UserSerializer, UserCreateSerializer (con set_password),
+      UserBasicSerializer, DriverSerializer, PassengerSerializer,
+      RouteSerializer (con passenger_count), TrackingSerializer
+  10. ViewSets con permisos por rol: UserViewSet, DriverViewSet, PassengerViewSet,
+      RouteViewSet, TrackingViewSet
+  11. URLs registradas: users, drivers, passengers, routes, tracking
+
+FRONTEND
+  12. Login con JWT, almacenamiento de access/refresh/role/username en localStorage
+  13. Validacion de token al iniciar la app (force logout si token invalido)
+  14. Rutas protegidas con PrivateRoute
+  15. Navbar global: solo visible cuando hay sesion activa (oculto en login)
+  16. Dashboard SaaS profesional:
+      - StatCards, HeroCard, ActivityFeed (272px lateral), MiniChart SVG semanal
+      - Saludo dinamico por hora + nombre de usuario
+      - Grid: contenido principal + feed lateral fijo
+  17. Logo SVG propio (Logo.js): variante light/default, favicon.svg
+  18. Pagina de login rediseniada (split screen SaaS):
+      - Panel izquierdo: gradiente azul, logo grande (80px), copy orientado al usuario,
+        features con checkmarks, shapes decorativos SVG
+      - Panel derecho: inputs con iconos internos (usuario/candado), boton ojo
+        para mostrar/ocultar contrasena, spinner de carga, chip de error
+      - Sin navbar, ocupa 100vh sin scroll
+  19. Iconografia SVG inline profesional (sin dependencias externas)
+  20. Servicio API admin (services/admin.js): CRUD completo para users, drivers, routes
+  21. Componente Modal reutilizable (sin cierre por clic exterior ni ESC)
+  22. AdminUsersPage (/admin/users): tabla + modal create/edit, show password checkbox,
+      labels text-sm, badge de rol y estado activo
+  23. AdminDriversPage (/admin/drivers): tabla + modal create/edit con selector de usuario
+  24. AdminRoutesPage (/admin/routes): tabla + modal create/edit con selector de conductor
+  25. Registro de rutas en App.js: /admin/users, /admin/drivers, /admin/routes
+  26. index.html: lang=es, SEO meta tags, Open Graph, Twitter Card, JSON-LD SoftwareApplication
+  27. Titulo de pestana: "Vialtros -- Gestion de rutas" (generico, no escolar)
+
+    28. Rediseño completo de la landing page: split-screen, fondo suavizado (gradiente y SVG abstracto), hero profesional, sin emojis.
+    29. Iconografía unificada: solo SVG inline outline estilo Lucide, sin dependencias externas ni emojis en todo el frontend.
+
+
+=== PENDIENTE ===
+
+BACKEND
+  1. Endpoint para que el driver marque estado de pasajero (recogido / no recogido)
+  2. Endpoint de detalle: ruta y conductor asignado al usuario
+  3. Paginacion en listados
+  4. Filtros en listados (por rol, estado, ruta)
+  5. Manejo de errores global y validaciones adicionales
+
+FRONTEND
+  6.  Pagina: Ver mis rutas (/driver/routes) -- lista de pasajeros + toggle recogido
+  7.  Pagina: Ver mi ruta y conductor (/user/route) -- mapa + datos del conductor
+  8.  Pagina: Mi Perfil (/profile) -- editar datos personales
+  9.  Navegacion mobile (menu hamburguesa)
+  10. Notificaciones / toasts de feedback (success, error, warning)
+  11. Manejo de expiracion de token (refresh automatico)
+  12. Vista de tracking mejorada: multiples pasajeros en mapa con estado
+
+GENERAL
+  13. Migracion a PostgreSQL para produccion
+  14. Variables de entorno .env documentadas (backend y frontend)
+  15. Tests unitarios backend (models, views, serializers)
+  16. Tests frontend (componentes clave)
+  17. Configuracion de produccion (ALLOWED_HOSTS, DEBUG=False, CORS, HTTPS)
+
+====================================================
