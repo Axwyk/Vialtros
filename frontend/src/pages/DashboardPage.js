@@ -26,7 +26,9 @@ function formatDate() {
 export default function DashboardPage({ role, onLogout }) {
   const [stats, setStats]   = useState(null);
   const [loading, setLoading] = useState(true);
-  const username = localStorage.getItem('username') || 'Usuario';
+  const usernameRaw = localStorage.getItem('username') || 'Usuario';
+  // Capitaliza solo la primera letra, el resto en minúsculas
+  const username = usernameRaw.charAt(0).toUpperCase() + usernameRaw.slice(1).toLowerCase();
 
   useEffect(() => {
     getDashboardStats()

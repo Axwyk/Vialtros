@@ -88,18 +88,20 @@ ASGI_APPLICATION = 'core.asgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
+#
+# Usa PostgreSQL si tienes variables de entorno DB_ENGINE=django.db.backends.postgresql, DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT
+# Usa SQLite por defecto si no hay variables de entorno (útil para desarrollo local)
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('DB_NAME', 'vialtros_db'),
-        'USER': os.environ.get('DB_USER', 'vialtros_user'),
+        'ENGINE': os.environ.get('DB_ENGINE', 'django.db.backends.sqlite3'),
+        'NAME': os.environ.get('DB_NAME', os.path.join(BASE_DIR, 'db.sqlite3')),
+        'USER': os.environ.get('DB_USER', ''),
         'PASSWORD': os.environ.get('DB_PASSWORD', ''),
-        'HOST': os.environ.get('DB_HOST', 'localhost'),
-        'PORT': os.environ.get('DB_PORT', '5432'),
-        'OPTIONS': {
-            'client_encoding': 'UTF8',
-        },
+        'HOST': os.environ.get('DB_HOST', ''),
+        'PORT': os.environ.get('DB_PORT', ''),
+        # Solo para PostgreSQL: client_encoding
+        'OPTIONS': {'client_encoding': 'UTF8'} if os.environ.get('DB_ENGINE') == 'django.db.backends.postgresql' else {},
     }
 }
 
@@ -154,6 +156,11 @@ REST_FRAMEWORK = {
 
 # Custom user model
 AUTH_USER_MODEL = 'users.User'
+
+# Backend de autenticación insensible a mayúsculas/minúsculas
+AUTHENTICATION_BACKENDS = [
+    'users.backends.CaseInsensitiveModelBackend',
+]
 
 # Channels config
 # Channels config
