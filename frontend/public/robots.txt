@@ -1,0 +1,7 @@
+# Permitir solo la página pública
+User-agent: *
+Allow: /$
+Disallow: /login
+Disallow: /dashboard
+Disallow: /admin/
+Disallow: /tracking/
