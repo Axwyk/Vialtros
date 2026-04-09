@@ -1,5 +1,11 @@
 # Vialtros
 
+Reunion: Vialtros
+Jueves, 9 abril · 12:00 – 1:00pm
+Zona horaria: America/Bogota
+Información para unirse a la reunión de Google Meet
+Vínculo a la videollamada: https://meet.google.com/zkp-gxgc-zga
+
 Plataforma SaaS de gestión de rutas con seguimiento en tiempo real, roles diferenciados y panel de administración. Actualmente orientada a rutas escolares, con arquitectura preparada para expansión a otros ámbitos.
 
 ## Estado actual
