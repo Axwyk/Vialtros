@@ -20,6 +20,10 @@ export const getRoute     = (id)    => api.get(`/routes/${id}/`).then(r => r.dat
 export const createRoute  = (data)  => api.post('/routes/', data).then(r => r.data);
 export const updateRoute  = (id, d) => api.patch(`/routes/${id}/`, d).then(r => r.data);
 export const deleteRoute  = (id)    => api.delete(`/routes/${id}/`);
+export const assignPassengerToRoute = (routeId, passengerId) =>
+	api.post(`/routes/${routeId}/assign_passenger/`, { passenger_id: passengerId }).then(r => r.data);
+export const removePassengerFromRoute = (routeId, passengerId) =>
+	api.post(`/routes/${routeId}/remove_passenger/`, { passenger_id: passengerId }).then(r => r.data);
 
 // ── Pasajeros ─────────────────────────────────────────────────
 export const getPassengers    = ()      => api.get('/passengers/').then(r => r.data);
