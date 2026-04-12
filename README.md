@@ -1,5 +1,6 @@
 # Vialtros
 
+Reuniones: Miercoles, Jueves y Domingo - 12pm - 1pm
 https://meet.google.com/buu-yiqp-mmx
 
 Plataforma SaaS de gestión de rutas con seguimiento GPS en tiempo real, roles diferenciados y panel administrativo profesional.
