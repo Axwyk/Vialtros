@@ -2,7 +2,7 @@
 
 ## Estructura general
 
-```
+```text
 frontend/src/
 ├── App.js                  # Raíz: router, auth state, navbar condicional
 ├── pages/                  # Páginas completas (vistas de React Router)
@@ -17,10 +17,12 @@ frontend/src/
 Gestiona el estado global de autenticación y las rutas de la SPA.
 
 **Estado:**
+
 - `isAuth` — `true` si existe un `access` token en `localStorage`
 - `role` — rol del usuario (`admin`, `driver`, `user`), validado contra `/api/users/me/`
 
 **Comportamiento al iniciar:**
+
 1. Comprueba `localStorage.access`
 2. Llama a `getCurrentUser()` → valida el token
 3. Si el token es inválido → logout forzado + limpieza de `localStorage`
@@ -28,7 +30,7 @@ Gestiona el estado global de autenticación y las rutas de la SPA.
 **Rutas registradas:**
 
 | Path | Componente | Protegida |
-|---|---|---|
+| --- | --- | --- |
 | `/login` | `LoginPage` | No |
 | `/dashboard` | `DashboardPage` | Sí |
 | `/tracking/:routeId` | `TrackingPage` | Sí |
@@ -48,7 +50,8 @@ Gestiona el estado global de autenticación y las rutas de la SPA.
 Pantalla de autenticación con diseño split-screen SaaS.
 
 **Estructura visual:**
-```
+
+```text
 ┌────────────────────────┬──────────────────────┐
 │  Panel izquierdo       │  Panel derecho       │
 │  (oculto en mobile)    │  (formulario)        │
@@ -61,21 +64,25 @@ Pantalla de autenticación con diseño split-screen SaaS.
 │  Gradiente azul        │  Fondo blanco        │
 └────────────────────────┴──────────────────────┘
 ```
+
 > No se usan emojis. Todos los iconos y decoraciones son SVG inline outline profesional.
 
 **Estado local:**
+
 - `username`, `password` — campos del formulario
 - `showPassword` — activa/desactiva tipo `text` en el campo contraseña
 - `loading` — muestra spinner en el botón mientras se hace el request
 - `error` — mensaje de error mostrado en el chip rojo
 
 **Flujo de login:**
+
 1. `POST /api/token/` con `{ username, password }`
 2. Guarda en `localStorage`: `access`, `refresh`, `role`, `username`
 3. Llama a `onLogin()` → actualiza `isAuth` en `App.js`
 4. React Router navega a `/dashboard`
 
 **Iconografía:**
+
 - Solo SVG inline outline profesional (estilo Lucide), sin dependencias externas ni emojis en todo el frontend.
 - Ejemplo: `IconUser`, `IconLock`, `IconEye`, `IconEyeOff` (inputs y botones), y todos los features/hero.
 
@@ -86,6 +93,7 @@ Pantalla de autenticación con diseño split-screen SaaS.
 Panel principal tras el login.
 
 **Componentes:**
+
 - `StatCards` — tarjetas con métricas (rutas, usuarios, trackings activos)
 - `HeroCard` — tarjeta de bienvenida con animación, saludo por hora del día
 - `ActivityFeed` — feed lateral fijo (272px) con actividad reciente
@@ -100,6 +108,7 @@ Panel principal tras el login.
 Vista de seguimiento en tiempo real.
 
 **Funcionalidad:**
+
 - Conecta al WebSocket `ws://localhost:8000/ws/tracking/<routeId>/`
 - Actualiza el mapa Leaflet con la posición recibida
 - Usa `MapView.js` como componente del mapa
@@ -115,7 +124,7 @@ CRUD completo de usuarios del sistema.
 **Modal — campos del formulario:**
 
 | Campo | Tipo | Requerido |
-|---|---|---|
+| --- | --- | --- |
 | `username` | text | Sí |
 | `email` | email | No |
 | `role` | select: `admin / driver / user` | Sí |
@@ -136,7 +145,7 @@ CRUD de conductores.
 **Modal — campos del formulario:**
 
 | Campo | Tipo | Requerido |
-|---|---|---|
+| --- | --- | --- |
 | `user` | select (rol=driver) | Sí |
 | `license_number` | text | Sí |
 
@@ -153,7 +162,7 @@ CRUD de rutas de transporte.
 **Modal — campos del formulario:**
 
 | Campo | Tipo | Requerido |
-|---|---|---|
+| --- | --- | --- |
 | `name` | text | Sí |
 | `origin` | text | Sí |
 | `destination` | text | Sí |
@@ -170,12 +179,14 @@ CRUD de rutas de transporte.
 Modal reutilizable para formularios de creación/edición.
 
 **Props:**
+
 - `isOpen` — controla la visibilidad
 - `onClose` — callback para cerrar
 - `title` — título del modal
 - `children` — contenido del formulario
 
 **Comportamiento:**
+
 - Solo se cierra mediante el botón `×` o el botón "Cancelar" en el padre.
 - **No se cierra** al hacer clic fuera ni con la tecla ESC.
 
@@ -186,6 +197,7 @@ Modal reutilizable para formularios de creación/edición.
 Componente SVG del logo de Vialtros.
 
 **Exports:**
+
 - `LogoIcon({ size, color })` — solo el icono SVG. Por defecto: `size=32`, `color="#1E40AF"`.
 - `Logo({ variant, iconSize })` — icono + wordmark "Vialtros". Variantes:
   - `"default"` — icono azul, texto oscuro (para fondos claros)
@@ -202,6 +214,7 @@ Wrapper de `<Route>`. Si no hay `access` en `localStorage`, redirige a `/login`.
 ### `components/dashboard/`
 
 Componentes específicos del Dashboard:
+
 - `icons.js` — Colección de iconos SVG inline usados en el dashboard
 - `StatCard` — Tarjeta de métrica (icono + valor + etiqueta)
 - `HeroCard` — Tarjeta de bienvenida con animación
@@ -231,6 +244,7 @@ api.get('/users/').then(r => r.data);
 ```js
 getCurrentUser() → Promise<User|null>
 ```
+
 Llama a `GET /api/users/me/`. Devuelve el usuario o `null` si el token es inválido.
 
 ---
@@ -240,7 +254,7 @@ Llama a `GET /api/users/me/`. Devuelve el usuario o `null` si el token es invál
 CRUD para las tres entidades administrables:
 
 | Función | Endpoint |
-|---|---|
+| --- | --- |
 | `getUsers()` | `GET /api/users/` |
 | `getUser(id)` | `GET /api/users/{id}/` |
 | `createUser(data)` | `POST /api/users/` |
@@ -287,6 +301,7 @@ REACT_APP_WS_URL=ws://localhost:8000/ws
 ```
 
 Para producción:
+
 ```env
 REACT_APP_API_URL=https://api.vialtros.com/api
 REACT_APP_WS_URL=wss://api.vialtros.com/ws

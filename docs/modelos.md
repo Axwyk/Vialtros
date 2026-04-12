@@ -6,7 +6,7 @@ Todos los modelos se encuentran en `backend/users/models.py`.
 
 ## Diagrama de relaciones
 
-```
+```txt
 ┌──────────────────────────┐
 │          User            │
 │──────────────────────────│
@@ -67,7 +67,7 @@ Todos los modelos se encuentran en `backend/users/models.py`.
 Extiende `AbstractUser` de Django.
 
 | Campo | Tipo | Descripción |
-|---|---|---|
+| --- | --- | --- |
 | `id` | AutoField (PK) | Identificador único |
 | `username` | CharField (unique) | Nombre de usuario |
 | `email` | EmailField | Correo electrónico |
@@ -85,7 +85,7 @@ Extiende `AbstractUser` de Django.
 Perfil de conductor, vinculado 1:1 a un `User` con `role=driver`.
 
 | Campo | Tipo | Descripción |
-|---|---|---|
+| --- | --- | --- |
 | `id` | AutoField (PK) | Identificador único |
 | `user` | OneToOneField → User | Usuario del sistema |
 | `license_number` | CharField(50) | Número de licencia de conducir |
@@ -97,7 +97,7 @@ Perfil de conductor, vinculado 1:1 a un `User` con `role=driver`.
 Perfil de pasajero, vinculado 1:1 a un `User` con `role=user`.
 
 | Campo | Tipo | Descripción |
-|---|---|---|
+| --- | --- | --- |
 | `id` | AutoField (PK) | Identificador único |
 | `user` | OneToOneField → User | Usuario del sistema |
 | `phone` | CharField(20) | Número de teléfono |
@@ -109,7 +109,7 @@ Perfil de pasajero, vinculado 1:1 a un `User` con `role=user`.
 Ruta de transporte con conductor y pasajeros asignados.
 
 | Campo | Tipo | Descripción |
-|---|---|---|
+| --- | --- | --- |
 | `id` | AutoField (PK) | Identificador único |
 | `name` | CharField(100) | Nombre de la ruta |
 | `origin` | CharField(255) | Punto de origen |
@@ -124,7 +124,7 @@ Ruta de transporte con conductor y pasajeros asignados.
 `TextChoices` para el estado de recogida de un pasajero.
 
 | Valor | Etiqueta |
-|---|---|
+| --- | --- |
 | `picked` | Recogido |
 | `not_picked` | No recogido |
 
@@ -135,7 +135,7 @@ Ruta de transporte con conductor y pasajeros asignados.
 Registro de posición GPS y estado de recogida para un pasajero en una ruta.
 
 | Campo | Tipo | Descripción |
-|---|---|---|
+| --- | --- | --- |
 | `id` | AutoField (PK) | Identificador único |
 | `route` | ForeignKey → Route | Ruta a la que pertenece |
 | `passenger` | ForeignKey → Passenger | Pasajero rastreado |
@@ -151,7 +151,7 @@ Registro de posición GPS y estado de recogida para un pasajero en una ruta.
 Ubicación: `backend/users/serializers.py`
 
 | Serializer | Modelo | Uso |
-|---|---|---|
+| --- | --- | --- |
 | `UserSerializer` | User | Lectura: `id, username, email, role, is_active, is_staff` |
 | `UserBasicSerializer` | User | Lectura anidada: `id, username, email, role` |
 | `UserCreateSerializer` | User | Creación/edición: incluye campo `password` write-only, llama a `set_password()` |

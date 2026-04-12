@@ -3,7 +3,7 @@
 ## Requisitos previos
 
 | Herramienta | Versión mínima |
-|---|---|
+| --- | --- |
 | Python | 3.10+ |
 | Node.js | 18+ |
 | npm | 9+ |
@@ -42,7 +42,7 @@ pip install -r requirements.txt
 
 #### Dependencias instaladas (`requirements.txt`)
 
-```
+```txt
 django
 djangorestframework
 djangorestframework-simplejwt
@@ -101,7 +101,7 @@ npm start
 ### 4. Scripts de conveniencia
 
 | Script | Descripción |
-|---|---|
+| --- | --- |
 | `poblar_demo.bat` | Aplica migraciones y carga datos de prueba |
 | `reiniciar_todo.bat` | Lanza backend (Daphne) y frontend (React) en terminales separadas |
 
@@ -254,6 +254,7 @@ Accesible en `/admin/` con las credenciales del superusuario.
 ## Datos de Prueba
 
 Ejecutar `poblar_demo.bat` (Windows) o el script equivalente para cargar:
+
 - Usuarios de ejemplo con cada rol
 - Conductores y pasajeros vinculados
 - Rutas de prueba con conductor asignado
@@ -272,3 +273,4 @@ Ejecutar `poblar_demo.bat` (Windows) o el script equivalente para cargar:
 - [ ] Variables de entorno del frontend apuntan a URLs de producción (`https://` y `wss://`)
 - [ ] `npm run build` ejecutado para generar los estáticos
 - [ ] Archivos estáticos Django recolectados: `python manage.py collectstatic`
+

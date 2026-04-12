@@ -5,3 +5,4 @@ channels
 channels-redis
 psycopg2-binary
 python-dotenv
+django-cors-headers

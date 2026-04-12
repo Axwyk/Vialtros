@@ -9,7 +9,7 @@ Vialtros es una plataforma SaaS de gestión de rutas con seguimiento en tiempo r
 - **Comunicación HTTP:** Axios con JWT en cada request
 - **Comunicación en tiempo real:** WebSocket nativo
 
-```
+```text
 ┌─────────────────────┐         REST (JWT)           ┌──────────────────────────┐
 │                     │ ◄──────────────────────────► │                          │
 │   React SPA         │                              │   Django REST Framework  │
@@ -30,7 +30,7 @@ Vialtros es una plataforma SaaS de gestión de rutas con seguimiento en tiempo r
 ### Backend
 
 | Componente | Tecnología | Versión |
-|---|---|---|
+| --- | --- | --- |
 | Framework web | Django | 6.x |
 | API REST | Django REST Framework | latest |
 | Autenticación | SimpleJWT | latest |
@@ -42,7 +42,7 @@ Vialtros es una plataforma SaaS de gestión de rutas con seguimiento en tiempo r
 ### Frontend
 
 | Componente | Tecnología | Versión |
-|---|---|---|
+| --- | --- | --- |
 | Framework UI | React | 19 |
 | Estilos | Tailwind CSS | 3 |
 | Routing | React Router | v7 |
@@ -54,7 +54,7 @@ Vialtros es una plataforma SaaS de gestión de rutas con seguimiento en tiempo r
 
 ## Estructura de Directorios
 
-```
+```text
 Vialtros/
 ├── backend/
 │   ├── core/                   # Configuración Django (settings, URLs, ASGI)
@@ -109,7 +109,7 @@ Vialtros/
 
 ## Flujo de Autenticación
 
-```
+```text
 1. Usuario envía credenciales → POST /api/token/
 2. Backend valida y devuelve { access, refresh }
 3. Frontend almacena tokens en localStorage (access, refresh, role, username)
@@ -123,7 +123,7 @@ Vialtros/
 
 ## Flujo WebSocket (Tracking)
 
-```
+```text
 1. Frontend abre: ws://localhost:8000/ws/tracking/<routeId>/
 2. Django Channels enruta al TrackingConsumer
 3. Consumer recibe mensajes JSON con { latitude, longitude, ... }
@@ -135,11 +135,12 @@ Vialtros/
 ## Permisos por Rol
 
 | Rol | Acceso |
-|---|---|
+| --- | --- |
 | `admin` | CRUD total: usuarios, conductores, rutas, pasajeros |
 | `driver` | Ver sus rutas asignadas, marcar estado de pasajeros |
 | `user` | Ver su ruta en tiempo real + datos del conductor |
 
 Los permisos se aplican en dos niveles:
+
 1. **Backend:** Clases `IsAdmin`, `IsDriver`, `IsPassenger` en cada ViewSet
 2. **Frontend:** `PrivateRoute` + comprobación de `role` en localStorage

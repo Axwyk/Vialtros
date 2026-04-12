@@ -5,7 +5,7 @@ Plataforma SaaS de gestión de rutas con seguimiento GPS en tiempo real.
 ## Índice
 
 | Archivo | Contenido |
-|---|---|
+| --- | --- |
 | [arquitectura.md](arquitectura.md) | Stack tecnológico, diagrama del sistema, flujo de auth, estructura de directorios |
 | [modelos.md](modelos.md) | Modelos de base de datos, diagrama ER, serializers, permisos |
 | [api.md](api.md) | Referencia completa de endpoints REST y WebSocket |
