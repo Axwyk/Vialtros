@@ -1,105 +1,97 @@
 # Vialtros
 
-Reunion: Vialtros
-Jueves, 9 abril · 12:00 – 1:00pm
-Zona horaria: America/Bogota
-Información para unirse a la reunión de Google Meet
-Vínculo a la videollamada: https://meet.google.com/zkp-gxgc-zga
+Reuniones: Miercoles, Jueves y Domingo - 12pm - 1pm
+https://meet.google.com/buu-yiqp-mmx
 
-Plataforma SaaS de gestión de rutas con seguimiento en tiempo real, roles diferenciados y panel de administración. Actualmente orientada a rutas escolares, con arquitectura preparada para expansión a otros ámbitos.
+Plataforma SaaS de gestión de rutas con seguimiento GPS en tiempo real, roles diferenciados y panel administrativo profesional.
+
+**Características principales:**
+- ✓ Autenticación JWT con roles (Admin, Driver, User)
+- ✓ Dashboard SaaS con estadísticas y gráficos
+- ✓ WebSocket para tracking en tiempo real
+- ✓ CRUD completo de usuarios, conductores y rutas
+- ✓ Interfaz moderna con Tailwind CSS y diseño split-screen
+- ✓ Iconografía SVG profesional (sin dependencias externas)
 
 ## Estado actual
+Proyecto en desarrollo activo — **V1 con funcionalidades core completadas**. Ver [`estado_proyecto.txt`](estado_proyecto.txt) para detalles de implementado vs pendiente.
 
-Proyecto en desarrollo activo. Ver `estado_proyecto.txt` para el detalle de funcionalidades listas y pendientes.
+## Stack Tecnológico
+| Componente | Tecnología |
+|---|---|
+| **Backend** | Django 4+ · Django REST Framework · Channels · SimpleJWT |
+| **Frontend** | React 19 · Tailwind CSS · React Router v7 · Leaflet |
+| **BD** | SQLite (dev) / PostgreSQL (producción) |
+| **WebSockets** | Daphne + Django Channels |
+| **Autenticación** | JWT con refresh token · Permisos por rol |
 
-## Tecnologías
-
-- **Backend:** Django 4+ · Django REST Framework · Django Channels · JWT (SimpleJWT)
-- **Frontend:** React 19 · Tailwind CSS · React Router v7 · Leaflet · Redux Toolkit
-- **Base de datos:** SQLite (dev) / PostgreSQL (prod)
-- **WebSockets:** Daphne + Django Channels
-- **Iconografía:** Solo SVG inline outline profesional (estilo Lucide), sin dependencias externas ni emojis en todo el frontend
-- **Logo:** Componente SVG propio — favicon + wordmark en navbar y sidebar
-
-## Roles
-
+## Roles y Permisos
 | Rol | Permisos |
-| --- | --- |
-| **Admin** | CRUD de usuario+s, conductores y rutas |
-| **Driver** | Ve sus rutas y marca estado de pasajeros |
-| **User** | Visualiza la ubicación del vehículo en tiempo real |
+|---|---|
+| **Admin** | CRUD usuarios/conductores/rutas, acceso panel administrativo |
+| **Driver** | Ve sus rutas asignadas, marca estado de pasajeros |
+| **User** | Visualiza ubicación en tiempo real del vehículo |
 
-## Estructura del proyecto
-
+## Estructura del Proyecto
 ```
 Vialtros/
 ├── backend/
-│   ├── users/        # Modelos, auth, serializers, viewsets (User, Driver, Passenger)
-│   ├── routes/       # Modelo Route
-│   ├── tracking/     # WebSocket consumer + Tracking model
-│   └── core/         # Settings, URLs, ASGI
+│   ├── core/              # Configuración Django (settings, urls, asgi)
+│   ├── users/             # Modelos User/Driver/Passenger, serializers, viewsets
+│   ├── routes/            # Modelo Route y endpoints
+│   ├── tracking/          # WebSocket consumer, Tracking model
+│   ├── manage.py
+│   └── requirements.txt
 ├── frontend/
-│   ├── public/       # index.html (SEO, OG, JSON-LD), favicon.svg
-│   └── src/
-│       ├── pages/    # LoginPage, DashboardPage, TrackingPage,
-│       │             # AdminUsersPage, AdminDriversPage, AdminRoutesPage
-│       ├── components/
-│       │   ├── dashboard/  # Sidebar, StatCard, HeroCard, ActivityFeed, MiniChart, icons.js
-│       │   ├── Logo.js     # Logo SVG reutilizable (variantes light/default)
-│       │   └── Modal.js    # Modal reutilizable (cierre solo por botón)
-│       └── services/       # auth.js, dashboard.js, admin.js, ws.js
-└── venv/
+│   ├── public/            # index.html + favicon.svg
+│   ├── src/
+│   │   ├── pages/         # LoginPage, DashboardPage, AdminPages
+│   │   ├── components/    # Logo, Modal, MapView, Sidebar, etc.
+│   │   └── services/      # api.js, auth.js, admin.js, ws.js
+│   ├── package.json
+│   └── tailwind.config.js
+├── docs/                  # Documentación técnica
+├── estado_proyecto.txt    # Funcionalidades listas y pendientes
+└── README.md
 ```
 
-## Instalación y despliegue
+## Instalación y Despliegue
 
-### Requisitos previos
-
+### Requisitos
 - Python 3.10+
 - Node.js 18+
-- PostgreSQL (producción)
+- PostgreSQL (recomendado para producción)
 
-### Backend
-
+### Backend (desarrollo)
 ```bash
 cd backend
 python -m venv venv
-.\venv\Scripts\activate  # Windows
+.\venv\Scripts\activate         # Windows
+# source venv/bin/activate      # Linux/Mac
+
 pip install -r requirements.txt
 python manage.py migrate
 python manage.py createsuperuser
 python manage.py runserver
 ```
 
-### Frontend
-
+### Frontend (desarrollo)
 ```bash
 cd frontend
 npm install
-npm start
+npm start                       # http://localhost:3000
 ```
 
-- Sistema de roles: Admin, Driver, User
-- API RESTful con JWT + permisos por rol en cada ViewSet
-- CRUD completo de usuarios, conductores y rutas desde el panel admin
-- WebSockets para tracking en tiempo real (Django Channels + Daphne)
-- Dashboard SaaS: StatCards, MiniChart SVG, ActivityFeed, HeroCard animada
-- Login split-screen: panel de branding + formulario con iconos SVG outline (sin emojis), show/hide password, spinner
-- Landing page split-screen: hero con SVG abstracto profesional, fondo suavizado (gradiente y SVG), solo iconografía SVG inline outline
-- Logo SVG propio (favicon, navbar, sidebar) con variantes light/default
-- SEO completo en index.html: meta tags, Open Graph, Twitter Card, JSON-LD schema
-- Título de pestaña genérico: "Vialtros — Gestión de rutas"
+### Datos de prueba
+```bash
+cd backend
+python manage.py poblar_demo   # Carga usuarios, conductores y rutas de demo
+```
 
-## Scripts de desarrollo
-
-- `poblar_demo.bat` — Aplica migraciones y carga datos de prueba
-- `reiniciar_todo.bat` — Lanza backend (Daphne) y frontend (React) en terminales separadas
-
-1. Reinicia la terminal para que los cambios surtan efecto.
-2. Crea la base de datos ejecutando:
-
-   ```bash
-   psql -U postgres -c "CREATE DATABASE vialtros_db;"
-   ```
-
-3. Si usas Amazon RDS, solo cambia los datos de conexión en el backend.
+## Documentación Completa
+Consulta la carpeta [`docs/`](docs/) para:
+- [Arquitectura del sistema](docs/arquitectura.md)
+- [Modelos de datos](docs/modelos.md)
+- [Referencia de API](docs/api.md)
+- [Guía frontend](docs/frontend.md)
+- [Despliegue en producción](docs/despliegue.md)
