@@ -9,6 +9,7 @@ const navItems = [
   { to: "/admin/users", icon: icons.users, label: "Usuarios", admin: true },
   { to: "/admin/drivers", icon: icons.drivers, label: "Conductores", admin: true },
   { to: "/admin/routes", icon: icons.routes, label: "Rutas", admin: true },
+  { to: "/admin/passengers", icon: icons.clipboard, label: "Estudiantes", admin: true },
   { to: "/tracking/1", icon: icons.tracking, label: "Tracking" },
   { to: "/profile", icon: icons.profile, label: "Mi Perfil" },
 ];
