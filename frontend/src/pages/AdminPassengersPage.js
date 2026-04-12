@@ -4,10 +4,10 @@ import Modal from '../components/Modal';
 import { icons } from '../components/dashboard/icons';
 import {
   getPassengers, createPassenger, updatePassenger, deletePassenger,
-  getUsers, getRoutes,
+  getUsers, getRoutes, assignPassengerToRoute, removePassengerFromRoute,
 } from '../services/admin';
 
-const EMPTY_FORM = { user: '', phone: '' };
+const EMPTY_FORM = { user: '', phone: '', routeId: '' };
 
 export default function AdminPassengersPage({ role, onLogout }) {
   const [passengers, setPassengers] = useState([]);
@@ -38,9 +38,22 @@ export default function AdminPassengersPage({ role, onLogout }) {
 
   const openCreate = () => { setForm(EMPTY_FORM); setFormError(''); setModal('create'); };
   const openEdit   = (p) => {
-    setForm({ user: p.user, phone: p.phone });
+    setForm({ user: p.user, phone: p.phone, routeId: getPassengerRoute(p.id)?.id ?? '' });
     setFormError('');
     setModal(p);
+  };
+
+  const syncPassengerRoute = async (passengerId, nextRouteId) => {
+    const currentRoute = getPassengerRoute(passengerId);
+    const currentRouteId = currentRoute ? String(currentRoute.id) : '';
+    const targetRouteId = String(nextRouteId || '');
+
+    if (currentRouteId && currentRouteId !== targetRouteId) {
+      await removePassengerFromRoute(currentRouteId, passengerId);
+    }
+    if (targetRouteId && currentRouteId !== targetRouteId) {
+      await assignPassengerToRoute(targetRouteId, passengerId);
+    }
   };
 
   const handleSave = async () => {
@@ -48,8 +61,13 @@ export default function AdminPassengersPage({ role, onLogout }) {
     if (!form.phone.trim())   { setFormError('El teléfono es obligatorio'); return; }
     setSaving(true); setFormError('');
     try {
-      if (modal === 'create') await createPassenger(form);
-      else await updatePassenger(modal.id, { phone: form.phone });
+      if (modal === 'create') {
+        const created = await createPassenger({ user: form.user, phone: form.phone });
+        await syncPassengerRoute(created.id, form.routeId);
+      } else {
+        await updatePassenger(modal.id, { phone: form.phone });
+        await syncPassengerRoute(modal.id, form.routeId);
+      }
       setModal(null); load();
     } catch (e) {
       const d = e?.response?.data;
@@ -194,6 +212,18 @@ export default function AdminPassengersPage({ role, onLogout }) {
                 onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
                 placeholder="ej. 600 123 456"
               />
+            </label>
+            <label className="text-xs font-medium text-gray-600">Ruta asignada
+              <select
+                className="mt-1 block w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                value={form.routeId}
+                onChange={e => setForm(f => ({ ...f, routeId: e.target.value }))}
+              >
+                <option value="">Sin asignar</option>
+                {routes.map(route => (
+                  <option key={route.id} value={route.id}>{route.name}</option>
+                ))}
+              </select>
             </label>
             {formError && <p className="text-xs text-red-500">{formError}</p>}
             <div className="flex gap-2 pt-1">
