@@ -3,9 +3,11 @@
 Plataforma SaaS de gestión de rutas con seguimiento en tiempo real, roles diferenciados y panel de administración. Actualmente orientada a rutas escolares, con arquitectura preparada para expansión a otros ámbitos.
 
 ## Estado actual
+
 Proyecto en desarrollo activo. Ver `estado_proyecto.txt` para el detalle de funcionalidades listas y pendientes.
 
 ## Tecnologías
+
 - **Backend:** Django 4+ · Django REST Framework · Django Channels · JWT (SimpleJWT)
 - **Frontend:** React 19 · Tailwind CSS · React Router v7 · Leaflet · Redux Toolkit
 - **Base de datos:** SQLite (dev) / PostgreSQL (prod)
@@ -14,13 +16,15 @@ Proyecto en desarrollo activo. Ver `estado_proyecto.txt` para el detalle de func
 - **Logo:** Componente SVG propio — favicon + wordmark en navbar y sidebar
 
 ## Roles
+
 | Rol | Permisos |
-|---|---|
-| **Admin** | CRUD de usuarios, conductores y rutas |
+| --- | --- |
+| **Admin** | CRUD de usuario+s, conductores y rutas |
 | **Driver** | Ve sus rutas y marca estado de pasajeros |
 | **User** | Visualiza la ubicación del vehículo en tiempo real |
 
 ## Estructura del proyecto
+
 ```
 Vialtros/
 ├── backend/
@@ -44,11 +48,13 @@ Vialtros/
 ## Instalación y despliegue
 
 ### Requisitos previos
+
 - Python 3.10+
 - Node.js 18+
 - PostgreSQL (producción)
 
 ### Backend
+
 ```bash
 cd backend
 python -m venv venv
@@ -60,6 +66,7 @@ python manage.py runserver
 ```
 
 ### Frontend
+
 ```bash
 cd frontend
 npm install
@@ -78,11 +85,15 @@ npm start
 - Título de pestaña genérico: "Vialtros — Gestión de rutas"
 
 ## Scripts de desarrollo
+
 - `poblar_demo.bat` — Aplica migraciones y carga datos de prueba
 - `reiniciar_todo.bat` — Lanza backend (Daphne) y frontend (React) en terminales separadas
-3. Reinicia la terminal para que los cambios surtan efecto.
-4. Crea la base de datos ejecutando:
-   ```
+
+1. Reinicia la terminal para que los cambios surtan efecto.
+2. Crea la base de datos ejecutando:
+
+   ```bash
    psql -U postgres -c "CREATE DATABASE vialtros_db;"
    ```
-5. Si usas Amazon RDS, solo cambia los datos de conexión en el backend.
+
+3. Si usas Amazon RDS, solo cambia los datos de conexión en el backend.
