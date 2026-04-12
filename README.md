@@ -1,9 +1,8 @@
 # Vialtros
+
 ---------------------------------------------------------------
 Reunion: Vialtros
-Domingo, 12 abril · 12:00 – 1:00pm
-Zona horaria: America/Bogota
-Información para unirse a la reunión de Google Meet
+Miercoles, Jueves y Domingo · 12:00 – 1:00pm
 Vínculo a la videollamada: https://meet.google.com/buu-yiqp-mmx
 ---------------------------------------------------------------
 
