@@ -28,6 +28,51 @@ class UserViewSet(viewsets.ModelViewSet):
         serializer = UserSerializer(request.user)
         return Response(serializer.data)
 
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def dashboard_stats(self, request):
+        user = request.user
+
+        if user.role == 'admin':
+            return Response({
+                'routes': Route.objects.count(),
+                'users': User.objects.count(),
+                'trackings': Tracking.objects.count(),
+            })
+
+        if user.role == 'driver':
+            try:
+                driver = Driver.objects.get(user=user)
+            except Driver.DoesNotExist:
+                return Response({'routes': 0, 'users': 0, 'trackings': 0})
+
+            routes_qs = Route.objects.filter(driver=driver)
+            passenger_count = Passenger.objects.filter(route__in=routes_qs).distinct().count()
+            tracking_count = Tracking.objects.filter(route__in=routes_qs).count()
+
+            return Response({
+                'routes': routes_qs.count(),
+                'users': passenger_count,
+                'trackings': tracking_count,
+            })
+
+        if user.role == 'user':
+            try:
+                passenger = Passenger.objects.get(user=user)
+            except Passenger.DoesNotExist:
+                return Response({'routes': 0, 'users': 0, 'trackings': 0})
+
+            routes_qs = Route.objects.filter(passengers=passenger)
+            route = routes_qs.first()
+            classmates_count = route.passengers.count() if route else 0
+
+            return Response({
+                'routes': routes_qs.count(),
+                'users': classmates_count,
+                'trackings': Tracking.objects.filter(passenger=passenger).count(),
+            })
+
+        return Response({'routes': 0, 'users': 0, 'trackings': 0})
+
     @action(detail=False, methods=['get'], permission_classes=[IsDriver])
     def assigned_users(self, request):
         try:
@@ -37,6 +82,15 @@ class UserViewSet(viewsets.ModelViewSet):
         routes = Route.objects.filter(driver=driver)
         passengers = Passenger.objects.filter(route__in=routes).distinct()
         return Response(PassengerSerializer(passengers, many=True).data)
+
+    @action(detail=False, methods=['get'], permission_classes=[IsDriver])
+    def assigned_routes(self, request):
+        try:
+            driver = Driver.objects.get(user=request.user)
+        except Driver.DoesNotExist:
+            return Response({'detail': 'No es conductor'}, status=status.HTTP_403_FORBIDDEN)
+        routes = Route.objects.filter(driver=driver).prefetch_related('passengers__user').order_by('id')
+        return Response(RouteSerializer(routes, many=True).data)
 
     @action(detail=False, methods=['get'], permission_classes=[IsPassenger])
     def my_conductor(self, request):
