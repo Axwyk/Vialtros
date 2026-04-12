@@ -2,13 +2,14 @@ import React, { useEffect, useState, useCallback } from 'react';
 import Sidebar from '../components/dashboard/Sidebar';
 import Modal from '../components/Modal';
 import { icons } from '../components/dashboard/icons';
-import { getRoutes, createRoute, updateRoute, deleteRoute, getDrivers } from '../services/admin';
+import { getRoutes, createRoute, updateRoute, deleteRoute, getDrivers, getPassengers } from '../services/admin';
 
-const EMPTY_FORM = { name: '', origin: '', destination: '', driver: '' };
+const EMPTY_FORM = { name: '', origin: '', destination: '', driver: '', passengers: [] };
 
 export default function AdminRoutesPage({ role, onLogout }) {
   const [routes, setRoutes]   = useState([]);
   const [drivers, setDrivers] = useState([]);
+  const [passengers, setPassengers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(null);
   const [modal, setModal]     = useState(null);
@@ -21,8 +22,8 @@ export default function AdminRoutesPage({ role, onLogout }) {
 
   const load = useCallback(() => {
     setLoading(true);
-    Promise.all([getRoutes(), getDrivers()])
-      .then(([r, d]) => { setRoutes(r); setDrivers(d); })
+    Promise.all([getRoutes(), getDrivers(), getPassengers()])
+      .then(([r, d, p]) => { setRoutes(r); setDrivers(d); setPassengers(p); })
       .catch(() => setError('No se pudo cargar los datos'))
       .finally(() => setLoading(false));
   }, []);
@@ -31,7 +32,7 @@ export default function AdminRoutesPage({ role, onLogout }) {
 
   const openCreate = () => { setForm(EMPTY_FORM); setFormError(''); setModal('create'); };
   const openEdit   = (r) => {
-    setForm({ name: r.name, origin: r.origin, destination: r.destination, driver: r.driver ?? '' });
+    setForm({ name: r.name, origin: r.origin, destination: r.destination, driver: r.driver ?? '', passengers: r.passengers ?? [] });
     setFormError('');
     setModal(r);
   };
@@ -42,7 +43,7 @@ export default function AdminRoutesPage({ role, onLogout }) {
     if (!form.destination.trim()) { setFormError('El destino es obligatorio'); return; }
     setSaving(true); setFormError('');
     try {
-      const payload = { ...form, driver: form.driver || null };
+      const payload = { ...form, driver: form.driver || null, passengers: form.passengers || [] };
       if (modal === 'create') await createRoute(payload);
       else await updateRoute(modal.id, payload);
       setModal(null); load();
@@ -118,6 +119,7 @@ export default function AdminRoutesPage({ role, onLogout }) {
                     <span className="flex items-center gap-1">Conductor {sortCol === 'driver' ? (sortDir === 'asc' ? '↑' : '↓') : <span className="opacity-30">↕</span>}</span>
                   </th>
                   <th className="text-left px-5 py-3 font-medium">Pasajeros</th>
+                  <th className="text-left px-5 py-3 font-medium">Nombres</th>
                   <th className="px-5 py-3" />
                 </tr>
               </thead>
@@ -134,6 +136,11 @@ export default function AdminRoutesPage({ role, onLogout }) {
                       <span className="text-xs font-medium bg-blue-50 text-blue-600 px-2.5 py-0.5 rounded-full">
                         {r.passenger_count ?? 0}
                       </span>
+                    </td>
+                    <td className="px-5 py-3.5 text-gray-500">
+                      {r.passenger_details?.length > 0
+                        ? r.passenger_details.map(p => p.user_detail?.username || `Pasajero #${p.id}`).join(', ')
+                        : <span className="text-gray-300">Sin pasajeros</span>}
                     </td>
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-2 justify-end">
@@ -191,6 +198,23 @@ export default function AdminRoutesPage({ role, onLogout }) {
                 {drivers.map(d => (
                   <option key={d.id} value={d.id}>
                     {d.user_detail?.username || `Conductor #${d.id}`} — {d.license_number}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs font-medium text-gray-600">Pasajeros asignados
+              <select
+                multiple
+                className="mt-1 block w-full h-40 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                value={form.passengers}
+                onChange={e => setForm(f => ({
+                  ...f,
+                  passengers: Array.from(e.target.selectedOptions, option => Number(option.value)),
+                }))}
+              >
+                {passengers.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.user_detail?.username || `Pasajero #${p.id}`} — {p.user_detail?.email || p.phone}
                   </option>
                 ))}
               </select>
