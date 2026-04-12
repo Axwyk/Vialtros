@@ -17,6 +17,7 @@ export default function AdminRoutesPage({ role, onLogout }) {
   const [saving, setSaving]   = useState(false);
   const [formError, setFormError] = useState('');
   const [confirmId, setConfirmId] = useState(null);
+  const [passengerListRoute, setPassengerListRoute] = useState(null);
   const [sortCol, setSortCol]     = useState(null);
   const [sortDir, setSortDir]     = useState('asc');
 
@@ -76,6 +77,19 @@ export default function AdminRoutesPage({ role, onLogout }) {
     return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
   });
 
+  const getPassengerPreview = (route) => {
+    if (!Array.isArray(route.passenger_details) || route.passenger_details.length === 0) {
+      return 'Sin pasajeros';
+    }
+
+    const names = route.passenger_details
+      .map(p => p.user_detail?.username || `#${p.id}`)
+      .filter(Boolean);
+
+    if (names.length <= 2) return names.join(', ');
+    return `${names.slice(0, 2).join(', ')} +${names.length - 2}`;
+  };
+
   return (
     <div className="min-h-screen flex bg-gray-50 font-sans">
       <Sidebar role={role} onLogout={onLogout} />
@@ -119,7 +133,7 @@ export default function AdminRoutesPage({ role, onLogout }) {
                     <span className="flex items-center gap-1">Conductor {sortCol === 'driver' ? (sortDir === 'asc' ? '↑' : '↓') : <span className="opacity-30">↕</span>}</span>
                   </th>
                   <th className="text-left px-5 py-3 font-medium">Pasajeros</th>
-                  <th className="text-left px-5 py-3 font-medium">Nombres</th>
+                  <th className="text-left px-5 py-3 font-medium">Resumen</th>
                   <th className="px-5 py-3" />
                 </tr>
               </thead>
@@ -138,9 +152,19 @@ export default function AdminRoutesPage({ role, onLogout }) {
                       </span>
                     </td>
                     <td className="px-5 py-3.5 text-gray-500">
-                      {r.passenger_details?.length > 0
-                        ? r.passenger_details.map(p => p.user_detail?.username || `Pasajero #${p.id}`).join(', ')
-                        : <span className="text-gray-300">Sin pasajeros</span>}
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-500 truncate max-w-[190px]" title={getPassengerPreview(r)}>
+                          {getPassengerPreview(r)}
+                        </span>
+                        {r.passenger_details?.length > 0 && (
+                          <button
+                            onClick={() => setPassengerListRoute(r)}
+                            className="text-xs font-medium text-blue-600 hover:text-blue-800 transition"
+                          >
+                            Ver lista
+                          </button>
+                        )}
+                      </div>
                     </td>
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-2 justify-end">
@@ -249,6 +273,42 @@ export default function AdminRoutesPage({ role, onLogout }) {
               <button onClick={handleDelete} className="flex-1 bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg text-sm font-semibold transition">Sí, eliminar</button>
               <button onClick={() => setConfirmId(null)} className="flex-1 border border-gray-200 text-gray-600 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition">Cancelar</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {passengerListRoute && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setPassengerListRoute(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">Pasajeros de {passengerListRoute.name}</h3>
+                <p className="text-xs text-gray-400 mt-0.5">{passengerListRoute.passenger_details?.length || 0} asignados</p>
+              </div>
+              <button
+                onClick={() => setPassengerListRoute(null)}
+                className="text-sm text-gray-400 hover:text-gray-600 transition"
+              >
+                Cerrar
+              </button>
+            </div>
+
+            {passengerListRoute.passenger_details?.length > 0 ? (
+              <div className="max-h-72 overflow-y-auto pr-1 space-y-2">
+                {passengerListRoute.passenger_details.map(p => (
+                  <div key={p.id} className="flex items-center justify-between bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+                    <div>
+                      <p className="text-sm font-medium text-gray-800">{p.user_detail?.username || `Pasajero #${p.id}`}</p>
+                      <p className="text-xs text-gray-400">{p.user_detail?.email || p.phone || 'Sin contacto'}</p>
+                    </div>
+                    {p.phone && <span className="text-xs font-mono text-gray-500">{p.phone}</span>}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400">No hay pasajeros en esta ruta.</p>
+            )}
           </div>
         </div>
       )}
