@@ -1,8 +1,9 @@
 // Página de login con JWT
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogoIcon } from '../components/Logo';
 import api from '../services/api';
+import { ensureLocalAccessSession, isLocalAccessEnabled } from '../services/auth';
 
 /* ── Iconos inline ── */
 const IconUser = () => (
@@ -35,19 +36,39 @@ export default function LoginPage({ onLogin }) {
   const [error, setError]             = useState('');
   const navigate = useNavigate();
 
+  useEffect(() => {
+    if (!isLocalAccessEnabled()) return;
+
+    ensureLocalAccessSession();
+    onLogin && onLogin();
+    navigate('/dashboard', { replace: true });
+  }, [navigate, onLogin]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
+    const normalizedUsername = username.trim();
     try {
-      const res = await api.post('/token/', { username, password });
+      const res = await api.post('/token/', { username: normalizedUsername, password });
       localStorage.setItem('access',   res.data.access);
       localStorage.setItem('refresh',  res.data.refresh);
-      localStorage.setItem('username', username);
+      localStorage.setItem('username', normalizedUsername);
       onLogin && onLogin();
       navigate('/dashboard');
-    } catch {
-      setError('Usuario o contraseña incorrectos');
+    } catch (err) {
+      if (isLocalAccessEnabled()) {
+        ensureLocalAccessSession({ username: normalizedUsername || username || 'Invitado' });
+        onLogin && onLogin();
+        navigate('/dashboard');
+        return;
+      }
+
+      if (err?.response?.status === 401) {
+        setError('Usuario o contraseña incorrectos');
+      } else {
+        setError('No se pudo conectar con el servidor. Verifica que el backend esté iniciado.');
+      }
     } finally {
       setLoading(false);
     }

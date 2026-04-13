@@ -1,18 +1,19 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import MapView from '../components/MapView';
 import { connectTrackingWS } from '../services/ws';
 import { getTrackingsByRoute } from '../services/tracking';
 import { getRoute } from '../services/admin';
 import { geocodeAddress, getStreetRoute, getETAMinutes } from '../services/routing';
+import TrackingHero from '../components/tracking/TrackingHero';
 import './TrackingPage.css';
 
 const LIVE_WINDOW_MINUTES = 20;
 const BUENAVENTURA_BOUNDS = {
-  minLat: 3.75,
-  maxLat: 3.98,
-  minLng: -77.15,
-  maxLng: -76.9,
+  minLat: 3.65,
+  maxLat: 4.05,
+  minLng: -77.25,
+  maxLng: -76.75,
 };
 
 function toNumber(value) {
@@ -65,6 +66,31 @@ function mergeTrackings(prev, incoming) {
   });
 }
 
+function appendHistoryPoint(prev, point) {
+  if (!Array.isArray(point) || point.length !== 2) return prev;
+  const [lat, lng] = point;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return prev;
+
+  const last = prev[prev.length - 1];
+  if (last && last[0] === lat && last[1] === lng) {
+    return prev;
+  }
+  return [...prev, [lat, lng]];
+}
+
+function extractPositionPayload(rawData) {
+  if (!rawData || typeof rawData !== 'object') return rawData;
+
+  const eventName = String(rawData.event || rawData.type || rawData.action || '').toLowerCase();
+  if (!eventName) return rawData;
+
+  if (eventName === 'position_update') {
+    return rawData.data || rawData.payload || rawData.position || rawData;
+  }
+
+  return null;
+}
+
 function isRecentTimestamp(timestamp, minutes = LIVE_WINDOW_MINUTES) {
   const t = new Date(timestamp).getTime();
   if (!Number.isFinite(t)) return false;
@@ -82,43 +108,6 @@ function isWithinBuenaventura(lat, lng) {
   );
 }
 
-const DEMO_ORIGIN = [3.8806, -77.0319];
-const DEMO_DESTINATION = [3.8896, -77.0427];
-const DEMO_ROUTE_POLYLINE = [
-  [3.8806, -77.0319],
-  [3.8822, -77.0338],
-  [3.8841, -77.0361],
-  [3.8863, -77.0389],
-  [3.8877, -77.0407],
-  [3.8896, -77.0427],
-];
-
-const DEMO_TRACKINGS = [
-  {
-    latitude: 3.8852,
-    longitude: -77.0377,
-    timestamp: '2026-04-13T09:05:00Z',
-    speed_kmh: 24,
-    passenger: 1,
-    status: 'picked',
-  },
-  {
-    latitude: 3.8869,
-    longitude: -77.0393,
-    timestamp: '2026-04-13T09:08:00Z',
-    speed_kmh: 26,
-    passenger: 2,
-    status: 'picked',
-  },
-];
-
-// Buses cercanos visibles en el mapa durante el modo demo
-const DEMO_VEHICLES = [
-  { label: 'B-03', latitude: 3.8863, longitude: -77.0389, status: 'En ruta', speedKmh: 26, studentsOnboard: 2 },
-  { label: 'B-07', latitude: 3.8822, longitude: -77.0338, status: 'En ruta', speedKmh: 21, studentsOnboard: 1 },
-  { label: 'B-12', latitude: 3.8877, longitude: -77.0407, status: 'Detenido', speedKmh: 0, studentsOnboard: 0 },
-];
-
 export default function TrackingPage({ routeId: routeIdProp }) {
   const params = useParams();
   const selectedRouteId = Number(routeIdProp ?? params.routeId);
@@ -128,6 +117,8 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const [originCoords, setOriginCoords] = useState(null);
   const [destinationCoords, setDestinationCoords] = useState(null);
   const [routePolyline, setRoutePolyline] = useState(null);
+  const [vehiclePosition, setVehiclePosition] = useState(null);
+  const [liveRouteHistory, setLiveRouteHistory] = useState([]);
   const [eta, setEta] = useState(null);
   const [etaUpdated, setEtaUpdated] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -169,6 +160,21 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           .filter((t) => isRecentTimestamp(t.timestamp) && isWithinBuenaventura(t.latitude, t.longitude));
         setTrackings(normalizedInitial);
 
+        if (normalizedInitial.length > 0) {
+          const latest = normalizedInitial[normalizedInitial.length - 1];
+          setVehiclePosition({
+            latitude: latest.latitude,
+            longitude: latest.longitude,
+            timestamp: latest.timestamp,
+          });
+
+          const historyPoints = normalizedInitial.map((t) => [t.latitude, t.longitude]);
+          setLiveRouteHistory(historyPoints);
+        } else {
+          setVehiclePosition(null);
+          setLiveRouteHistory([]);
+        }
+
         if (route?.origin && route?.destination) {
           const [from, to] = await Promise.all([
             geocodeAddress(route.origin),
@@ -176,24 +182,15 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           ]);
 
           if (!mounted) return;
-          const geocodeInBuenaventura =
-            Array.isArray(from)
-            && Array.isArray(to)
-            && isWithinBuenaventura(from[0], from[1])
-            && isWithinBuenaventura(to[0], to[1]);
 
-          if (geocodeInBuenaventura) {
+          // Confiamos en el geocoder con contexto de ciudad;
+          // solo forzamos demo si no se pudo geocodificar ninguno de los dos extremos.
+          if (Array.isArray(from) && Array.isArray(to)) {
             setOriginCoords(from);
             setDestinationCoords(to);
             setForceBuenaventuraDemo(false);
-          } else {
-            setOriginCoords(null);
-            setDestinationCoords(null);
-            setRoutePolyline(null);
-            setForceBuenaventuraDemo(true);
-          }
 
-          if (geocodeInBuenaventura && from && to) {
+            // getStreetRoute incluye fallback a línea recta (islas / rutas sin asfalto)
             const streetRoute = await getStreetRoute(from, to);
             if (!mounted) return;
             if (streetRoute) {
@@ -201,6 +198,12 @@ export default function TrackingPage({ routeId: routeIdProp }) {
               setEta(Math.ceil(streetRoute.duration / 60));
               setEtaUpdated(new Date());
             }
+          } else {
+            // Geocoding devolvió null → usar demo
+            setOriginCoords(null);
+            setDestinationCoords(null);
+            setRoutePolyline(null);
+            setForceBuenaventuraDemo(true);
           }
         } else {
           setForceBuenaventuraDemo(true);
@@ -218,11 +221,19 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     if (!Number.isFinite(selectedRouteId)) return undefined;
 
     setWsStatus('connecting');
+    let opened = false;
+
+    const openingTimeoutId = setTimeout(() => {
+      setWsStatus((current) => (current === 'connecting' ? 'offline' : current));
+    }, 7000);
 
     const socketClient = connectTrackingWS(
       selectedRouteId,
       (rawData) => {
-        const normalized = normalizeTracking(rawData, new Date().toISOString());
+        const payload = extractPositionPayload(rawData);
+        if (!payload) return;
+
+        const normalized = normalizeTracking(payload, new Date().toISOString());
         if (!normalized) return;
 
         if (trackingsCountRef.current === 0) {
@@ -237,18 +248,32 @@ export default function TrackingPage({ routeId: routeIdProp }) {
         }
 
         setTrackings((prev) => mergeTrackings(prev, [normalized]));
+        setVehiclePosition({
+          latitude: normalized.latitude,
+          longitude: normalized.longitude,
+          timestamp: normalized.timestamp,
+        });
+        setLiveRouteHistory((prev) => appendHistoryPoint(prev, [normalized.latitude, normalized.longitude]));
       },
       {
         onOpen: () => {
+          opened = true;
+          clearTimeout(openingTimeoutId);
           setWsStatus('live');
           setIsPollingFallback(false);
         },
-        onClose: () => setWsStatus('connecting'),
+        onClose: () => {
+          setWsStatus((current) => {
+            if (current === 'live' || opened) return 'connecting';
+            return 'offline';
+          });
+        },
         onError: () => setWsStatus('offline'),
       },
     );
 
     return () => {
+      clearTimeout(openingTimeoutId);
       socketClient.close();
       if (liveTransitionTimerRef.current) clearTimeout(liveTransitionTimerRef.current);
       if (liveToastTimerRef.current) clearTimeout(liveToastTimerRef.current);
@@ -274,6 +299,16 @@ export default function TrackingPage({ routeId: routeIdProp }) {
         if (normalized.length === 0) return;
 
         setTrackings((prev) => mergeTrackings(prev, normalized));
+        const latestPoint = normalized[normalized.length - 1];
+        setVehiclePosition({
+          latitude: latestPoint.latitude,
+          longitude: latestPoint.longitude,
+          timestamp: latestPoint.timestamp,
+        });
+        setLiveRouteHistory((prev) => normalized.reduce(
+          (acc, t) => appendHistoryPoint(acc, [t.latitude, t.longitude]),
+          prev,
+        ));
         setIsPollingFallback(true);
       } catch {
         // En fallback, ignoramos errores intermitentes de red.
@@ -313,15 +348,21 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   }, [wsStatus, isPollingFallback]);
 
   const hasLiveData = trackings.length > 0;
-  const isDemoMode = !hasLiveData;
-  const useBuenaventuraDemo = isDemoMode || forceBuenaventuraDemo;
+  const showEmptyCityCanvas = !hasLiveData;
+  const showRouteContext = hasLiveData && !forceBuenaventuraDemo;
 
-  const displayOriginCoords = useBuenaventuraDemo || !originCoords ? DEMO_ORIGIN : originCoords;
-  const displayDestinationCoords = useBuenaventuraDemo || !destinationCoords ? DEMO_DESTINATION : destinationCoords;
-  const displayRoutePolyline = useBuenaventuraDemo || !(routePolyline?.length > 1)
-    ? DEMO_ROUTE_POLYLINE
-    : routePolyline;
-  const displayTrackings = hasLiveData ? trackings : DEMO_TRACKINGS;
+  const displayOriginCoords = showRouteContext ? originCoords : null;
+  const displayDestinationCoords = showRouteContext ? destinationCoords : null;
+  const displayPlannedRoutePolyline = showRouteContext && Array.isArray(routePolyline) && routePolyline.length > 1
+    ? routePolyline
+    : null;
+  const displayTraveledRoutePolyline = hasLiveData && liveRouteHistory.length > 1
+    ? liveRouteHistory
+    : null;
+  const displayTrackings = useMemo(
+    () => (hasLiveData ? trackings : []),
+    [hasLiveData, trackings],
+  );
 
   const vehicleSummary = useMemo(() => {
     if (displayTrackings.length === 0) {
@@ -369,7 +410,15 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   }, [displayTrackings, routeInfo, selectedRouteId]);
 
   const activeVehicles = useMemo(() => {
-    if (useBuenaventuraDemo) return DEMO_VEHICLES;
+    if (!hasLiveData) return [];
+
+    if (Number.isFinite(vehiclePosition?.latitude) && Number.isFinite(vehiclePosition?.longitude)) {
+      return [{
+        ...vehicleSummary,
+        latitude: vehiclePosition.latitude,
+        longitude: vehiclePosition.longitude,
+      }];
+    }
 
     const latestByPassenger = new Map();
     displayTrackings.forEach((t) => {
@@ -400,58 +449,43 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       return [];
     }
     return [vehicleSummary];
-  }, [vehicleSummary, useBuenaventuraDemo, displayTrackings]);
+  }, [displayTrackings, hasLiveData, vehiclePosition, vehicleSummary]);
 
-  const etaLabel = eta === null ? (useBuenaventuraDemo ? '9 min' : 'Sin ETA') : `${eta} min`;
+  const etaLabel = eta === null ? 'Sin ETA' : `${eta} min`;
 
   return (
     <div className="tracking-layout min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 font-sans">
-      <div className="tracking-page-header px-4 md:px-8 py-4 md:py-5 sticky top-0 z-40 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-4 max-w-[1400px] mx-auto">
-          <div className="flex items-center gap-3 min-w-0">
-            <Link
-              to="/dashboard"
-              className="flex items-center justify-center w-9 h-9 rounded-xl bg-gray-100 hover:bg-gray-200 active:scale-95 transition shrink-0 text-slate-600"
-              aria-label="Volver al dashboard"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <line x1="19" y1="12" x2="5" y2="12" />
-                <polyline points="12 19 5 12 12 5" />
-              </svg>
-            </Link>
-            <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-1">Dashboard analitico</p>
-              <h1 className="text-lg md:text-xl font-bold text-slate-900 leading-tight truncate">
-                {routeInfo?.name || `Ruta #${selectedRouteId}`}
-              </h1>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <span className={`status-badge ${statusBadge.color}`}>
-              <span className="status-dot" />
-              {statusBadge.label}
-            </span>
-            {useBuenaventuraDemo && <span className="demo-badge">Modo demo</span>}
-            <span className="text-xs text-slate-500">{trackings.length} actualizaciones</span>
-          </div>
-        </div>
+      <div className="tracking-page-header px-4 md:px-8 pt-4 md:pt-6 pb-0 max-w-[1400px] mx-auto">
+        <TrackingHero
+          backTo="/dashboard"
+          backAriaLabel="Volver al dashboard"
+          eyebrow="Sistema activo"
+          title="Tracking en tiempo real"
+          description="Monitorea rutas activas, localiza conductores y sigue cada recorrido en tiempo real."
+          subtitle={routeInfo?.name || `Ruta #${selectedRouteId}`}
+          meta={(
+            <>
+              <span className={`status-badge ${statusBadge.color}`}>
+                <span className="status-dot" />
+                {statusBadge.label}
+              </span>
+              <span className="tracking-page-hero-updates">{trackings.length} actualizaciones</span>
+            </>
+          )}
+        />
       </div>
 
       <div className="tracking-dashboard px-4 md:px-8 py-5 max-w-[1400px] mx-auto">
         <aside className="tracking-analytics-panel">
           <section className="kpi-card">
             <p className="kpi-label">Origen</p>
-            <p className="kpi-value">{useBuenaventuraDemo ? 'Centro, Buenaventura' : (routeInfo?.origin || 'Centro, Buenaventura')}</p>
+            <p className="kpi-value">{routeInfo?.origin || 'Centro, Buenaventura'}</p>
             <p className="kpi-label mt-3">Destino</p>
-            <p className="kpi-value">{useBuenaventuraDemo ? 'Seminario San Buenaventura' : (routeInfo?.destination || 'Seminario San Buenaventura')}</p>
+            <p className="kpi-value">{routeInfo?.destination || 'Seminario San Buenaventura'}</p>
             <div className="kpi-eta-row">
               <span className="kpi-label">ETA</span>
               <strong className="kpi-eta-value">{etaLabel}</strong>
             </div>
-            {useBuenaventuraDemo && (
-              <p className="kpi-updated">Vista inicial con datos de prueba para validar el diseno del mapa.</p>
-            )}
             {etaUpdated && (
               <p className="kpi-updated">
                 Actualizado: {etaUpdated.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
@@ -512,12 +546,14 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           )}
           <MapView
             trackings={displayTrackings}
-            routePolyline={displayRoutePolyline}
+            plannedRoutePolyline={displayPlannedRoutePolyline}
+            traveledRoutePolyline={displayTraveledRoutePolyline}
             originCoords={displayOriginCoords}
             destinationCoords={displayDestinationCoords}
-            originName={useBuenaventuraDemo ? 'Centro' : (routeInfo?.origin || 'Centro')}
-            destinationName={useBuenaventuraDemo ? 'Seminario San Buenaventura' : (routeInfo?.destination || 'Seminario San Buenaventura')}
+            originName={routeInfo?.origin || 'Centro'}
+            destinationName={routeInfo?.destination || 'Seminario San Buenaventura'}
             activeVehicles={activeVehicles}
+            vehiclePosition={showEmptyCityCanvas ? null : vehiclePosition}
             mapHeight="640px"
           />
         </main>

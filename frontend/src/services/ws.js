@@ -25,11 +25,46 @@ function resolveWsBaseUrl() {
   return 'ws://localhost:8000/ws';
 }
 
+function parseIncomingMessage(rawText) {
+  try {
+    return JSON.parse(rawText);
+  } catch {
+    return null;
+  }
+}
+
+function extractLocationUpdate(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+
+  // Soporta formato por evento: { event: 'position_update', data: { ... } }
+  const eventName = String(payload.event || payload.type || payload.action || '').toLowerCase();
+  if (eventName === 'position_update' || eventName === 'tracking_update') {
+    const nested = payload.data || payload.payload || payload.position;
+    if (nested && typeof nested === 'object') {
+      return nested;
+    }
+  }
+
+  // Soporta payload plano: { latitude, longitude, ... }
+  if (
+    payload.latitude != null
+    || payload.longitude != null
+    || payload.lat != null
+    || payload.lng != null
+  ) {
+    return payload;
+  }
+
+  return null;
+}
+
 export function connectTrackingWS(routeId, onMessage, handlers = {}) {
   const {
     onOpen,
     onClose,
     onError,
+    onRawMessage,
+    onLocationUpdate,
     reconnectDelayMs = 1500,
     maxReconnectAttempts = 20,
   } = handlers;
@@ -49,11 +84,21 @@ export function connectTrackingWS(routeId, onMessage, handlers = {}) {
     };
 
     socket.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        onMessage(data);
-      } catch {
-        // Ignora mensajes malformados para no romper el stream.
+      const data = parseIncomingMessage(event.data);
+      if (!data) return;
+
+      if (onRawMessage) {
+        onRawMessage(data);
+      }
+
+      const locationPayload = extractLocationUpdate(data);
+      if (locationPayload && onLocationUpdate) {
+        onLocationUpdate(locationPayload);
+      }
+
+      // Compatibilidad: el callback principal sigue recibiendo la mejor señal de ubicación.
+      if (locationPayload) {
+        onMessage(locationPayload);
       }
     };
 

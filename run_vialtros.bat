@@ -1,13 +1,15 @@
 @echo off
-rem Script para iniciar backend y frontend en ventanas separadas.
+rem Script para iniciar backend (ASGI con WebSocket) y frontend en ventanas separadas.
 
 cd /d "%~dp0"
 
-rem Inicia el backend de Django en una ventana nueva
-start "Backend Vialtros" cmd /k "cd /d "%~dp0backend" && if exist "%~dp0.venv\Scripts\activate.bat" call "%~dp0.venv\Scripts\activate.bat" && python manage.py runserver"
+rem Inicia el backend con script robusto para Windows (.venv + fallback)
+start "Backend Vialtros" cmd /k "cd /d "%~dp0backend" && call "%~dp0backend\start_backend.bat""
 
 rem Inicia el frontend de React en una ventana nueva
 start "Frontend Vialtros" cmd /k "cd /d "%~dp0frontend" && npm start"
 
-echo Backend y frontend iniciándose en ventanas separadas.
+echo Backend ASGI y frontend iniciandose en ventanas separadas.
+echo Si quieres ver movimiento en vivo, en otra terminal ejecuta:
+echo   cd backend ^&^& python manage.py transmitir_tracking --route 1 --interval 2
 pause

@@ -14,11 +14,16 @@ import UserRoutePage from './pages/UserRoutePage';
 import LandingPage from './pages/LandingPage';
 import PrivateRoute from './components/PrivateRoute';
 import { Logo } from './components/Logo';
+import { clearSession, ensureLocalAccessSession, isLocalAccessEnabled } from './services/auth';
 
 
 function App() {
-  const [isAuth, setIsAuth] = useState(!!localStorage.getItem('access'));
-  const [role, setRole] = useState(localStorage.getItem('role') || null);
+  const [isAuth, setIsAuth] = useState(() => {
+    const token = localStorage.getItem('access');
+    if (token) return true;
+    return ensureLocalAccessSession();
+  });
+  const [role, setRole] = useState(() => localStorage.getItem('role') || (isLocalAccessEnabled() ? 'admin' : null));
 
   useEffect(() => {
     if (isAuth) {
@@ -27,11 +32,7 @@ function App() {
           setRole(user.role);
           localStorage.setItem('role', user.role);
         } else {
-          // Token inválido o expirado → forzar logout
-          localStorage.removeItem('access');
-          localStorage.removeItem('refresh');
-          localStorage.removeItem('role');
-          localStorage.removeItem('username');
+          clearSession();
           setIsAuth(false);
           setRole(null);
         }
@@ -43,10 +44,14 @@ function App() {
   }, [isAuth]);
 
   const handleLogout = () => {
-    localStorage.removeItem('access');
-    localStorage.removeItem('refresh');
-    localStorage.removeItem('role');
-    localStorage.removeItem('username');
+    clearSession();
+
+    if (ensureLocalAccessSession()) {
+      setIsAuth(true);
+      setRole(localStorage.getItem('role') || 'admin');
+      return;
+    }
+
     setIsAuth(false);
     setRole(null);
   };

@@ -17,9 +17,8 @@ echo Vialtros - Iniciando servidores
 echo ========================================
 
 REM Terminal 1: Backend ASGI (Daphne en puerto 8000)
-REM Daphne es necesario para WebSockets (channels). runserver no soporta WS.
-echo Iniciando Backend ASGI (daphne) en puerto 8000...
-start "Backend Vialtros" cmd /k "cd /d "%~dp0backend" && if exist "%~dp0.venv\Scripts\activate.bat" call "%~dp0.venv\Scripts\activate.bat" && daphne -b 0.0.0.0 -p 8000 core.asgi:application"
+echo Iniciando Backend ASGI en puerto 8000...
+start "Backend Vialtros" cmd /k "cd /d "%~dp0backend" && call "%~dp0backend\start_backend.bat""
 
 REM Esperar que el backend arranque antes de lanzar el frontend
 timeout /t 3 /nobreak >nul

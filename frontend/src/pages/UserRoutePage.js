@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import Sidebar from '../components/dashboard/Sidebar';
 import { icons } from '../components/dashboard/icons';
+import TrackingHero from '../components/tracking/TrackingHero';
 import { getUserAssignedRoute } from '../services/dashboard';
 
 export default function UserRoutePage({ role, onLogout }) {
@@ -29,17 +29,22 @@ export default function UserRoutePage({ role, onLogout }) {
     <div className="min-h-screen flex bg-gray-50 font-sans">
       <Sidebar role={role} onLogout={onLogout} />
       <main className="flex-1 min-w-0 py-8 px-6 md:px-10 overflow-y-auto">
-        <div className="flex items-center justify-between gap-4 mb-8">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">Tu ruta asignada</h1>
-            <p className="text-sm text-gray-400 mt-0.5">Consulta tu conductor, el trayecto y los datos principales de tu recorrido</p>
-          </div>
-          <Link
-            to="/dashboard"
-            className="flex items-center gap-2 bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-lg text-sm font-semibold shadow-sm hover:bg-gray-50 transition-all duration-150"
-          >
-            Volver al panel
-          </Link>
+        <div className="mb-8">
+          <TrackingHero
+            backTo="/dashboard"
+            backAriaLabel="Volver al panel"
+            eyebrow="Ruta personal"
+            title="Tu ruta asignada"
+            description="Consulta tu conductor, el trayecto y los datos principales de tu recorrido desde una vista clara y consistente con el tracking en vivo."
+            subtitle={route?.name || 'Pendiente de asignacion'}
+            meta={
+              route ? (
+                <span className="tracking-hero-chip">
+                  {route?.passenger_count ?? route?.passenger_details?.length ?? 0} estudiantes
+                </span>
+              ) : null
+            }
+          />
         </div>
 
         {loading ? (

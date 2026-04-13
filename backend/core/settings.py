@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
+    'channels',
     'django.contrib.staticfiles',
     # Apps del proyecto
     'users.apps.UsersConfig',
@@ -50,7 +51,6 @@ INSTALLED_APPS = [
     # Terceros
     'rest_framework',
     'rest_framework_simplejwt',
-    'channels',
 ]
 
 MIDDLEWARE = [

@@ -1,0 +1,188 @@
+.tracking-hero-shell {
+  position: relative;
+  overflow: hidden;
+  border-radius: 24px;
+  padding: 24px 26px 26px;
+  background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+  box-shadow: 0 18px 42px rgba(37, 99, 235, 0.24);
+}
+
+.tracking-hero-orb {
+  position: absolute;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.tracking-hero-orb-primary {
+  width: 220px;
+  height: 220px;
+  top: -92px;
+  right: -74px;
+}
+
+.tracking-hero-orb-secondary {
+  width: 150px;
+  height: 150px;
+  right: 84px;
+  bottom: -74px;
+}
+
+.tracking-hero-content {
+  position: relative;
+  z-index: 1;
+}
+
+.tracking-hero-topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.tracking-hero-back {
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #dbeafe;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.tracking-hero-back:hover {
+  background: rgba(255, 255, 255, 0.14);
+  transform: translateY(-1px);
+}
+
+.tracking-hero-status-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.tracking-hero-live-dot {
+  position: relative;
+  width: 10px;
+  height: 10px;
+}
+
+.tracking-hero-live-dot-ping,
+.tracking-hero-live-dot-core {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: #34d399;
+}
+
+.tracking-hero-live-dot-ping {
+  opacity: 0.7;
+  animation: tracking-hero-pulse 2s ease-out infinite;
+}
+
+.tracking-hero-status-label {
+  color: #a7f3d0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.tracking-hero-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.tracking-hero-copy {
+  margin-top: 18px;
+}
+
+.tracking-hero-title {
+  margin: 0;
+  color: #ffffff;
+  font-size: clamp(1.85rem, 2.9vw, 2.45rem);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+
+.tracking-hero-description {
+  margin: 14px 0 0;
+  max-width: 540px;
+  color: rgba(219, 234, 254, 0.94);
+  font-size: 16px;
+  line-height: 1.8;
+}
+
+.tracking-hero-subtitle {
+  margin: 16px 0 0;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.tracking-hero-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  color: #eff6ff;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+@keyframes tracking-hero-pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 768px) {
+  .tracking-hero-shell {
+    border-radius: 20px;
+    padding: 18px;
+  }
+
+  .tracking-hero-topbar {
+    flex-direction: column;
+  }
+
+  .tracking-hero-meta {
+    justify-content: flex-start;
+  }
+
+  .tracking-hero-copy {
+    margin-top: 14px;
+  }
+
+  .tracking-hero-title {
+    font-size: clamp(1.65rem, 8vw, 2rem);
+  }
+
+  .tracking-hero-description {
+    font-size: 14px;
+    line-height: 1.65;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tracking-hero-live-dot-ping {
+    animation: none !important;
+  }
+}

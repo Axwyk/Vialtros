@@ -1,10 +1,18 @@
 // Servicio de conexión a la API REST con JWT
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
+function resolveApiUrl() {
+  const configured = process.env.REACT_APP_API_URL?.trim();
+  if (configured) {
+    return configured.replace(/\/+$/, '');
+  }
+
+  // Por defecto usa misma origin para funcionar en producción y con proxy en desarrollo.
+  return '/api';
+}
 
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: resolveApiUrl(),
 });
 
 // Interceptor para agregar el token JWT a cada request

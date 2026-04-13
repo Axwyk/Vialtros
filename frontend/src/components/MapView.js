@@ -27,6 +27,8 @@ const destinationIcon = L.divIcon({
   iconAnchor: [10, 10],
 });
 
+const BUENAVENTURA_CENTER = [3.89243, -77.02824];
+
 function createVehicleIcon(label, status = 'Detenido') {
   const safeLabel = safeText(label || 'Vehiculo');
   const normalizedStatus = status === 'En ruta' ? 'moving' : 'idle';
@@ -72,12 +74,14 @@ function createRouteLabelIcon(label, variant) {
   });
 }
 
-function FitBounds({ coordinates }) {
+function FitBounds({ coordinates, freezeAfterFirstFit = false }) {
   const map = useMap();
   const lastLengthRef = useRef(-1);
+  const fittedOnceRef = useRef(false);
 
   useEffect(() => {
     if (!coordinates?.length) return;
+    if (freezeAfterFirstFit && fittedOnceRef.current) return;
     if (coordinates.length === lastLengthRef.current) return;
     lastLengthRef.current = coordinates.length;
 
@@ -88,14 +92,42 @@ function FitBounds({ coordinates }) {
 
     if (valid.length === 1) {
       map.setView(valid[0], 15, { animate: false });
+      fittedOnceRef.current = true;
       return;
     }
 
     const bounds = L.latLngBounds(valid);
     if (bounds.isValid()) {
       map.fitBounds(bounds, { padding: [80, 80], animate: false, maxZoom: 16 });
+      fittedOnceRef.current = true;
     }
-  }, [map, coordinates]);
+  }, [map, coordinates, freezeAfterFirstFit]);
+
+  return null;
+}
+
+function AutoFollowVehicle({ vehiclePoint, enabled = true }) {
+  const map = useMap();
+  const firstFollowRef = useRef(true);
+
+  useEffect(() => {
+    if (!enabled || !vehiclePoint) return;
+
+    const [lat, lng] = vehiclePoint;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+    if (firstFollowRef.current) {
+      firstFollowRef.current = false;
+      map.setView([lat, lng], Math.max(map.getZoom(), 15), { animate: false });
+      return;
+    }
+
+    map.flyTo([lat, lng], Math.max(map.getZoom(), 15), {
+      animate: true,
+      duration: 1.2,
+      easeLinearity: 0.25,
+    });
+  }, [map, vehiclePoint, enabled]);
 
   return null;
 }
@@ -112,11 +144,14 @@ function FitBounds({ coordinates }) {
 export default function MapView({
   trackings = [],
   routePolyline = null,
+  plannedRoutePolyline = null,
+  traveledRoutePolyline = null,
   originCoords = null,
   destinationCoords = null,
   originName = null,
   destinationName = null,
   activeVehicles = [],
+  vehiclePosition = null,
   mapHeight = '560px',
 }) {
   const validPoints = trackings
@@ -124,7 +159,7 @@ export default function MapView({
     .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
 
   const latestPoint = validPoints.length > 0 ? validPoints[validPoints.length - 1] : null;
-  const center = latestPoint || originCoords || destinationCoords || [3.879, -77.021];
+  const center = latestPoint || originCoords || destinationCoords || BUENAVENTURA_CENTER;
   const startLabelIcon = useMemo(
     () => createRouteLabelIcon(originName || 'Origen', 'start'),
     [originName],
@@ -134,14 +169,27 @@ export default function MapView({
     [destinationName],
   );
 
-  const fitCoords = routePolyline?.length > 1
-    ? routePolyline
+  const plannedLine = plannedRoutePolyline?.length > 1
+    ? plannedRoutePolyline
+    : (routePolyline?.length > 1 ? routePolyline : null);
+  const traveledLine = traveledRoutePolyline?.length > 1 ? traveledRoutePolyline : null;
+
+  const fitCoords = plannedLine?.length > 1
+    ? plannedLine
+    : (traveledLine?.length > 1
+      ? traveledLine
     : [
       ...[originCoords, destinationCoords].filter(Boolean),
       ...activeVehicles
         .filter((v) => Number.isFinite(v.latitude) && Number.isFinite(v.longitude))
         .map((v) => [v.latitude, v.longitude]),
-    ];
+    ]);
+
+  const vehiclePoint = Number.isFinite(vehiclePosition?.latitude) && Number.isFinite(vehiclePosition?.longitude)
+    ? [Number(vehiclePosition.latitude), Number(vehiclePosition.longitude)]
+    : latestPoint;
+
+  const hasLiveTrackings = validPoints.length > 0;
 
   return (
     <div style={{ position: 'relative', height: mapHeight }} className="tracking-map-container">
@@ -170,25 +218,47 @@ export default function MapView({
           maxZoom={20}
         />
 
-        {routePolyline?.length > 1 && (
+        {plannedLine?.length > 1 && (
           <>
             <Polyline
-              positions={routePolyline}
-              color="#2E63D8"
+              positions={plannedLine}
+              color="#64748b"
               weight={9}
-              opacity={0.18}
-              className="vt-route-line-shadow"
+              opacity={0.2}
+              className="vt-planned-route-line-shadow"
             />
             <Polyline
-              positions={routePolyline}
-              color="#2E63D8"
-              weight={5}
-              opacity={0.95}
-              dashArray="14 9"
+              positions={plannedLine}
+              color="#334155"
+              weight={4}
+              opacity={0.72}
+              dashArray="10 10"
               lineCap="round"
               lineJoin="round"
               smoothFactor={1.2}
-              className="vt-route-line-main"
+              className="vt-planned-route-line-main"
+            />
+          </>
+        )}
+
+        {traveledLine?.length > 1 && (
+          <>
+            <Polyline
+              positions={traveledLine}
+              color="#2E63D8"
+              weight={8}
+              opacity={0.2}
+              className="vt-traveled-route-line-shadow"
+            />
+            <Polyline
+              positions={traveledLine}
+              color="#1d4ed8"
+              weight={5}
+              opacity={0.96}
+              lineCap="round"
+              lineJoin="round"
+              smoothFactor={1.2}
+              className="vt-traveled-route-line-main"
             />
           </>
         )}
@@ -213,7 +283,8 @@ export default function MapView({
         {originCoords && <Marker position={originCoords} icon={startLabelIcon} interactive={false} />}
         {destinationCoords && <Marker position={destinationCoords} icon={endLabelIcon} interactive={false} />}
 
-        <FitBounds coordinates={fitCoords} />
+        <FitBounds coordinates={fitCoords} freezeAfterFirstFit={hasLiveTrackings} />
+        <AutoFollowVehicle vehiclePoint={vehiclePoint} enabled={hasLiveTrackings} />
       </MapContainer>
 
       {/* Leyenda del mapa */}
@@ -237,10 +308,16 @@ export default function MapView({
             <span>Destino</span>
           </div>
         )}
-        {routePolyline?.length > 1 && (
+        {plannedLine?.length > 1 && (
           <div className="legend-item">
-            <div className="legend-line"></div>
-            <span>Ruta</span>
+            <div className="legend-line planned"></div>
+            <span>Ruta planificada</span>
+          </div>
+        )}
+        {traveledLine?.length > 1 && (
+          <div className="legend-item">
+            <div className="legend-line traveled"></div>
+            <span>Ruta recorrida</span>
           </div>
         )}
       </div>
