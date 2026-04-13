@@ -79,6 +79,7 @@ export default function Sidebar({ role, onLogout }) {
 
   const navItems = [
     { to: "/dashboard", icon: icons.dashboard, label: "Inicio" },
+    { to: "/driver/routes", icon: icons.routes, label: "Mis rutas", driver: true },
     { to: "/admin/users", icon: icons.users, label: "Usuarios", admin: true },
     { to: "/admin/drivers", icon: icons.drivers, label: "Conductores", admin: true },
     { to: "/admin/routes", icon: icons.routes, label: "Rutas", admin: true },
@@ -93,7 +94,7 @@ export default function Sidebar({ role, onLogout }) {
         <Logo variant="default" iconSize={30} />
       </div>
       <nav className="flex flex-col gap-1 flex-1">
-        {navItems.filter(item => !item.admin || role === 'admin').map(item => {
+        {navItems.filter(item => (!item.admin || role === 'admin') && (!item.driver || role === 'driver')).map(item => {
           const Icon = item.icon;
           const isActive = item.tracking ? location.pathname.startsWith('/tracking/') : location.pathname === item.to;
           return (

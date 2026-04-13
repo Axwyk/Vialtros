@@ -6,6 +6,7 @@ import {
   getPassengers, createPassenger, updatePassenger, deletePassenger,
   getUsers, getRoutes, assignPassengerToRoute, removePassengerFromRoute,
 } from '../services/admin';
+import { getDriverTrackings } from '../services/dashboard';
 
 const EMPTY_FORM = { user: '', phone: '', routeId: '' };
 
@@ -13,6 +14,7 @@ export default function AdminPassengersPage({ role, onLogout }) {
   const [passengers, setPassengers] = useState([]);
   const [users, setUsers]           = useState([]);
   const [routes, setRoutes]         = useState([]);
+  const [trackings, setTrackings]   = useState([]);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState(null);
   const [modal, setModal]           = useState(null);
@@ -25,8 +27,8 @@ export default function AdminPassengersPage({ role, onLogout }) {
 
   const load = useCallback(() => {
     setLoading(true);
-    Promise.all([getPassengers(), getUsers(), getRoutes()])
-      .then(([p, u, r]) => { setPassengers(p); setUsers(u); setRoutes(r); })
+    Promise.all([getPassengers(), getUsers(), getRoutes(), getDriverTrackings()])
+      .then(([p, u, r, t]) => { setPassengers(p); setUsers(u); setRoutes(r); setTrackings(t); })
       .catch(() => setError('No se pudo cargar los datos'))
       .finally(() => setLoading(false));
   }, []);
@@ -146,12 +148,15 @@ export default function AdminPassengersPage({ role, onLogout }) {
                   <th onClick={() => toggleSort('route')} className="text-left px-5 py-3 font-medium cursor-pointer select-none hover:text-gray-600">
                     <span className="flex items-center gap-1">Ruta asignada {sortCol === 'route' ? (sortDir === 'asc' ? '↑' : '↓') : <span className="opacity-30">↕</span>}</span>
                   </th>
+                  <th className="text-left px-5 py-3 font-medium">Estado de Recogida</th>
                   <th className="px-5 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {sorted.map(p => {
                   const assignedRoute = getPassengerRoute(p.id);
+                  const passengerTracking = trackings.find(t => Number(t.passenger) === Number(p.id));
+                  const pickupStatus = passengerTracking?.status || 'not_picked';
                   return (
                     <tr key={p.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-5 py-3.5 font-medium text-gray-900">
@@ -163,6 +168,13 @@ export default function AdminPassengersPage({ role, onLogout }) {
                         {assignedRoute
                           ? <span className="text-xs font-medium bg-blue-50 text-blue-600 px-2.5 py-0.5 rounded-full">{assignedRoute.name}</span>
                           : <span className="text-xs text-gray-300">Sin asignar</span>}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${
+                          pickupStatus === 'picked' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        }`}>
+                          {pickupStatus === 'picked' ? '✓ Recogido' : '✗ No recogido'}
+                        </span>
                       </td>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-2 justify-end">

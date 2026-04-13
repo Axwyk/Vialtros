@@ -3,15 +3,20 @@ import Sidebar from '../components/dashboard/Sidebar';
 import { icons } from '../components/dashboard/icons';
 import TrackingHero from '../components/tracking/TrackingHero';
 import { getUserAssignedRoute } from '../services/dashboard';
+import { getDriverTrackings } from '../services/dashboard';
 
 export default function UserRoutePage({ role, onLogout }) {
   const [data, setData] = useState(null);
+  const [trackings, setTrackings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    getUserAssignedRoute()
-      .then(setData)
+    Promise.all([getUserAssignedRoute(), getDriverTrackings()])
+      .then(([routeData, trackingData]) => {
+        setData(routeData);
+        setTrackings(trackingData);
+      })
       .catch((err) => {
         if (err?.response?.status === 404) {
           setError('Todavía no tienes una ruta asignada.');
@@ -24,6 +29,8 @@ export default function UserRoutePage({ role, onLogout }) {
 
   const route = data?.route;
   const driver = data?.driver;
+  const userTracking = trackings.find(t => Number(t.route) === Number(route?.id));
+  const pickupStatus = userTracking?.status || 'not_picked';
 
   return (
     <div className="min-h-screen flex bg-gray-50 font-sans">
@@ -97,6 +104,20 @@ export default function UserRoutePage({ role, onLogout }) {
                     <p className="text-[11px] uppercase tracking-wide text-gray-300">Licencia</p>
                     <p className="text-sm font-medium text-gray-700">{driver?.license_number || 'No disponible'}</p>
                   </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-gray-100 bg-white p-4">
+                <p className="text-xs uppercase tracking-wide text-green-500 font-semibold mb-2">Estado de Recogida</p>
+                <div className="flex items-center gap-3">
+                  <span className={`inline-flex items-center gap-1 text-sm font-medium px-3 py-1 rounded-full ${
+                    pickupStatus === 'picked' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                  }`}>
+                    {pickupStatus === 'picked' ? '✓ Ya fuiste recogido' : '✗ Aún no has sido recogido'}
+                  </span>
+                  <p className="text-xs text-gray-400">
+                    {pickupStatus === 'picked' ? 'Tu conductor te ha marcado como recogido.' : 'Espera a que tu conductor te marque como recogido.'}
+                  </p>
                 </div>
               </div>
             </section>
