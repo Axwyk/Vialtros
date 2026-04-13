@@ -1,34 +1,107 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Sidebar from '../components/dashboard/Sidebar';
 import { icons } from '../components/dashboard/icons';
 import TrackingHero from '../components/tracking/TrackingHero';
 import { getUserAssignedRoute } from '../services/dashboard';
 import { getDriverTrackings } from '../services/dashboard';
+import { getTrackingsByRoute } from '../services/tracking';
+import { connectTrackingWS } from '../services/ws';
+import { geocodeAddress } from '../services/routing';
 
+const NEAR_DISTANCE_KM = 0.8;
+
+function toRad(value) {
+  return (value * Math.PI) / 180;
+}
+
+function distanceKm(lat1, lng1, lat2, lng2) {
+  const earthKm = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+
+  return earthKm * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
+function normalizeTracking(raw) {
+  const latitude = Number(raw?.latitude ?? raw?.lat);
+  const longitude = Number(raw?.longitude ?? raw?.lng);
+
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return null;
+  }
+
+  return {
+    ...raw,
+    latitude,
+    longitude,
+  };
+}
 export default function UserRoutePage({ role, onLogout }) {
   const [data, setData] = useState(null);
   const [trackings, setTrackings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [destinationCoords, setDestinationCoords] = useState(null);
+  const [showNearbyBanner, setShowNearbyBanner] = useState(false);
 
   useEffect(() => {
-    Promise.all([getUserAssignedRoute(), getDriverTrackings()])
-      .then(([routeData, trackingData]) => {
-        setData(routeData);
-        setTrackings(trackingData);
-      })
-      .catch((err) => {
-        if (err?.response?.status === 404) {
-          setError('Todavía no tienes una ruta asignada.');
-          return;
-        }
-        setError('No se pudo cargar tu ruta en este momento.');
-      })
-      .finally(() => setLoading(false));
-  }, []);
+  Promise.all([getUserAssignedRoute(), getDriverTrackings()])
+    .then(([routeData, trackingData]) => {
+      setData(routeData);
+      setTrackings((trackingData || []).map(normalizeTracking).filter(Boolean));
+    })
+    .catch((err) => {
+      if (err?.response?.status === 404) {
+        setError('Todavía no tienes una ruta asignada.');
+        return;
+      }
+      setError('No se pudo cargar tu ruta en este momento.');
+    })
+    .finally(() => setLoading(false));
+}, []);
+
+  useEffect(() => {
+  if (!data?.route?.destination) return;
+
+  geocodeAddress(data.route.destination)
+    .then((coords) => {
+      if (Array.isArray(coords) && coords.length === 2) {
+        setDestinationCoords(coords);
+      }
+    })
+    .catch(() => {});
+}, [data]);
 
   const route = data?.route;
   const driver = data?.driver;
+
+  const latestTracking = useMemo(() => {
+  if (!trackings.length) return null;
+  return trackings[trackings.length - 1];
+}, [trackings]);
+
+const isVehicleNearby = useMemo(() => {
+  if (!latestTracking || !destinationCoords) return false;
+
+  const km = distanceKm(
+    latestTracking.latitude,
+    latestTracking.longitude,
+    destinationCoords[0],
+    destinationCoords[1]
+  );
+
+  return km <= NEAR_DISTANCE_KM;
+}, [latestTracking, destinationCoords]);
+
+useEffect(() => {
+  setShowNearbyBanner(isVehicleNearby);
+}, [isVehicleNearby]);
+
   const userTracking = trackings.find(t => Number(t.route) === Number(route?.id));
   const pickupStatus = userTracking?.status || 'not_picked';
 
@@ -36,6 +109,23 @@ export default function UserRoutePage({ role, onLogout }) {
     <div className="min-h-screen flex bg-gray-50 font-sans">
       <Sidebar role={role} onLogout={onLogout} />
       <main className="flex-1 min-w-0 py-8 px-6 md:px-10 overflow-y-auto">
+
+        {showNearbyBanner && (
+  <div className="fixed top-6 right-6 z-50 max-w-sm rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 shadow-lg">
+    <div className="flex items-start gap-3">
+      <div className="mt-0.5 h-3 w-3 rounded-full bg-emerald-500 animate-pulse" />
+      <div>
+        <p className="text-sm font-semibold text-emerald-800">
+          Tu vehículo está cerca
+        </p>
+        <p className="mt-1 text-xs text-emerald-700">
+          Prepárate, el conductor ya está próximo a tu destino.
+        </p>
+      </div>
+    </div>
+  </div>
+)}
+
         <div className="mb-8">
           <TrackingHero
             backTo="/dashboard"
