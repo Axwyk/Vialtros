@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getDriverAssignedRoutes } from '../services/dashboard';
+import { getRoutes } from '../services/admin';
 import { sendDriverLocation } from '../services/driverLocation';
 
 function formatTimestamp(value) {
@@ -16,7 +17,7 @@ function formatTimestamp(value) {
   });
 }
 
-export default function DriverLocationPage() {
+export default function DriverLocationPage({ role }) {
   const [routes, setRoutes] = useState([]);
   const [selectedRouteId, setSelectedRouteId] = useState('');
   const [loadingRoutes, setLoadingRoutes] = useState(true);
@@ -29,20 +30,47 @@ export default function DriverLocationPage() {
   const watchIdRef = useRef(null);
   const lastSentMsRef = useRef(0);
 
+  const isAdminPreview = role === 'admin';
+
+  async function loadAvailableRoutes(currentRole) {
+    if (currentRole === 'driver') {
+      return getDriverAssignedRoutes();
+    }
+
+    if (currentRole === 'admin') {
+      return getRoutes();
+    }
+
+    return [];
+  }
+
   useEffect(() => {
     let mounted = true;
     setLoadingRoutes(true);
+    setError('');
 
-    getDriverAssignedRoutes()
+    loadAvailableRoutes(role)
       .then((data) => {
         if (!mounted) return;
         setRoutes(data);
         if (data[0]?.id) setSelectedRouteId(String(data[0].id));
+        if (!data.length && role === 'driver') {
+          setStatusText('Aun no tienes rutas asignadas para compartir ubicacion.');
+        }
+        if (!data.length && role === 'admin') {
+          setStatusText('No hay rutas cargadas para probar el envio de ubicacion.');
+        }
       })
-      .catch(() => {
+      .catch((err) => {
         if (!mounted) return;
         setRoutes([]);
-        setError('No se pudieron cargar las rutas del conductor.');
+        if (err?.response?.status === 403 && role !== 'driver' && role !== 'admin') {
+          setError('Solo un conductor o un administrador pueden usar esta pantalla.');
+        } else if (role === 'admin') {
+          setError('No se pudieron cargar las rutas disponibles para la prueba de ubicacion.');
+        } else {
+          setError('No se pudieron cargar las rutas del conductor.');
+        }
       })
       .finally(() => {
         if (mounted) setLoadingRoutes(false);
@@ -54,7 +82,7 @@ export default function DriverLocationPage() {
         navigator.geolocation?.clearWatch(watchIdRef.current);
       }
     };
-  }, []);
+  }, [role]);
 
   const selectedRoute = useMemo(
     () => routes.find((route) => String(route.id) === String(selectedRouteId)) || null,
@@ -143,74 +171,81 @@ export default function DriverLocationPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-3xl">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-white px-4 py-6 text-slate-900 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-4xl">
         <div className="mb-6 flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-300">Modo conductor</p>
-            <h1 className="mt-2 text-3xl font-black tracking-tight">Compartir ubicacion</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-600">
+              {isAdminPreview ? 'Modo prueba' : 'Modo conductor'}
+            </p>
+            <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Compartir ubicacion</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
               Abre esta pantalla desde el celular del conductor y deja la transmision activa para alimentar el mapa en vivo.
             </p>
+            {isAdminPreview && (
+              <p className="mt-2 inline-flex rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                Vista de prueba para administrador
+              </p>
+            )}
           </div>
           <Link
             to="/dashboard"
-            className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-slate-500 hover:bg-slate-800"
+            className="rounded-2xl border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-50"
           >
             Volver
           </Link>
         </div>
 
-        <section className="rounded-[28px] border border-slate-800 bg-gradient-to-br from-slate-900 via-slate-900 to-cyan-950/70 p-5 shadow-2xl shadow-cyan-950/30 sm:p-7">
+        <section className="rounded-[28px] border border-blue-100 bg-white p-5 shadow-xl shadow-blue-100/60 sm:p-7">
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="rounded-3xl border border-slate-800 bg-slate-950/60 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Ruta activa</p>
+            <div className="rounded-3xl border border-slate-200 bg-slate-50/90 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Ruta activa</p>
               <select
                 value={selectedRouteId}
                 onChange={(event) => setSelectedRouteId(event.target.value)}
                 disabled={loadingRoutes || sharing}
-                className="mt-3 w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-100 outline-none transition focus:border-cyan-400"
+                className="mt-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-blue-400"
               >
                 <option value="">Selecciona una ruta</option>
                 {routes.map((route) => (
                   <option key={route.id} value={route.id}>{route.name}</option>
                 ))}
               </select>
-              <p className="mt-3 text-xs text-slate-400">
-                {selectedRoute ? `${selectedRoute.origin} -> ${selectedRoute.destination}` : 'Selecciona la ruta asignada al conductor.'}
+              <p className="mt-3 text-xs text-slate-500">
+                {selectedRoute ? `${selectedRoute.origin} -> ${selectedRoute.destination}` : (isAdminPreview ? 'Selecciona cualquier ruta para probar el envio.' : 'Selecciona la ruta asignada al conductor.')}
               </p>
             </div>
 
-            <div className="rounded-3xl border border-slate-800 bg-slate-950/60 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Estado</p>
+            <div className="rounded-3xl border border-slate-200 bg-slate-50/90 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Estado</p>
               <div className="mt-3 flex items-center gap-3">
-                <span className={`inline-flex h-3 w-3 rounded-full ${sharing ? 'bg-emerald-400' : 'bg-slate-500'}`} />
-                <p className="text-sm font-semibold text-slate-100">{sharing ? 'Transmitiendo al mapa' : 'En espera'}</p>
+                <span className={`inline-flex h-3 w-3 rounded-full ${sharing ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                <p className="text-sm font-semibold text-slate-800">{sharing ? 'Transmitiendo al mapa' : 'En espera'}</p>
               </div>
-              <p className="mt-3 text-xs text-slate-400">Ultimo envio: {formatTimestamp(lastSentAt)}</p>
-              <p className="mt-1 text-xs text-slate-400">{statusText}</p>
+              <p className="mt-3 text-xs text-slate-500">Ultimo envio: {formatTimestamp(lastSentAt)}</p>
+              <p className="mt-1 text-xs text-slate-500">{statusText}</p>
             </div>
           </div>
 
           {lastCoords && (
             <div className="mt-4 grid gap-4 sm:grid-cols-3">
-              <div className="rounded-3xl border border-slate-800 bg-slate-950/60 p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Latitud</p>
-                <p className="mt-2 text-lg font-bold text-cyan-300">{lastCoords.latitude.toFixed(6)}</p>
+              <div className="rounded-3xl border border-slate-200 bg-blue-50/70 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Latitud</p>
+                <p className="mt-2 text-lg font-bold text-blue-700">{lastCoords.latitude.toFixed(6)}</p>
               </div>
-              <div className="rounded-3xl border border-slate-800 bg-slate-950/60 p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Longitud</p>
-                <p className="mt-2 text-lg font-bold text-cyan-300">{lastCoords.longitude.toFixed(6)}</p>
+              <div className="rounded-3xl border border-slate-200 bg-blue-50/70 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Longitud</p>
+                <p className="mt-2 text-lg font-bold text-blue-700">{lastCoords.longitude.toFixed(6)}</p>
               </div>
-              <div className="rounded-3xl border border-slate-800 bg-slate-950/60 p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Velocidad</p>
-                <p className="mt-2 text-lg font-bold text-cyan-300">{Math.round(lastCoords.speed_kmh || 0)} km/h</p>
+              <div className="rounded-3xl border border-slate-200 bg-blue-50/70 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Velocidad</p>
+                <p className="mt-2 text-lg font-bold text-blue-700">{Math.round(lastCoords.speed_kmh || 0)} km/h</p>
               </div>
             </div>
           )}
 
           {error && (
-            <div className="mt-4 rounded-2xl border border-rose-500/30 bg-rose-950/40 px-4 py-3 text-sm text-rose-200">
+            <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
               {error}
             </div>
           )}
@@ -220,7 +255,7 @@ export default function DriverLocationPage() {
               type="button"
               onClick={startSharing}
               disabled={loadingRoutes || sharing || !selectedRouteId}
-              className="rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-black uppercase tracking-[0.14em] text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+              className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-black uppercase tracking-[0.14em] text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
             >
               {sending ? 'Enviando...' : 'Iniciar transmision'}
             </button>
@@ -228,13 +263,13 @@ export default function DriverLocationPage() {
               type="button"
               onClick={stopSharing}
               disabled={!sharing}
-              className="rounded-2xl border border-slate-700 bg-slate-900 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:border-slate-500 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Detener
             </button>
             <Link
               to={selectedRouteId ? `/tracking/${selectedRouteId}` : '/dashboard'}
-              className="rounded-2xl border border-slate-700 bg-slate-900 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:border-slate-500 hover:bg-slate-800"
+              className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50"
             >
               Ver mapa
             </Link>

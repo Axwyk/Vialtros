@@ -65,3 +65,19 @@ class TrackingIngestTests(APITestCase):
 
 		self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 		self.assertEqual(Tracking.objects.count(), 0)
+
+	@override_settings(DEBUG=True, TRACKING_INGEST_TOKEN='')
+	def test_ingest_allows_local_dev_token_in_debug(self):
+		response = self.client.post(
+			'/api/tracking/ingest/',
+			{
+				'route': self.route.id,
+				'latitude': 3.8891,
+				'longitude': -77.0284,
+			},
+			format='json',
+			HTTP_X_TRACKING_TOKEN='local-dev-access',
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+		self.assertEqual(Tracking.objects.count(), 1)

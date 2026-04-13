@@ -1,5 +1,8 @@
 // Servicio de conexión a la API REST con JWT
 import axios from 'axios';
+import { isLocalAccessEnabled, isLocalAccessToken } from './auth';
+
+const LOCAL_DEV_INGEST_TOKEN = 'local-dev-access';
 
 function resolveApiUrl() {
   const configured = process.env.REACT_APP_API_URL?.trim();
@@ -18,6 +21,14 @@ const api = axios.create({
 // Interceptor para agregar el token JWT a cada request
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('access');
+
+  if (token && isLocalAccessEnabled() && isLocalAccessToken(token)) {
+    if (config.url?.includes('/tracking/ingest/')) {
+      config.headers['X-Tracking-Token'] = process.env.REACT_APP_TRACKING_INGEST_TOKEN || LOCAL_DEV_INGEST_TOKEN;
+    }
+    return config;
+  }
+
   if (token && !config.url.includes('/token/')) {
     config.headers.Authorization = `Bearer ${token}`;
   }

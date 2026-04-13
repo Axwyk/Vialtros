@@ -12,6 +12,7 @@ import AdminRoutesPage from './pages/AdminRoutesPage';
 import AdminPassengersPage from './pages/AdminPassengersPage';
 import UserRoutePage from './pages/UserRoutePage';
 import DriverRoutesPage from './pages/DriverRoutesPage';
+import DriverLocationPage from './pages/DriverLocationPage';
 import LandingPage from './pages/LandingPage';
 import PrivateRoute from './components/PrivateRoute';
 import { Logo } from './components/Logo';
@@ -117,6 +118,11 @@ function App() {
           <Route path="/driver/routes" element={
             <PrivateRoute>
               <DriverRoutesPage onLogout={handleLogout} />
+            </PrivateRoute>
+          } />
+          <Route path="/driver/location" element={
+            <PrivateRoute>
+              <DriverLocationPage role={role} />
             </PrivateRoute>
           } />
           <Route path="*" element={<Navigate to={isAuth ? "/dashboard" : "/"} />} />
