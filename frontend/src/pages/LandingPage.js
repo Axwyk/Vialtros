@@ -365,7 +365,7 @@ export default function LandingPage() {
           <p className="text-blue-200 text-sm">© {new Date().getFullYear()} Vialtros. Sistema de gestión de rutas y transporte.</p>
           <div className="flex gap-6">
             {['Privacidad', 'Términos', 'Soporte'].map(l => (
-              <a key={l} href="#" className="text-blue-300 hover:text-white text-sm transition-colors no-underline">{l}</a>
+                <button key={l} className="text-blue-300 hover:text-white text-sm transition-colors no-underline bg-transparent border-none cursor-pointer p-0">{l}</button>
             ))}
           </div>
         </div>

@@ -80,7 +80,7 @@ function App() {
           } />
           <Route path="/tracking/:routeId" element={
             <PrivateRoute>
-              <TrackingPage routeId={1} />
+              <TrackingPage />
             </PrivateRoute>
           } />
           <Route path="/admin/users" element={

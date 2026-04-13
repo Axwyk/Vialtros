@@ -1,21 +1,92 @@
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { icons } from "./icons";
 import { Logo } from "../Logo";
-
-const navItems = [
-  { to: "/dashboard", icon: icons.dashboard, label: "Inicio" },
-  { to: "/admin/users", icon: icons.users, label: "Usuarios", admin: true },
-  { to: "/admin/drivers", icon: icons.drivers, label: "Conductores", admin: true },
-  { to: "/admin/routes", icon: icons.routes, label: "Rutas", admin: true },
-  { to: "/admin/passengers", icon: icons.clipboard, label: "Estudiantes", admin: true },
-  { to: "/tracking/1", icon: icons.tracking, label: "Tracking" },
-  { to: "/profile", icon: icons.profile, label: "Mi Perfil" },
-];
+import { getDriverAssignedRoutes, getUserAssignedRoute } from "../../services/dashboard";
+import { getRoutes } from "../../services/admin";
 
 export default function Sidebar({ role, onLogout }) {
   const location = useLocation();
+  const [trackingLink, setTrackingLink] = useState("/tracking/1");
+  const [trackingEnabled, setTrackingEnabled] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function resolveTrackingRoute() {
+      if (role === "driver") {
+        try {
+          const routes = await getDriverAssignedRoutes();
+          const firstRouteId = routes?.[0]?.id;
+          if (!mounted) return;
+          if (firstRouteId) {
+            setTrackingLink(`/tracking/${firstRouteId}`);
+            setTrackingEnabled(true);
+          } else {
+            setTrackingEnabled(false);
+          }
+        } catch {
+          if (mounted) setTrackingEnabled(false);
+        }
+        return;
+      }
+
+      if (role === "user") {
+        try {
+          const payload = await getUserAssignedRoute();
+          const routeId = payload?.route?.id;
+          if (!mounted) return;
+          if (routeId) {
+            setTrackingLink(`/tracking/${routeId}`);
+            setTrackingEnabled(true);
+          } else {
+            setTrackingEnabled(false);
+          }
+        } catch {
+          if (mounted) setTrackingEnabled(false);
+        }
+        return;
+      }
+
+      if (role === "admin") {
+        try {
+          const routes = await getRoutes();
+          const firstRouteId = routes?.[0]?.id;
+          if (!mounted) return;
+          if (firstRouteId) {
+            setTrackingLink(`/tracking/${firstRouteId}`);
+            setTrackingEnabled(true);
+          } else {
+            setTrackingEnabled(false);
+          }
+        } catch {
+          if (mounted) setTrackingEnabled(false);
+        }
+        return;
+      }
+
+      if (mounted) {
+        setTrackingEnabled(false);
+      }
+    }
+
+    resolveTrackingRoute();
+    return () => {
+      mounted = false;
+    };
+  }, [role]);
+
+  const navItems = [
+    { to: "/dashboard", icon: icons.dashboard, label: "Inicio" },
+    { to: "/admin/users", icon: icons.users, label: "Usuarios", admin: true },
+    { to: "/admin/drivers", icon: icons.drivers, label: "Conductores", admin: true },
+    { to: "/admin/routes", icon: icons.routes, label: "Rutas", admin: true },
+    { to: "/admin/passengers", icon: icons.clipboard, label: "Estudiantes", admin: true },
+    { to: trackingEnabled ? trackingLink : "/dashboard", icon: icons.tracking, label: "Tracking", disabled: !trackingEnabled, tracking: true },
+    { to: "/profile", icon: icons.profile, label: "Mi Perfil" },
+  ];
+
   return (
     <aside className="hidden md:flex flex-col bg-white border-r border-gray-200 shadow-sm min-h-screen w-60 py-8 px-4 sticky top-0">
       <div className="mb-10 px-2">
@@ -24,14 +95,16 @@ export default function Sidebar({ role, onLogout }) {
       <nav className="flex flex-col gap-1 flex-1">
         {navItems.filter(item => !item.admin || role === 'admin').map(item => {
           const Icon = item.icon;
+          const isActive = item.tracking ? location.pathname.startsWith('/tracking/') : location.pathname === item.to;
           return (
             <Link
               key={item.to}
               to={item.to}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-sm transition-all duration-150 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === item.to ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-600'}`}
+              onClick={item.disabled ? (event) => event.preventDefault() : undefined}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-sm transition-all duration-150 ${item.disabled ? 'opacity-50 cursor-not-allowed text-gray-400' : 'hover:bg-blue-50 hover:text-blue-700'} ${isActive ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-600'}`}
             >
-              <Icon size={18} strokeWidth={2} className={location.pathname === item.to ? "text-blue-600" : "text-gray-400"} />
-              <span>{item.label}</span>
+              <Icon size={18} strokeWidth={2} className={isActive ? "text-blue-600" : "text-gray-400"} />
+              <span>{item.disabled ? 'Tracking (sin ruta)' : item.label}</span>
             </Link>
           );
         })}

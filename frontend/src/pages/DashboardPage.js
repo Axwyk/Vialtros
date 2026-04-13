@@ -130,7 +130,7 @@ export default function DashboardPage({ role, onLogout }) {
         {/* ── Main grid: hero+chart | activity ── */}
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_272px] gap-5 mb-6">
           <div className="flex flex-col gap-5">
-            <HeroCard />
+            <HeroCard role={role} />
 
             {/* Chart card */}
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">

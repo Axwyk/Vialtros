@@ -163,15 +163,24 @@ AUTHENTICATION_BACKENDS = [
 ]
 
 # Channels config
-# Channels config
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {
-            'hosts': [('127.0.0.1', 6379)],
+# Usa Redis si existe REDIS_URL; si no, usa memoria local para desarrollo.
+REDIS_URL = os.environ.get('REDIS_URL', '').strip()
+
+if REDIS_URL:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {
+                'hosts': [REDIS_URL],
+            },
         },
-    },
-}
+    }
+else:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels.layers.InMemoryChannelLayer',
+        },
+    }
 
 # CORS config para permitir frontend
 if DEBUG:

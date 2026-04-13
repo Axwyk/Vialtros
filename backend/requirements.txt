@@ -3,6 +3,8 @@ djangorestframework
 djangorestframework-simplejwt
 channels
 channels-redis
+daphne
+websocket-client
 psycopg2-binary
 python-dotenv
 django-cors-headers

@@ -1,6 +1,8 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { icons } from "./icons";
+import { getDriverAssignedRoutes, getUserAssignedRoute } from "../../services/dashboard";
+import { getRoutes } from "../../services/admin";
 
 function MapPreview() {
   return (
@@ -30,7 +32,76 @@ function MapPreview() {
   );
 }
 
-export default function HeroCard() {
+export default function HeroCard({ role }) {
+  const [trackingLink, setTrackingLink] = useState("/tracking/1");
+  const [trackingEnabled, setTrackingEnabled] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function resolveTrackingRoute() {
+      if (role === "driver") {
+        try {
+          const routes = await getDriverAssignedRoutes();
+          const firstRouteId = routes?.[0]?.id;
+          if (!mounted) return;
+          if (firstRouteId) {
+            setTrackingLink(`/tracking/${firstRouteId}`);
+            setTrackingEnabled(true);
+          } else {
+            setTrackingEnabled(false);
+          }
+        } catch {
+          if (mounted) setTrackingEnabled(false);
+        }
+        return;
+      }
+
+      if (role === "user") {
+        try {
+          const payload = await getUserAssignedRoute();
+          const routeId = payload?.route?.id;
+          if (!mounted) return;
+          if (routeId) {
+            setTrackingLink(`/tracking/${routeId}`);
+            setTrackingEnabled(true);
+          } else {
+            setTrackingEnabled(false);
+          }
+        } catch {
+          if (mounted) setTrackingEnabled(false);
+        }
+        return;
+      }
+
+      if (role === "admin") {
+        try {
+          const routes = await getRoutes();
+          const firstRouteId = routes?.[0]?.id;
+          if (!mounted) return;
+          if (firstRouteId) {
+            setTrackingLink(`/tracking/${firstRouteId}`);
+            setTrackingEnabled(true);
+          } else {
+            setTrackingEnabled(false);
+          }
+        } catch {
+          if (mounted) setTrackingEnabled(false);
+        }
+        return;
+      }
+
+      if (mounted) {
+        setTrackingEnabled(false);
+      }
+    }
+
+    resolveTrackingRoute();
+    return () => {
+      mounted = false;
+    };
+  }, [role]);
+
   return (
     <div
       className="rounded-2xl shadow-lg p-7 flex items-center justify-between gap-6 overflow-hidden relative"
@@ -51,13 +122,23 @@ export default function HeroCard() {
         <p className="text-sm text-blue-100 mb-5 max-w-xs leading-relaxed" style={{ opacity: 0.9 }}>
           Monitorea rutas activas, localiza conductores y sigue cada recorrido en tiempo real.
         </p>
-        <Link
-          to="/tracking/1"
-          className="inline-flex items-center gap-2 bg-white text-blue-700 px-5 py-2.5 rounded-lg font-semibold text-sm shadow hover:bg-blue-50 active:scale-95 transition-all duration-150"
-        >
-          Abrir mapa
-          {icons.arrowRight({ size: 14, strokeWidth: 2.5 })}
-        </Link>
+        {trackingEnabled ? (
+          <Link
+            to={trackingLink}
+            className="inline-flex items-center gap-2 bg-white text-blue-700 px-5 py-2.5 rounded-lg font-semibold text-sm shadow hover:bg-blue-50 active:scale-95 transition-all duration-150"
+          >
+            Abrir mapa
+            {icons.arrowRight({ size: 14, strokeWidth: 2.5 })}
+          </Link>
+        ) : (
+          <button
+            type="button"
+            disabled
+            className="inline-flex items-center gap-2 bg-white/40 text-blue-100 px-5 py-2.5 rounded-lg font-semibold text-sm border border-white/20 cursor-not-allowed"
+          >
+            Sin ruta asignada
+          </button>
+        )}
       </div>
 
       <div className="relative z-10 hidden md:block">

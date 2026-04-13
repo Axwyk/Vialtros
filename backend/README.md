@@ -92,8 +92,25 @@ socket.send(JSON.stringify({ latitude: 10.5, longitude: -66.9, status: 'picked' 
 ```
 
 **Notas:**
-- Es necesario tener Redis corriendo en `localhost:6379` para el canal de WebSockets.
+- Si defines `REDIS_URL` se usa Redis para Channels.
+- Si no defines `REDIS_URL`, el backend usa canal en memoria (util para desarrollo local).
 - El backend debe iniciarse con `daphne` o `python -m channels` para soporte ASGI/WebSockets.
+
+### Simular transmision de coordenadas al mapa
+
+Puedes emitir coordenadas en vivo para una ruta usando:
+
+```bash
+python manage.py transmitir_tracking --route 3 --interval 2 --cycles 0
+```
+
+- `--route`: ID de ruta a transmitir.
+- `--interval`: segundos entre puntos.
+- `--cycles`: cantidad de vueltas del recorrido demo (`0` = infinito).
+
+El comando crea registros en `Tracking` y los publica por WebSocket al grupo:
+
+`ws://localhost:8000/ws/tracking/<route_id>/`
 
 ---
 
