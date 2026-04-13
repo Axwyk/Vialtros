@@ -7,7 +7,8 @@ import HeroCard from '../components/dashboard/HeroCard';
 import ActivityFeed from '../components/dashboard/ActivityFeed';
 import MiniChart from '../components/dashboard/MiniChart';
 import { Link } from 'react-router-dom';
-import { getDashboardStats, getDriverAssignedRoutes } from '../services/dashboard';
+import { getDashboardStats, getDriverAssignedRoutes, getDriverTrackings } from '../services/dashboard';
+import { updateTrackingStatus, updateTrackingStatusByPassenger } from '../services/tracking';
 import { icons } from '../components/dashboard/icons';
 
 function getGreeting() {
@@ -38,6 +39,7 @@ export default function DashboardPage({ role, onLogout }) {
   const [loading, setLoading] = useState(true);
   const [driverRoutes, setDriverRoutes] = useState([]);
   const [driverRoutesLoading, setDriverRoutesLoading] = useState(false);
+  const [driverTrackings, setDriverTrackings] = useState([]);
   const usernameRaw = localStorage.getItem('username') || 'Usuario';
   // Capitaliza solo la primera letra, el resto en minúsculas
   const username = usernameRaw.charAt(0).toUpperCase() + usernameRaw.slice(1).toLowerCase();
@@ -58,6 +60,29 @@ export default function DashboardPage({ role, onLogout }) {
       .catch(() => setDriverRoutes([]))
       .finally(() => setDriverRoutesLoading(false));
   }, [role]);
+
+  useEffect(() => {
+    if (role !== 'driver') return;
+
+    getDriverTrackings()
+      .then(setDriverTrackings)
+      .catch(() => setDriverTrackings([]));
+  }, [role]);
+
+  const handleUpdateStatus = async (trackingId, routeId, passengerId, newStatus) => {
+    try {
+      if (trackingId) {
+        await updateTrackingStatus(trackingId, newStatus);
+      } else {
+        await updateTrackingStatusByPassenger(routeId, passengerId, newStatus);
+      }
+      const updatedTrackings = await getDriverTrackings();
+      setDriverTrackings(updatedTrackings);
+    } catch (error) {
+      console.error('Error updating status:', error);
+      // Optionally show error message
+    }
+  };
 
   const totalAssignedStudents = driverRoutes.reduce(
     (total, route) => total + (route.passenger_count ?? route.passenger_details?.length ?? 0),
@@ -259,6 +284,71 @@ export default function DashboardPage({ role, onLogout }) {
                         Esta ruta no tiene estudiantes asignados.
                       </div>
                     )}
+
+                    {/* Trackings section */}
+                    {(() => {
+                      const routeTrackings = driverTrackings.filter((t) => Number(t.route) === Number(route.id));
+                      if (!route.passenger_details || route.passenger_details.length === 0) return null;
+                      return (
+                        <div className="mt-5">
+                          <div className="flex items-center justify-between mb-3">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900">Estado de recogida</p>
+                              <p className="text-xs text-slate-400">Actualiza el estado de cada estudiante</p>
+                            </div>
+                          </div>
+                          <div className="space-y-2.5">
+                            {route.passenger_details.map((passenger) => {
+                              const tracking = routeTrackings.find((t) => Number(t.passenger) === Number(passenger.id));
+                              const status = tracking?.status || 'not_picked';
+                              return (
+                                <div key={passenger.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white px-3.5 py-3">
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 shadow-sm ${
+                                      status === 'picked' ? 'bg-green-100 border-green-300 text-green-700' : 'bg-red-100 border-red-300 text-red-700'
+                                    }`}>
+                                      {status === 'picked' ? '✓' : '✗'}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-semibold text-slate-800 truncate">
+                                        {passenger.user_detail?.username || `Estudiante #${passenger.id}`}
+                                      </p>
+                                      <p className="text-xs text-slate-400">
+                                        {status === 'picked' ? 'Recogido' : 'No recogido'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex gap-2 shrink-0">
+                                    <button
+                                      onClick={() => handleUpdateStatus(tracking?.id, route.id, passenger.id, 'picked')}
+                                      disabled={status === 'picked'}
+                                      className={`px-3 py-1 text-xs font-semibold rounded-full transition ${
+                                        status === 'picked'
+                                          ? 'bg-green-100 text-green-700 cursor-not-allowed'
+                                          : 'bg-green-600 text-white hover:bg-green-700'
+                                      }`}
+                                    >
+                                      Marcar recogido
+                                    </button>
+                                    <button
+                                      onClick={() => handleUpdateStatus(tracking?.id, route.id, passenger.id, 'not_picked')}
+                                      disabled={status === 'not_picked'}
+                                      className={`px-3 py-1 text-xs font-semibold rounded-full transition ${
+                                        status === 'not_picked'
+                                          ? 'bg-red-100 text-red-700 cursor-not-allowed'
+                                          : 'bg-red-600 text-white hover:bg-red-700'
+                                      }`}
+                                    >
+                                      Marcar no recogido
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </article>
                 ))}
               </div>

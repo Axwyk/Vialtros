@@ -14,3 +14,8 @@ export async function getUserAssignedRoute() {
   const response = await api.get('/users/my_conductor/');
   return response.data;
 }
+
+export async function getDriverTrackings() {
+  const response = await api.get('/tracking/');
+  return response.data;
+}

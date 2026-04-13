@@ -181,5 +181,58 @@ class TrackingViewSet(viewsets.ModelViewSet):
             except Passenger.DoesNotExist:
                 return Tracking.objects.none()
             return Tracking.objects.filter(passenger=passenger)
-        return Tracking.objects.none()
+
+    @action(detail=True, methods=['post', 'put'], permission_classes=[IsDriver])
+    def update_status(self, request, pk=None):
+        tracking = self.get_object()
+        new_status = request.data.get('status')
+        if new_status not in ['picked', 'not_picked']:
+            return Response({'detail': 'Estado inválido. Use "picked" o "not_picked".'}, status=status.HTTP_400_BAD_REQUEST)
+        tracking.status = new_status
+        tracking.save()
+        serializer = self.get_serializer(tracking)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['post'], permission_classes=[IsDriver])
+    def update_status_by_passenger(self, request):
+        route_id = request.data.get('route_id')
+        passenger_id = request.data.get('passenger_id')
+        new_status = request.data.get('status')
+
+        if new_status not in ['picked', 'not_picked']:
+            return Response({'detail': 'Estado inválido. Use "picked" o "not_picked".'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            driver = Driver.objects.get(user=request.user)
+        except Driver.DoesNotExist:
+            return Response({'detail': 'No es conductor'}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            route = Route.objects.get(id=route_id)
+        except Route.DoesNotExist:
+            return Response({'detail': 'Ruta no encontrada'}, status=status.HTTP_404_NOT_FOUND)
+
+        if route.driver != driver:
+            return Response({'detail': 'No tienes permiso para actualizar esta ruta'}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            passenger = Passenger.objects.get(id=passenger_id)
+        except Passenger.DoesNotExist:
+            return Response({'detail': 'Pasajero no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+
+        tracking, created = Tracking.objects.get_or_create(
+            route=route,
+            passenger=passenger,
+            defaults={
+                'latitude': 0.0,
+                'longitude': 0.0,
+                'status': new_status,
+            }
+        )
+        if not created:
+            tracking.status = new_status
+            tracking.save()
+
+        serializer = self.get_serializer(tracking)
+        return Response(serializer.data)
 

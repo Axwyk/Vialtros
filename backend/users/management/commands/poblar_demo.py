@@ -60,10 +60,9 @@ class Command(BaseCommand):
             route.passengers.add(*passengers[i:i+2])
         self.stdout.write(self.style.SUCCESS('Rutas creadas'))
 
-        # Trackings (1 por ruta, con pasajero)
+        # Trackings: un registro por cada pasajero en la ruta
         for route in Route.objects.all():
-            passenger = route.passengers.first()
-            if passenger:
+            for passenger in route.passengers.all():
                 Tracking.objects.get_or_create(
                     route=route,
                     passenger=passenger,
