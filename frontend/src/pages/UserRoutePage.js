@@ -108,10 +108,10 @@ export default function UserRoutePage({ role, onLogout }) {
               </div>
 
               <div className="rounded-xl border border-gray-100 bg-white p-4">
-                <p className="text-xs uppercase tracking-wide text-green-500 font-semibold mb-2">Estado de Recogida</p>
+                <p className="text-xs uppercase tracking-wide text-blue-500 font-semibold mb-2">Estado de Recogida</p>
                 <div className="flex items-center gap-3">
                   <span className={`inline-flex items-center gap-1 text-sm font-medium px-3 py-1 rounded-full ${
-                    pickupStatus === 'picked' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                    pickupStatus === 'picked' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'
                   }`}>
                     {pickupStatus === 'picked' ? '✓ Ya fuiste recogido' : '✗ Aún no has sido recogido'}
                   </span>

@@ -339,8 +339,8 @@ export default function DashboardPage({ role, onLogout }) {
                                       disabled={status === 'picked'}
                                       className={`px-3 py-1 text-xs font-semibold rounded-full transition ${
                                         status === 'picked'
-                                          ? 'bg-green-100 text-green-700 cursor-not-allowed'
-                                          : 'bg-green-600 text-white hover:bg-green-700'
+                                          ? 'bg-blue-100 text-blue-700 cursor-not-allowed'
+                                          : 'bg-blue-600 text-white hover:bg-blue-700'
                                       }`}
                                     >
                                       Marcar recogido
