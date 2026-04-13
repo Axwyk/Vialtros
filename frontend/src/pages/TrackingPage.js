@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useReducer, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import MapView from '../components/MapView';
 import { connectTrackingWS } from '../services/ws';
@@ -79,6 +79,29 @@ function mergeTrackings(prev, incoming) {
   });
 }
 
+const initialTrackingState = {
+  trackings: [],
+  vehiclePosition: null,
+  liveRouteHistory: [],
+};
+
+function trackingReducer(state, action) {
+  switch (action.type) {
+    case 'SET_TRACKINGS':
+      return { ...state, trackings: action.payload };
+    case 'MERGE_TRACKINGS':
+      return { ...state, trackings: mergeTrackings(state.trackings, action.payload) };
+    case 'SET_VEHICLE_POSITION':
+      return { ...state, vehiclePosition: action.payload };
+    case 'SET_ROUTE_HISTORY':
+      return { ...state, liveRouteHistory: action.payload };
+    case 'APPEND_ROUTE_POINT':
+      return { ...state, liveRouteHistory: appendHistoryPoint(state.liveRouteHistory, action.payload) };
+    default:
+      return state;
+  }
+}
+
 function appendHistoryPoint(prev, point) {
   if (!Array.isArray(point) || point.length !== 2) return prev;
   const [lat, lng] = point;
@@ -125,14 +148,12 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const params = useParams();
   const selectedRouteId = Number(routeIdProp ?? params.routeId);
 
-  const [trackings, setTrackings] = useState([]);
+  const [trackingState, dispatch] = useReducer(trackingReducer, initialTrackingState);
+  const { trackings, vehiclePosition, liveRouteHistory } = trackingState;
   const [routeInfo, setRouteInfo] = useState(null);
   const [originCoords, setOriginCoords] = useState(null);
   const [destinationCoords, setDestinationCoords] = useState(null);
   const [routePolyline, setRoutePolyline] = useState(null);
-  const [vehiclePosition, setVehiclePosition] = useState(null);
-  const [liveRouteHistory, setLiveRouteHistory] = useState([]);
-  const [matchedLiveRouteHistory, setMatchedLiveRouteHistory] = useState([]);
   const [eta, setEta] = useState(null);
   const [etaUpdated, setEtaUpdated] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -172,21 +193,24 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           .map((t) => normalizeTracking(t, new Date().toISOString()))
           .filter(Boolean)
           .filter((t) => isRecentTimestamp(t.timestamp) && isWithinBuenaventura(t.latitude, t.longitude));
-        setTrackings(normalizedInitial);
+        dispatch({ type: 'SET_TRACKINGS', payload: normalizedInitial });
 
         if (normalizedInitial.length > 0) {
           const latest = normalizedInitial[normalizedInitial.length - 1];
-          setVehiclePosition({
-            latitude: latest.latitude,
-            longitude: latest.longitude,
-            timestamp: latest.timestamp,
+          dispatch({
+            type: 'SET_VEHICLE_POSITION',
+            payload: {
+              latitude: latest.latitude,
+              longitude: latest.longitude,
+              timestamp: latest.timestamp,
+            },
           });
 
           const historyPoints = normalizedInitial.map((t) => [t.latitude, t.longitude]);
-          setLiveRouteHistory(historyPoints);
+          dispatch({ type: 'SET_ROUTE_HISTORY', payload: historyPoints });
         } else {
-          setVehiclePosition(null);
-          setLiveRouteHistory([]);
+          dispatch({ type: 'SET_VEHICLE_POSITION', payload: null });
+          dispatch({ type: 'SET_ROUTE_HISTORY', payload: [] });
         }
 
         if (route?.origin && route?.destination) {
@@ -261,13 +285,16 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           liveToastTimerRef.current = setTimeout(() => setShowLiveToast(false), 2600);
         }
 
-        setTrackings((prev) => mergeTrackings(prev, [normalized]));
-        setVehiclePosition({
-          latitude: normalized.latitude,
-          longitude: normalized.longitude,
-          timestamp: normalized.timestamp,
+        dispatch({ type: 'MERGE_TRACKINGS', payload: [normalized] });
+        dispatch({
+          type: 'SET_VEHICLE_POSITION',
+          payload: {
+            latitude: normalized.latitude,
+            longitude: normalized.longitude,
+            timestamp: normalized.timestamp,
+          },
         });
-        setLiveRouteHistory((prev) => appendHistoryPoint(prev, [normalized.latitude, normalized.longitude]));
+        dispatch({ type: 'APPEND_ROUTE_POINT', payload: [normalized.latitude, normalized.longitude] });
       },
       {
         onOpen: () => {
@@ -312,17 +339,23 @@ export default function TrackingPage({ routeId: routeIdProp }) {
 
         if (normalized.length === 0) return;
 
-        setTrackings((prev) => mergeTrackings(prev, normalized));
+        dispatch({ type: 'MERGE_TRACKINGS', payload: normalized });
         const latestPoint = normalized[normalized.length - 1];
-        setVehiclePosition({
-          latitude: latestPoint.latitude,
-          longitude: latestPoint.longitude,
-          timestamp: latestPoint.timestamp,
+        dispatch({
+          type: 'SET_VEHICLE_POSITION',
+          payload: {
+            latitude: latestPoint.latitude,
+            longitude: latestPoint.longitude,
+            timestamp: latestPoint.timestamp,
+          },
         });
-        setLiveRouteHistory((prev) => normalized.reduce(
-          (acc, t) => appendHistoryPoint(acc, [t.latitude, t.longitude]),
-          prev,
-        ));
+        dispatch({
+          type: 'SET_ROUTE_HISTORY',
+          payload: normalized.reduce(
+            (acc, t) => appendHistoryPoint(acc, [t.latitude, t.longitude]),
+            [],
+          ),
+        });
         setIsPollingFallback(true);
       } catch {
         // En fallback, ignoramos errores intermitentes de red.
