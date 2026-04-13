@@ -162,6 +162,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const [forceBuenaventuraDemo, setForceBuenaventuraDemo] = useState(false);
   const [showLiveTransition, setShowLiveTransition] = useState(false);
   const [showLiveToast, setShowLiveToast] = useState(false);
+  const [matchedLiveRouteHistory, setMatchedLiveRouteHistory] = useState([]);
 
   const trackingsCountRef = useRef(0);
   const liveTransitionTimerRef = useRef(null);

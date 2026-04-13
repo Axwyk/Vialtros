@@ -34,6 +34,24 @@ function getInitials(name) {
     .join('');
 }
 
+function getPassengerStatusConfig(status) {
+  const statusMap = {
+    picked: {
+      label: 'Recogido',
+      className: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+    },
+    not_picked: {
+      label: 'Pendiente',
+      className: 'bg-amber-50 text-amber-700 border border-amber-200',
+    },
+  };
+
+  return statusMap[status] || {
+    label: 'Sin estado',
+    className: 'bg-slate-100 text-slate-600 border border-slate-200',
+  };
+}
+
 export default function DashboardPage({ role, onLogout }) {
   const [stats, setStats]   = useState(null);
   const [loading, setLoading] = useState(true);
@@ -316,6 +334,17 @@ export default function DashboardPage({ role, onLogout }) {
                             {route.passenger_details.map((passenger) => {
                               const tracking = routeTrackings.find((t) => Number(t.passenger) === Number(passenger.id));
                               const status = tracking?.status || 'not_picked';
+
+                              const statusBadge =
+  status === 'picked'
+    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+    : 'bg-rose-50 text-rose-700 border border-rose-200';
+
+const statusLabel =
+  status === 'picked'
+    ? 'Recogido'
+    : 'No recogido';
+
                               return (
                                 <div key={passenger.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white px-3.5 py-3">
                                   <div className="flex items-center gap-3 min-w-0">
@@ -328,9 +357,11 @@ export default function DashboardPage({ role, onLogout }) {
                                       <p className="text-sm font-semibold text-slate-800 truncate">
                                         {passenger.user_detail?.username || `Estudiante #${passenger.id}`}
                                       </p>
-                                      <p className="text-xs text-slate-400">
-                                        {status === 'picked' ? 'Recogido' : 'No recogido'}
-                                      </p>
+                                      <div className="mt-1 flex items-center gap-2">
+  <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusBadge}`}>
+    {statusLabel}
+  </span>
+</div>
                                     </div>
                                   </div>
                                   <div className="flex gap-2 shrink-0">
