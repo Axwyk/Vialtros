@@ -247,6 +247,21 @@ export default function DashboardPage({ role, onLogout }) {
                       </div>
                     </div>
 
+                    <div className="mb-5 flex flex-wrap gap-2">
+                      <Link
+                        to={`/tracking/${route.id}`}
+                        className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] text-white shadow-sm transition hover:bg-blue-700"
+                      >
+                        Ver mapa
+                      </Link>
+                      <Link
+                        to="/driver/location"
+                        className="inline-flex items-center gap-2 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] text-cyan-700 shadow-sm transition hover:bg-cyan-100"
+                      >
+                        Compartir ubicacion
+                      </Link>
+                    </div>
+
                     {route.passenger_details?.length > 0 ? (
                       <div>
                         <div className="flex items-center justify-between mb-3">

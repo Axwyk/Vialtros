@@ -70,6 +70,7 @@ daphne core.asgi:application  # Requiere instalar daphne
 	- CRUD `/api/routes/`
 - **Tracking:**
 	- CRUD `/api/tracking/`
+	- Ingesta GPS `/api/tracking/ingest/`
 
 Todos los endpoints requieren autenticación JWT (excepto /api/token/).
 
@@ -111,6 +112,90 @@ python manage.py transmitir_tracking --route 3 --interval 2 --cycles 0
 El comando crea registros en `Tracking` y los publica por WebSocket al grupo:
 
 `ws://localhost:8000/ws/tracking/<route_id>/`
+
+### Ingesta desde GPS real o servicio productor
+
+Para conectar un GPS real, una app del conductor o un servicio productor permanente, publica coordenadas en:
+
+`POST /api/tracking/ingest/`
+
+Autenticación admitida:
+- JWT de admin o conductor asignado a la ruta.
+- Token de servicio en el header `X-Tracking-Token` usando la variable `TRACKING_INGEST_TOKEN` en `backend/.env`.
+
+Payload mínimo:
+
+```json
+{
+	"route": 3,
+	"latitude": 3.8891,
+	"longitude": -77.0284
+}
+```
+
+Payload recomendado:
+
+```json
+{
+	"route": 3,
+	"latitude": 3.8891,
+	"longitude": -77.0284,
+	"timestamp": "2026-04-13T19:10:00Z",
+	"speed_kmh": 31.4,
+	"status": "picked",
+	"source": "gps-device-001"
+}
+```
+
+Ejemplo con token de servicio:
+
+```bash
+curl -X POST http://localhost:8000/api/tracking/ingest/ \
+	-H "Content-Type: application/json" \
+	-H "X-Tracking-Token: tu-token-seguro" \
+	-d '{"route":3,"latitude":3.8891,"longitude":-77.0284,"speed_kmh":31.4,"source":"gps-device-001"}'
+```
+
+Cada coordenada:
+- se guarda en la base de datos,
+- queda disponible para el fallback REST del frontend,
+- y se publica en vivo al grupo WebSocket de la ruta.
+
+### Productor permanente desde API externa
+
+Si ya tienes un proveedor GPS que expone una API JSON, puedes dejar un productor corriendo con:
+
+```bash
+python manage.py consumir_gps_api \
+	--source-url http://proveedor-gps.local/position \
+	--route 3 \
+	--token tu-token-seguro \
+	--poll 5 \
+	--lat-path latitude \
+	--lng-path longitude \
+	--speed-path speed_kmh \
+	--timestamp-path timestamp
+```
+
+Si la API externa devuelve campos anidados, usa rutas con punto, por ejemplo:
+- `--lat-path data.position.lat`
+- `--lng-path data.position.lng`
+
+### App del conductor desde celular
+
+El frontend ahora incluye una vista para conductor en:
+
+`/driver/location`
+
+Esa pantalla:
+- usa geolocalizacion del navegador del celular,
+- toma una de las rutas asignadas al conductor,
+- y envia coordenadas periodicamente a `/api/tracking/ingest/` con la sesion JWT actual.
+
+Para que funcione bien en celular:
+- abre la app con HTTPS o en localhost,
+- concede permiso de ubicacion al navegador,
+- y deja la pantalla activa mientras conduces.
 
 ---
 

@@ -1,3 +1,6 @@
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+from django.conf import settings
 from rest_framework import viewsets, permissions, status
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework.response import Response
@@ -5,7 +8,7 @@ from rest_framework.decorators import action
 from django.contrib.auth import get_user_model
 from .serializers import (
     UserSerializer, UserCreateSerializer,
-    RouteSerializer, TrackingSerializer,
+    RouteSerializer, TrackingSerializer, TrackingIngestSerializer,
     DriverSerializer, PassengerSerializer,
 )
 from .models import Route, Tracking, Driver, Passenger
@@ -165,6 +168,49 @@ class TrackingViewSet(viewsets.ModelViewSet):
     serializer_class = TrackingSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    def _resolve_ingest_token(self, request):
+        header_token = (request.headers.get('X-Tracking-Token') or '').strip()
+        if header_token:
+            return header_token
+
+        auth_header = (request.headers.get('Authorization') or '').strip()
+        if auth_header.lower().startswith('token '):
+            return auth_header[6:].strip()
+
+        return ''
+
+    def _can_ingest_route(self, request, route):
+        user = request.user
+        if getattr(user, 'is_authenticated', False):
+            if user.role == 'admin':
+                return True
+            if user.role == 'driver':
+                try:
+                    driver = Driver.objects.get(user=user)
+                except Driver.DoesNotExist:
+                    return False
+                return route.driver_id == driver.id
+
+        expected_token = getattr(settings, 'TRACKING_INGEST_TOKEN', '').strip()
+        provided_token = self._resolve_ingest_token(request)
+        return bool(expected_token and provided_token and provided_token == expected_token)
+
+    def _broadcast_tracking(self, payload):
+        channel_layer = get_channel_layer()
+        if channel_layer is None:
+            return
+
+        async_to_sync(channel_layer.group_send)(
+            f"tracking_{payload['route']}",
+            {
+                'type': 'tracking_update',
+                'data': {
+                    'event': 'position_update',
+                    'data': payload,
+                },
+            },
+        )
+
     def get_queryset(self):
         user = self.request.user
         if user.role == 'admin':
@@ -235,4 +281,28 @@ class TrackingViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(tracking)
         return Response(serializer.data)
+
+    @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny], url_path='ingest')
+    def ingest(self, request):
+        serializer = TrackingIngestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        route = serializer.validated_data['route']
+        if not self._can_ingest_route(request, route):
+            return Response(
+                {'detail': 'No autorizado para transmitir coordenadas a esta ruta.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        tracking = serializer.save()
+        response_payload = TrackingSerializer(tracking).data
+        ingest_meta = getattr(tracking, '_ingest_meta', {})
+
+        if ingest_meta.get('speed_kmh') is not None:
+            response_payload['speed_kmh'] = ingest_meta['speed_kmh']
+        if ingest_meta.get('source'):
+            response_payload['source'] = ingest_meta['source']
+
+        self._broadcast_tracking(response_payload)
+        return Response(response_payload, status=status.HTTP_201_CREATED)
 

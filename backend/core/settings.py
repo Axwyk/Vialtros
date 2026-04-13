@@ -165,6 +165,7 @@ AUTHENTICATION_BACKENDS = [
 # Channels config
 # Usa Redis si existe REDIS_URL; si no, usa memoria local para desarrollo.
 REDIS_URL = os.environ.get('REDIS_URL', '').strip()
+TRACKING_INGEST_TOKEN = os.environ.get('TRACKING_INGEST_TOKEN', '').strip()
 
 if REDIS_URL:
     CHANNEL_LAYERS = {

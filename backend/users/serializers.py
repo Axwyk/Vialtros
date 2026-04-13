@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Driver, Passenger, Route, Tracking
+from .models import User, Driver, Passenger, Route, Tracking, PickupStatus
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -73,3 +73,39 @@ class TrackingSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tracking
         fields = '__all__'
+
+
+class TrackingIngestSerializer(serializers.Serializer):
+    route = serializers.PrimaryKeyRelatedField(queryset=Route.objects.all())
+    passenger = serializers.PrimaryKeyRelatedField(
+        queryset=Passenger.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    status = serializers.ChoiceField(choices=PickupStatus.choices, default=PickupStatus.NOT_PICKED)
+    latitude = serializers.FloatField()
+    longitude = serializers.FloatField()
+    timestamp = serializers.DateTimeField(required=False)
+    speed_kmh = serializers.FloatField(required=False, allow_null=True)
+    source = serializers.CharField(required=False, allow_blank=True, max_length=64)
+
+    def validate(self, attrs):
+        route = attrs['route']
+        passenger = attrs.get('passenger')
+
+        if passenger and not route.passengers.filter(id=passenger.id).exists():
+            raise serializers.ValidationError({
+                'passenger': 'El pasajero no pertenece a la ruta indicada.',
+            })
+
+        return attrs
+
+    def create(self, validated_data):
+        speed_kmh = validated_data.pop('speed_kmh', None)
+        source = validated_data.pop('source', '')
+        tracking = Tracking.objects.create(**validated_data)
+        tracking._ingest_meta = {
+            'speed_kmh': speed_kmh,
+            'source': source,
+        }
+        return tracking

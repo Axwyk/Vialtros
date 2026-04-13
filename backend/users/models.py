@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
+from django.utils import timezone
 
 # Create your models here.
 # Roles
@@ -32,8 +33,8 @@ class PickupStatus(models.TextChoices):
 
 class Tracking(models.Model):
 	route = models.ForeignKey(Route, on_delete=models.CASCADE)
-	passenger = models.ForeignKey(Passenger, on_delete=models.CASCADE)
+	passenger = models.ForeignKey(Passenger, on_delete=models.CASCADE, null=True, blank=True)
 	status = models.CharField(max_length=20, choices=PickupStatus.choices, default=PickupStatus.NOT_PICKED)
 	latitude = models.FloatField()
 	longitude = models.FloatField()
-	timestamp = models.DateTimeField(auto_now=True)
+	timestamp = models.DateTimeField(default=timezone.now)
