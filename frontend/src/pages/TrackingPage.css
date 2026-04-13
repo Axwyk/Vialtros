@@ -82,6 +82,115 @@
   font-size: 12px;
 }
 
+.route-summary-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.route-auth-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.route-auth-badge.verified {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #86efac;
+}
+
+.route-auth-badge.pending {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.route-stop-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.route-stop-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border-radius: 14px;
+  border: 1px solid #dbe4f2;
+  padding: 12px;
+  background: linear-gradient(180deg, #ffffff, #f8fbff);
+}
+
+.route-stop-card.start {
+  box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.06);
+}
+
+.route-stop-card.end {
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.06);
+}
+
+.route-stop-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  margin-top: 5px;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #0ea5e9, #2563eb);
+  box-shadow: 0 0 0 5px rgba(37, 99, 235, 0.12);
+}
+
+.route-stop-card.end .route-stop-dot {
+  border-radius: 4px;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+}
+
+.route-stop-divider {
+  width: 2px;
+  height: 18px;
+  margin: 0 auto;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(37, 99, 235, 0.15), rgba(37, 99, 235, 0.55), rgba(37, 99, 235, 0.15));
+}
+
+.route-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.route-metric-tile {
+  border-radius: 14px;
+  padding: 10px 11px;
+  background: linear-gradient(180deg, #eff6ff, #f8fbff);
+  border: 1px solid #dbeafe;
+}
+
+.route-metric-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.route-metric-value {
+  display: block;
+  margin-top: 6px;
+  font-size: 15px;
+  color: #0f172a;
+  font-weight: 800;
+}
+
 .panel-title-row {
   display: flex;
   align-items: center;
@@ -425,6 +534,10 @@
 
   .kpi-card {
     padding: 13px;
+  }
+
+  .route-metrics-grid {
+    grid-template-columns: 1fr;
   }
 
   .map-container-wrapper {

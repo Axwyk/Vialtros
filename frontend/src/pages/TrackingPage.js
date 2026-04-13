@@ -4,7 +4,7 @@ import MapView from '../components/MapView';
 import { connectTrackingWS } from '../services/ws';
 import { getTrackingsByRoute } from '../services/tracking';
 import { getRoute } from '../services/admin';
-import { geocodeAddress, getStreetRoute, getETAMinutes } from '../services/routing';
+import { geocodeAddress, getStreetRoute, getETAMinutes, getTrackedStreetRoute } from '../services/routing';
 import TrackingHero from '../components/tracking/TrackingHero';
 import './TrackingPage.css';
 
@@ -32,6 +32,19 @@ function distanceKm(lat1, lng1, lat2, lng2) {
     Math.sin(dLng / 2) * Math.sin(dLng / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return earthKm * c;
+}
+
+function polylineDistanceKm(coordinates) {
+  if (!Array.isArray(coordinates) || coordinates.length < 2) return 0;
+
+  let totalKm = 0;
+  for (let i = 1; i < coordinates.length; i += 1) {
+    const previous = coordinates[i - 1];
+    const current = coordinates[i];
+    if (!previous || !current) continue;
+    totalKm += distanceKm(previous[0], previous[1], current[0], current[1]);
+  }
+  return totalKm;
 }
 
 function normalizeTracking(raw, fallbackTimestamp) {
@@ -119,6 +132,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const [routePolyline, setRoutePolyline] = useState(null);
   const [vehiclePosition, setVehiclePosition] = useState(null);
   const [liveRouteHistory, setLiveRouteHistory] = useState([]);
+  const [matchedLiveRouteHistory, setMatchedLiveRouteHistory] = useState([]);
   const [eta, setEta] = useState(null);
   const [etaUpdated, setEtaUpdated] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -336,6 +350,35 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       .catch(() => {});
   }, [trackings, destinationCoords]);
 
+  useEffect(() => {
+    if (liveRouteHistory.length < 2) {
+      setMatchedLiveRouteHistory([]);
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    const timerId = setTimeout(() => {
+      getTrackedStreetRoute(liveRouteHistory)
+        .then((matchedRoute) => {
+          if (cancelled) return;
+          if (matchedRoute?.coordinates?.length > 1) {
+            setMatchedLiveRouteHistory(matchedRoute.coordinates);
+            return;
+          }
+          setMatchedLiveRouteHistory(liveRouteHistory);
+        })
+        .catch(() => {
+          if (!cancelled) setMatchedLiveRouteHistory(liveRouteHistory);
+        });
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timerId);
+    };
+  }, [liveRouteHistory]);
+
   const statusBadge = useMemo(() => {
     const badges = {
       connecting: { label: 'Conectando', color: 'connecting' },
@@ -349,19 +392,29 @@ export default function TrackingPage({ routeId: routeIdProp }) {
 
   const hasLiveData = trackings.length > 0;
   const showEmptyCityCanvas = !hasLiveData;
-  const showRouteContext = hasLiveData && !forceBuenaventuraDemo;
+  const hasPlannedRoute = Array.isArray(routePolyline) && routePolyline.length > 1;
+  const hasResolvedStops = Array.isArray(originCoords) && Array.isArray(destinationCoords);
+  const showRouteContext = !forceBuenaventuraDemo && (hasResolvedStops || hasPlannedRoute);
 
   const displayOriginCoords = showRouteContext ? originCoords : null;
   const displayDestinationCoords = showRouteContext ? destinationCoords : null;
   const displayPlannedRoutePolyline = showRouteContext && Array.isArray(routePolyline) && routePolyline.length > 1
     ? routePolyline
     : null;
-  const displayTraveledRoutePolyline = hasLiveData && liveRouteHistory.length > 1
-    ? liveRouteHistory
+  const displayTraveledRoutePolyline = hasLiveData && matchedLiveRouteHistory.length > 1
+    ? matchedLiveRouteHistory
     : null;
   const displayTrackings = useMemo(
     () => (hasLiveData ? trackings : []),
     [hasLiveData, trackings],
+  );
+  const plannedDistanceKm = useMemo(
+    () => polylineDistanceKm(displayPlannedRoutePolyline),
+    [displayPlannedRoutePolyline],
+  );
+  const traveledDistanceKm = useMemo(
+    () => polylineDistanceKm(displayTraveledRoutePolyline),
+    [displayTraveledRoutePolyline],
   );
 
   const vehicleSummary = useMemo(() => {
@@ -451,6 +504,33 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     return [vehicleSummary];
   }, [displayTrackings, hasLiveData, vehiclePosition, vehicleSummary]);
 
+  const snappedVehiclePoint = useMemo(() => {
+    if (!Array.isArray(displayTraveledRoutePolyline) || displayTraveledRoutePolyline.length === 0) return null;
+    return displayTraveledRoutePolyline[displayTraveledRoutePolyline.length - 1];
+  }, [displayTraveledRoutePolyline]);
+
+  const displayVehiclePosition = useMemo(() => {
+    if (!snappedVehiclePoint) return vehiclePosition;
+    return {
+      latitude: snappedVehiclePoint[0],
+      longitude: snappedVehiclePoint[1],
+      timestamp: vehiclePosition?.timestamp || null,
+    };
+  }, [snappedVehiclePoint, vehiclePosition]);
+
+  const displayActiveVehicles = useMemo(() => {
+    if (!snappedVehiclePoint || activeVehicles.length === 0) return activeVehicles;
+
+    return activeVehicles.map((vehicle, index) => {
+      if (index !== 0) return vehicle;
+      return {
+        ...vehicle,
+        latitude: snappedVehiclePoint[0],
+        longitude: snappedVehiclePoint[1],
+      };
+    });
+  }, [activeVehicles, snappedVehiclePoint]);
+
   const etaLabel = eta === null ? 'Sin ETA' : `${eta} min`;
 
   return (
@@ -478,13 +558,46 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       <div className="tracking-dashboard px-4 md:px-8 py-5 max-w-[1400px] mx-auto">
         <aside className="tracking-analytics-panel">
           <section className="kpi-card">
-            <p className="kpi-label">Origen</p>
-            <p className="kpi-value">{routeInfo?.origin || 'Centro, Buenaventura'}</p>
-            <p className="kpi-label mt-3">Destino</p>
-            <p className="kpi-value">{routeInfo?.destination || 'Seminario San Buenaventura'}</p>
+            <div className="route-summary-topbar">
+              <p className="kpi-label mb-0">Ruta real</p>
+              <span className={`route-auth-badge ${showRouteContext ? 'verified' : 'pending'}`}>
+                {showRouteContext ? 'Puntos verificados' : 'Pendiente de ubicar'}
+              </span>
+            </div>
+            <div className="route-stop-stack">
+              <div className="route-stop-card start">
+                <span className="route-stop-dot" aria-hidden="true" />
+                <div>
+                  <p className="kpi-label">Origen</p>
+                  <p className="kpi-value">{routeInfo?.origin || 'Centro, Buenaventura'}</p>
+                </div>
+              </div>
+              <div className="route-stop-divider" aria-hidden="true" />
+              <div className="route-stop-card end">
+                <span className="route-stop-dot" aria-hidden="true" />
+                <div>
+                  <p className="kpi-label">Destino</p>
+                  <p className="kpi-value">{routeInfo?.destination || 'Seminario San Buenaventura'}</p>
+                </div>
+              </div>
+            </div>
+            <div className="route-metrics-grid">
+              <div className="route-metric-tile">
+                <span className="route-metric-label">ETA</span>
+                <strong className="route-metric-value">{etaLabel}</strong>
+              </div>
+              <div className="route-metric-tile">
+                <span className="route-metric-label">Planificada</span>
+                <strong className="route-metric-value">{plannedDistanceKm > 0 ? `${plannedDistanceKm.toFixed(1)} km` : 'Sin trazo'}</strong>
+              </div>
+              <div className="route-metric-tile">
+                <span className="route-metric-label">Recorrida</span>
+                <strong className="route-metric-value">{traveledDistanceKm > 0 ? `${traveledDistanceKm.toFixed(1)} km` : '0.0 km'}</strong>
+              </div>
+            </div>
             <div className="kpi-eta-row">
-              <span className="kpi-label">ETA</span>
-              <strong className="kpi-eta-value">{etaLabel}</strong>
+              <span className="kpi-label">Estado de ruta</span>
+              <strong className="kpi-eta-value">{showRouteContext ? 'Trazada' : 'Buscando'}</strong>
             </div>
             {etaUpdated && (
               <p className="kpi-updated">
@@ -496,16 +609,16 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           <section className="kpi-card">
             <div className="panel-title-row">
               <h2 className="panel-title">Vehiculos activos</h2>
-              <span className="panel-counter">{activeVehicles.length}</span>
+              <span className="panel-counter">{displayActiveVehicles.length}</span>
             </div>
 
             {loading ? (
               <p className="panel-muted">Cargando datos...</p>
-            ) : activeVehicles.length === 0 ? (
+            ) : displayActiveVehicles.length === 0 ? (
               <p className="panel-muted">Aun no hay posicion activa para esta ruta.</p>
             ) : (
               <div className="vehicle-list">
-                {activeVehicles.map((vehicle) => (
+                {displayActiveVehicles.map((vehicle) => (
                   <article key={vehicle.label} className="vehicle-item">
                     <div className="vehicle-chip">
                       <span className="vehicle-chip-icon" aria-hidden="true">
@@ -552,8 +665,8 @@ export default function TrackingPage({ routeId: routeIdProp }) {
             destinationCoords={displayDestinationCoords}
             originName={routeInfo?.origin || 'Centro'}
             destinationName={routeInfo?.destination || 'Seminario San Buenaventura'}
-            activeVehicles={activeVehicles}
-            vehiclePosition={showEmptyCityCanvas ? null : vehiclePosition}
+            activeVehicles={displayActiveVehicles}
+            vehiclePosition={showEmptyCityCanvas ? null : displayVehiclePosition}
             mapHeight="640px"
           />
         </main>
