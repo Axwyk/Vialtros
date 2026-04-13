@@ -33,6 +33,20 @@ function parseIncomingMessage(rawText) {
   }
 }
 
+function normalizeLocationPayload(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+
+  const latitude = Number(payload.latitude ?? payload.lat);
+  const longitude = Number(payload.longitude ?? payload.lng);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+
+  return {
+    ...payload,
+    latitude,
+    longitude,
+  };
+}
+
 function extractLocationUpdate(payload) {
   if (!payload || typeof payload !== 'object') return null;
 
@@ -52,7 +66,7 @@ function extractLocationUpdate(payload) {
     || payload.lat != null
     || payload.lng != null
   ) {
-    return payload;
+    return normalizeLocationPayload(payload);
   }
 
   return null;
@@ -73,6 +87,14 @@ export function connectTrackingWS(routeId, onMessage, handlers = {}) {
   let closedManually = false;
   let reconnectAttempts = 0;
   let reconnectTimer = null;
+
+  if (!Number.isFinite(Number(routeId))) {
+    throw new Error('connectTrackingWS requiere un routeId numerico');
+  }
+
+  if (typeof WebSocket === 'undefined') {
+    throw new Error('WebSocket no esta disponible en este entorno');
+  }
 
   const connect = () => {
     const wsUrl = `${resolveWsBaseUrl()}/tracking/${routeId}/`;
@@ -99,6 +121,8 @@ export function connectTrackingWS(routeId, onMessage, handlers = {}) {
       // Compatibilidad: el callback principal sigue recibiendo la mejor señal de ubicación.
       if (locationPayload) {
         onMessage(locationPayload);
+      } else if (onMessage) {
+        onMessage(data);
       }
     };
 
@@ -119,6 +143,12 @@ export function connectTrackingWS(routeId, onMessage, handlers = {}) {
   connect();
 
   return {
+    send: (payload) => {
+      if (!socket || socket.readyState !== WebSocket.OPEN) return false;
+      socket.send(typeof payload === 'string' ? payload : JSON.stringify(payload));
+      return true;
+    },
+    getReadyState: () => socket?.readyState ?? WebSocket.CLOSED,
     close: () => {
       closedManually = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
