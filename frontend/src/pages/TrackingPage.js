@@ -12,14 +12,16 @@ import {
   getETAMinutes,
   getTrackedStreetRoute,
   isWithinBuenaventuraZone,
+  snapPointToRoad,
+  buildRoadPathBetweenPoints,
 } from '../services/routing';
 import TrackingHero from '../components/tracking/TrackingHero';
 import './TrackingPage.css';
 
 const LIVE_WINDOW_MINUTES = 20;
 const ETA_REFRESH_DISTANCE_KM = 0.08;
-const ROUTE_MATCH_MIN_NEW_POINTS = 4;
-const ROUTE_MATCH_REFRESH_DISTANCE_KM = 0.12;
+const ROUTE_MATCH_MIN_NEW_POINTS = 2;
+const ROUTE_MATCH_REFRESH_DISTANCE_KM = 0.06;
 const GUIDED_ROUTE_SPEED_KMH = 24;
 const GUIDED_ROUTE_STEP_MS = 4500;
 const GUIDED_ROUTE_MAX_POINTS = 28;
@@ -501,9 +503,13 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           }
 
           try {
+            // Prefer stored coordinates
+            const hasStoredOrigin = Number.isFinite(route.origin_lat) && Number.isFinite(route.origin_lng);
+            const hasStoredDest = Number.isFinite(route.destination_lat) && Number.isFinite(route.destination_lng);
+
             const [from, to] = await Promise.all([
-              geocodeAddress(route.origin),
-              geocodeAddress(route.destination),
+              hasStoredOrigin ? Promise.resolve([route.origin_lat, route.origin_lng]) : geocodeAddress(route.origin),
+              hasStoredDest ? Promise.resolve([route.destination_lat, route.destination_lng]) : geocodeAddress(route.destination),
             ]);
 
             if (!Array.isArray(from) || !Array.isArray(to)) {
@@ -577,15 +583,24 @@ export default function TrackingPage({ routeId: routeIdProp }) {
         }
 
         if (route?.origin && route?.destination) {
-          const [from, to] = await Promise.all([
-            geocodeAddress(route.origin, { fallbackCoords: userCoords }),
-            geocodeAddress(route.destination, { fallbackCoords: userCoords }),
-          ]);
+          // Prefer stored coordinates from Route model (precise, pre-resolved)
+          const hasStoredOrigin = Number.isFinite(route.origin_lat) && Number.isFinite(route.origin_lng);
+          const hasStoredDest = Number.isFinite(route.destination_lat) && Number.isFinite(route.destination_lng);
+
+          let from = hasStoredOrigin ? [route.origin_lat, route.origin_lng] : null;
+          let to = hasStoredDest ? [route.destination_lat, route.destination_lng] : null;
+
+          // Fallback: geocode if no stored coordinates
+          if (!from || !to) {
+            const [geocodedFrom, geocodedTo] = await Promise.all([
+              from ? Promise.resolve(from) : geocodeAddress(route.origin, { fallbackCoords: userCoords }),
+              to ? Promise.resolve(to) : geocodeAddress(route.destination, { fallbackCoords: userCoords }),
+            ]);
+            from = from || geocodedFrom;
+            to = to || geocodedTo;
+          }
 
           if (!mounted) return;
-
-          // Confiamos en el geocoder con contexto de ciudad;
-          // solo forzamos demo si no se pudo geocodificar ninguno de los dos extremos.
           if (Array.isArray(from) && Array.isArray(to)) {
             setOriginCoords(from);
             setDestinationCoords(to);
@@ -599,7 +614,18 @@ export default function TrackingPage({ routeId: routeIdProp }) {
               setEta(Math.ceil(streetRoute.duration / 60));
               setEtaUpdated(new Date());
             } else {
-              setRoutePolyline(null);
+              // OSRM route failed — try road-path building as fallback
+              try {
+                const roadPath = await buildRoadPathBetweenPoints([from, to]);
+                if (!mounted) return;
+                if (roadPath?.length > 2) {
+                  setRoutePolyline(roadPath);
+                } else {
+                  setRoutePolyline(null);
+                }
+              } catch {
+                if (mounted) setRoutePolyline(null);
+              }
             }
           } else {
             // Geocoding devolvió null → usar demo
@@ -650,16 +676,28 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           liveToastTimerRef.current = setTimeout(() => setShowLiveToast(false), 2600);
         }
 
-        dispatch({ type: 'MERGE_TRACKINGS', payload: [normalized] });
-        dispatch({
-          type: 'SET_VEHICLE_POSITION',
-          payload: {
-            latitude: normalized.latitude,
-            longitude: normalized.longitude,
-            timestamp: normalized.timestamp,
-          },
+        // Snap GPS point to nearest road for accurate display
+        snapPointToRoad([normalized.latitude, normalized.longitude]).then((snapped) => {
+          const lat = snapped[0];
+          const lng = snapped[1];
+          dispatch({ type: 'MERGE_TRACKINGS', payload: [{ ...normalized, latitude: lat, longitude: lng }] });
+          dispatch({
+            type: 'SET_VEHICLE_POSITION',
+            payload: { latitude: lat, longitude: lng, timestamp: normalized.timestamp },
+          });
+          dispatch({ type: 'APPEND_ROUTE_POINT', payload: [lat, lng] });
+        }).catch(() => {
+          dispatch({ type: 'MERGE_TRACKINGS', payload: [normalized] });
+          dispatch({
+            type: 'SET_VEHICLE_POSITION',
+            payload: {
+              latitude: normalized.latitude,
+              longitude: normalized.longitude,
+              timestamp: normalized.timestamp,
+            },
+          });
+          dispatch({ type: 'APPEND_ROUTE_POINT', payload: [normalized.latitude, normalized.longitude] });
         });
-        dispatch({ type: 'APPEND_ROUTE_POINT', payload: [normalized.latitude, normalized.longitude] });
       },
       {
         onOpen: () => {
@@ -822,7 +860,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
 
     const timerId = setTimeout(() => {
       getTrackedStreetRoute(trackings)
-        .then((matchedRoute) => {
+        .then(async (matchedRoute) => {
           if (cancelled) return;
           lastMatchedRouteRef.current = {
             historyLength: liveRouteHistory.length,
@@ -832,18 +870,33 @@ export default function TrackingPage({ routeId: routeIdProp }) {
             setMatchedLiveRouteHistory(matchedRoute.coordinates);
             return;
           }
-          setMatchedLiveRouteHistory(liveRouteHistory);
+          // Fallback: build road path between sparse GPS points
+          try {
+            const roadPath = await buildRoadPathBetweenPoints(liveRouteHistory);
+            if (!cancelled && roadPath?.length > 1) {
+              setMatchedLiveRouteHistory(roadPath);
+              return;
+            }
+          } catch { /* use raw points */ }
+          if (!cancelled) setMatchedLiveRouteHistory(liveRouteHistory);
         })
-        .catch(() => {
-          if (!cancelled) {
-            lastMatchedRouteRef.current = {
-              historyLength: liveRouteHistory.length,
-              lastPoint: latestPoint,
-            };
-            setMatchedLiveRouteHistory(liveRouteHistory);
-          }
+        .catch(async () => {
+          if (cancelled) return;
+          lastMatchedRouteRef.current = {
+            historyLength: liveRouteHistory.length,
+            lastPoint: latestPoint,
+          };
+          // Fallback: build road path
+          try {
+            const roadPath = await buildRoadPathBetweenPoints(liveRouteHistory);
+            if (!cancelled && roadPath?.length > 1) {
+              setMatchedLiveRouteHistory(roadPath);
+              return;
+            }
+          } catch { /* use raw points */ }
+          if (!cancelled) setMatchedLiveRouteHistory(liveRouteHistory);
         });
-    }, 900);
+    }, 600);
 
     return () => {
       cancelled = true;
@@ -1266,9 +1319,18 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           geocodeAddress(routeInfo.destination, { fallbackCoords: userCoords }),
         ]);
         const streetRoute = from && to ? await getStreetRoute(from, to) : null;
-        const exactStreetRoute = streetRoute && !streetRoute.isStraightLine ? streetRoute.coordinates : null;
-        playbackRoute = exactStreetRoute || (Array.isArray(from) && Array.isArray(to) ? [from, to] : null);
-        if (exactStreetRoute?.length > 1) {
+        let routeCoordinates = streetRoute && !streetRoute.isStraightLine ? streetRoute.coordinates : null;
+
+        // If OSRM route failed, build road path between endpoints as last resort
+        if (!routeCoordinates && Array.isArray(from) && Array.isArray(to)) {
+          try {
+            const roadPath = await buildRoadPathBetweenPoints([from, to]);
+            if (roadPath?.length > 2) routeCoordinates = roadPath;
+          } catch { /* use straight line as last resort */ }
+        }
+
+        playbackRoute = routeCoordinates || (Array.isArray(from) && Array.isArray(to) ? [from, to] : null);
+        if (routeCoordinates?.length > 1) {
           setRoutePolyline(playbackRoute);
           setOriginCoords(from);
           setDestinationCoords(to);
@@ -1572,16 +1634,16 @@ export default function TrackingPage({ routeId: routeIdProp }) {
             </div>
           )}
           <MapView
-            trackings={isAdminView ? [] : displayTrackings}
-            plannedRoutePolyline={isAdminView ? null : displayPlannedRoutePolyline}
-            remainingRoutePolyline={isAdminView ? null : routeProgressSegments.remaining}
-            traveledRoutePolyline={isAdminView ? null : displayTraveledRoutePolyline}
-            originCoords={isAdminView ? null : displayOriginCoords}
-            destinationCoords={isAdminView ? null : displayDestinationCoords}
+            trackings={displayTrackings}
+            plannedRoutePolyline={displayPlannedRoutePolyline}
+            remainingRoutePolyline={routeProgressSegments.remaining}
+            traveledRoutePolyline={displayTraveledRoutePolyline}
+            originCoords={displayOriginCoords}
+            destinationCoords={displayDestinationCoords}
             originName={routeInfo?.origin || 'Centro'}
             destinationName={routeInfo?.destination || 'Seminario San Buenaventura'}
             activeVehicles={displayActiveVehicles}
-            vehiclePosition={isAdminView || showEmptyCityCanvas ? null : displayVehiclePosition}
+            vehiclePosition={showEmptyCityCanvas ? null : displayVehiclePosition}
             userCoords={userCoords}
             mapHeight="640px"
             focusAllVehicles={isAdminView}

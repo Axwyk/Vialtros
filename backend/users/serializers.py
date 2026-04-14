@@ -62,7 +62,9 @@ class RouteSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Route
-        fields = ('id', 'name', 'origin', 'destination', 'driver', 'driver_detail',
+        fields = ('id', 'name', 'origin', 'destination',
+                  'origin_lat', 'origin_lng', 'destination_lat', 'destination_lng',
+                  'driver', 'driver_detail',
                   'passengers', 'passenger_details', 'passenger_count')
 
     def get_passenger_count(self, obj):

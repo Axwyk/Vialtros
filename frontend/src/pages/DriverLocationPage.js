@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { getDriverAssignedRoutes } from '../services/dashboard';
 import { getRoutes } from '../services/admin';
 import { sendDriverLocation } from '../services/driverLocation';
-import { geocodeAddress, getStreetRoute } from '../services/routing';
+import { geocodeAddress, getStreetRoute, snapPointToRoad } from '../services/routing';
 
 const GUIDED_ROUTE_SPEED_KMH = 24;
 const GUIDED_ROUTE_STEP_MS = 4500;
@@ -203,15 +203,21 @@ export default function DriverLocationPage({ role }) {
     }
   };
 
-  const postPosition = async (position, routeId) => transmitPosition({
-    routeId,
-    latitude: position.coords.latitude,
-    longitude: position.coords.longitude,
-    speedKmh: Number.isFinite(position.coords.speed) && position.coords.speed !== null
-      ? position.coords.speed * 3.6
-      : undefined,
-    source: 'driver-mobile-web',
-  });
+  const postPosition = async (position, routeId) => {
+    // Snap GPS to nearest road before transmitting
+    const rawLat = position.coords.latitude;
+    const rawLng = position.coords.longitude;
+    const snapped = await snapPointToRoad([rawLat, rawLng]).catch(() => [rawLat, rawLng]);
+    return transmitPosition({
+      routeId,
+      latitude: snapped[0],
+      longitude: snapped[1],
+      speedKmh: Number.isFinite(position.coords.speed) && position.coords.speed !== null
+        ? position.coords.speed * 3.6
+        : undefined,
+      source: 'driver-mobile-web',
+    });
+  };
 
   const playGuidedRoutePoint = async (routeId) => {
     const point = guidedRoutePointsRef.current[guidedRouteIndexRef.current];

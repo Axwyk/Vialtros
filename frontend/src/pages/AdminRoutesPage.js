@@ -4,9 +4,9 @@ import Sidebar from '../components/dashboard/Sidebar';
 import Modal from '../components/Modal';
 import { icons } from '../components/dashboard/icons';
 import { getRoutes, createRoute, updateRoute, deleteRoute, getDrivers, getPassengers } from '../services/admin';
-import { searchBuenaventuraPlaces } from '../services/routing';
+import { searchBuenaventuraPlaces, geocodeAddress } from '../services/routing';
 
-const EMPTY_FORM = { name: '', origin: '', destination: '', driver: '', passengers: [] };
+const EMPTY_FORM = { name: '', origin: '', destination: '', driver: '', passengers: [], origin_lat: null, origin_lng: null, destination_lat: null, destination_lng: null };
 
 export default function AdminRoutesPage({ role, onLogout }) {
   const [routes, setRoutes]   = useState([]);
@@ -51,7 +51,7 @@ export default function AdminRoutesPage({ role, onLogout }) {
     setModal('create');
   };
   const openEdit   = (r) => {
-    setForm({ name: r.name, origin: r.origin, destination: r.destination, driver: r.driver ?? '', passengers: r.passengers ?? [] });
+    setForm({ name: r.name, origin: r.origin, destination: r.destination, driver: r.driver ?? '', passengers: r.passengers ?? [], origin_lat: r.origin_lat ?? null, origin_lng: r.origin_lng ?? null, destination_lat: r.destination_lat ?? null, destination_lng: r.destination_lng ?? null });
     setFormError('');
     setOriginSuggestions([]);
     setOriginSuggestionsOpen(false);
@@ -134,7 +134,22 @@ export default function AdminRoutesPage({ role, onLogout }) {
     if (!form.destination.trim()) { setFormError('El destino es obligatorio'); return; }
     setSaving(true); setFormError('');
     try {
-      const payload = { ...form, driver: form.driver || null, passengers: form.passengers || [] };
+      // Resolve coordinates if not already set (user typed manually without selecting a suggestion)
+      let originLat = form.origin_lat;
+      let originLng = form.origin_lng;
+      let destLat = form.destination_lat;
+      let destLng = form.destination_lng;
+
+      if (originLat == null || originLng == null) {
+        const resolved = await geocodeAddress(form.origin.trim()).catch(() => null);
+        if (Array.isArray(resolved)) { originLat = resolved[0]; originLng = resolved[1]; }
+      }
+      if (destLat == null || destLng == null) {
+        const resolved = await geocodeAddress(form.destination.trim()).catch(() => null);
+        if (Array.isArray(resolved)) { destLat = resolved[0]; destLng = resolved[1]; }
+      }
+
+      const payload = { ...form, driver: form.driver || null, passengers: form.passengers || [], origin_lat: originLat, origin_lng: originLng, destination_lat: destLat, destination_lng: destLng };
       if (modal === 'create') await createRoute(payload);
       else await updateRoute(modal.id, payload);
       setModal(null); load();
@@ -293,7 +308,7 @@ export default function AdminRoutesPage({ role, onLogout }) {
                   className="block w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
                   value={form.origin}
                   onChange={e => {
-                    setForm(f => ({ ...f, origin: e.target.value }));
+                    setForm(f => ({ ...f, origin: e.target.value, origin_lat: null, origin_lng: null }));
                     setOriginSuggestionsEnabled(true);
                   }}
                   placeholder="ej. Colegio Central"
@@ -307,7 +322,7 @@ export default function AdminRoutesPage({ role, onLogout }) {
                         type="button"
                         onMouseDown={(event) => event.preventDefault()}
                         onClick={() => {
-                          setForm((current) => ({ ...current, origin: suggestion.label }));
+                          setForm((current) => ({ ...current, origin: suggestion.label, origin_lat: suggestion.coords?.[0] ?? null, origin_lng: suggestion.coords?.[1] ?? null }));
                           setOriginSuggestionsEnabled(false);
                           setOriginSuggestionsOpen(false);
                         }}
@@ -332,7 +347,7 @@ export default function AdminRoutesPage({ role, onLogout }) {
                   className="block w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
                   value={form.destination}
                   onChange={e => {
-                    setForm(f => ({ ...f, destination: e.target.value }));
+                    setForm(f => ({ ...f, destination: e.target.value, destination_lat: null, destination_lng: null }));
                     setDestinationSuggestionsEnabled(true);
                   }}
                   placeholder="ej. Sector Los Pinos"
@@ -346,7 +361,7 @@ export default function AdminRoutesPage({ role, onLogout }) {
                         type="button"
                         onMouseDown={(event) => event.preventDefault()}
                         onClick={() => {
-                          setForm((current) => ({ ...current, destination: suggestion.label }));
+                          setForm((current) => ({ ...current, destination: suggestion.label, destination_lat: suggestion.coords?.[0] ?? null, destination_lng: suggestion.coords?.[1] ?? null }));
                           setDestinationSuggestionsEnabled(false);
                           setDestinationSuggestionsOpen(false);
                         }}

@@ -1,6 +1,7 @@
-// Servicio de enrutamiento real por calles usando OSRM (sin API key)
-// y geocodificación con Nominatim (OpenStreetMap).
+// Servicio de enrutamiento real por calles usando Valhalla (FOSSGIS) como primario
+// y OSRM como fallback. Geocodificación con Nominatim (OpenStreetMap).
 
+const VALHALLA_BASE = 'https://valhalla1.openstreetmap.de';
 const OSRM_BASE = 'https://router.project-osrm.org/route/v1/driving';
 const OSRM_MATCH_BASE = 'https://router.project-osrm.org/match/v1/driving';
 const OSRM_NEAREST_BASE = 'https://router.project-osrm.org/nearest/v1/driving';
@@ -11,10 +12,12 @@ const BVA_VIEWBOX = '-77.18,3.72,-76.85,4.02';
 const BVA_CITY_SUFFIX = ', Buenaventura, Colombia';
 const geocodeCache = new Map();
 const routeCache = new Map();
-const TRACK_MATCH_RADIUS_METERS = 35;
+const TRACK_MATCH_RADIUS_METERS = 100;
 const TRACK_MATCH_GAP_SECONDS = 8;
 const TRACK_MAX_POINT_JUMP_KM = 1.4;
-const TRACK_MAX_BEARING_RANGE = 90;
+const TRACK_MAX_BEARING_RANGE = 180;
+const snapCache = new Map();
+const SNAP_CACHE_MAX = 400;
 export const BUENAVENTURA_CENTER = [3.89243, -77.02824];
 export const BUENAVENTURA_URBAN_BOUNDS = {
   minLat: 3.84,
@@ -280,13 +283,13 @@ function buildMatchParams(points) {
     const bearing = (Math.atan2(deltaLng, deltaLat) * (180 / Math.PI) + 360) % 360;
     const speed = point.speedKmh ?? 0;
     const range = speed >= 45
-      ? 20
+      ? 30
       : speed >= 30
-        ? 28
+        ? 45
         : speed >= 18
-          ? 38
+          ? 60
           : speed >= 8
-            ? 55
+            ? 90
             : TRACK_MAX_BEARING_RANGE;
 
     return `${Math.round(bearing)},${range}`;
@@ -313,10 +316,193 @@ function mergePolylineSegments(segments) {
   return merged;
 }
 
-async function fetchJson(url) {
-  const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
+async function fetchJson(url, timeoutMs = 12000) {
+  const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
   if (!response.ok) return null;
   return response.json();
+}
+
+async function fetchPostJson(url, body, timeoutMs = 12000) {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!response.ok) return null;
+  return response.json();
+}
+
+async function fetchJsonWithRetry(url, retries = 1, timeoutMs = 12000) {
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      const result = await fetchJson(url, timeoutMs);
+      if (result !== null) return result;
+    } catch {
+      if (attempt >= retries) return null;
+    }
+  }
+  return null;
+}
+
+// Decode Valhalla encoded polyline6 (precision 1e-6)
+function decodePolyline6(encoded) {
+  const coords = [];
+  let index = 0;
+  let lat = 0;
+  let lng = 0;
+
+  while (index < encoded.length) {
+    let b;
+    let shift = 0;
+    let result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    lat += (result & 1) ? ~(result >> 1) : (result >> 1);
+
+    shift = 0;
+    result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    lng += (result & 1) ? ~(result >> 1) : (result >> 1);
+
+    coords.push([lat / 1e6, lng / 1e6]);
+  }
+  return coords;
+}
+
+// Valhalla costing options: prefer main roads, avoid residential shortcuts
+const VALHALLA_COSTING_OPTIONS = {
+  auto: {
+    use_highways: 1,
+    use_living_streets: 0,
+    use_ferry: 0,
+    shortest: false,
+    top_speed: 80,
+  },
+};
+
+// Primary routing via Valhalla (FOSSGIS)
+async function valhallaRoute(from, to, timeoutMs = 15000) {
+  const body = {
+    locations: [
+      { lat: from[0], lon: from[1] },
+      { lat: to[0], lon: to[1] },
+    ],
+    costing: 'auto',
+    costing_options: VALHALLA_COSTING_OPTIONS,
+    directions_options: { units: 'km' },
+  };
+
+  const data = await fetchPostJson(`${VALHALLA_BASE}/route`, body, timeoutMs);
+  if (!data?.trip?.legs?.[0]?.shape) return null;
+
+  const leg = data.trip.legs[0];
+  const coordinates = decodePolyline6(leg.shape);
+  if (coordinates.length < 2) return null;
+
+  return {
+    coordinates,
+    duration: leg.summary?.time || 0,
+    distance: (leg.summary?.length || 0) * 1000, // km→m
+  };
+}
+
+// Valhalla snap to nearest road
+async function valhallaLocate(coords, timeoutMs = 8000) {
+  const body = {
+    locations: [{ lat: coords[0], lon: coords[1] }],
+    costing: 'auto',
+    costing_options: VALHALLA_COSTING_OPTIONS,
+    verbose: false,
+  };
+
+  const data = await fetchPostJson(`${VALHALLA_BASE}/locate`, body, timeoutMs);
+  if (!Array.isArray(data) || data.length === 0) return null;
+
+  const result = data[0];
+  if (!result?.edges?.length) return null;
+
+  const edge = result.edges[0];
+  if (!Number.isFinite(edge.correlated_lat) || !Number.isFinite(edge.correlated_lon)) return null;
+
+  return sanitizeBuenaventuraCoords(
+    [edge.correlated_lat, edge.correlated_lon],
+    coords,
+  );
+}
+
+// Valhalla trace_route for map matching (GPS points → road path)
+async function valhallaTraceRoute(points, timeoutMs = 12000) {
+  if (!Array.isArray(points) || points.length < 2) return null;
+
+  const shape = points.map((p) => ({
+    lat: Array.isArray(p) ? p[0] : p.latitude,
+    lon: Array.isArray(p) ? p[1] : p.longitude,
+  }));
+
+  const body = {
+    shape,
+    costing: 'auto',
+    costing_options: VALHALLA_COSTING_OPTIONS,
+    shape_match: 'map_snap',
+    search_radius: 150,
+  };
+
+  const data = await fetchPostJson(`${VALHALLA_BASE}/trace_route`, body, timeoutMs);
+  if (!data?.trip?.legs) return null;
+
+  const allCoords = data.trip.legs.flatMap((leg) => {
+    if (!leg.shape) return [];
+    return decodePolyline6(leg.shape);
+  });
+  if (allCoords.length < 2) return null;
+
+  const totalTime = data.trip.legs.reduce((s, l) => s + (l.summary?.time || 0), 0);
+  const totalDist = data.trip.legs.reduce((s, l) => s + (l.summary?.length || 0), 0);
+  return {
+    coordinates: allCoords,
+    duration: totalTime,
+    distance: totalDist * 1000,
+  };
+}
+
+// Valhalla route with multiple waypoints
+async function valhallaRouteWaypoints(waypoints, timeoutMs = 15000) {
+  if (!Array.isArray(waypoints) || waypoints.length < 2) return null;
+
+  const body = {
+    locations: waypoints.map((p) => ({ lat: p[0], lon: p[1], type: 'through' })),
+    costing: 'auto',
+    costing_options: VALHALLA_COSTING_OPTIONS,
+    directions_options: { units: 'km' },
+  };
+  // First and last must be 'break'
+  body.locations[0].type = 'break';
+  body.locations[body.locations.length - 1].type = 'break';
+
+  const data = await fetchPostJson(`${VALHALLA_BASE}/route`, body, timeoutMs);
+  if (!data?.trip?.legs) return null;
+
+  const allCoords = data.trip.legs.flatMap((leg) => {
+    if (!leg.shape) return [];
+    return decodePolyline6(leg.shape);
+  });
+  if (allCoords.length < 2) return null;
+
+  const totalTime = data.trip.legs.reduce((s, l) => s + (l.summary?.time || 0), 0);
+  const totalDist = data.trip.legs.reduce((s, l) => s + (l.summary?.length || 0), 0);
+  return {
+    coordinates: allCoords,
+    duration: totalTime,
+    distance: totalDist * 1000,
+  };
 }
 
 function isUsableRoadRoute(route, maxDistance = 60000) {
@@ -383,6 +569,15 @@ function trimAccessRoadLoops(coordinates, from, to) {
 async function snapToNearestRoad(coords) {
   if (!Array.isArray(coords) || coords.length !== 2) return null;
 
+  // 1. Primary: Valhalla locate
+  try {
+    const snapped = await valhallaLocate(coords);
+    if (snapped) return snapped;
+  } catch {
+    // Valhalla failed, try OSRM
+  }
+
+  // 2. Fallback: OSRM nearest
   const [lat, lng] = coords;
   try {
     const data = await fetchJson(`${OSRM_NEAREST_BASE}/${lng},${lat}?number=1`);
@@ -397,6 +592,15 @@ async function snapToNearestRoad(coords) {
 async function getNearestRoadCandidates(coords, number = 3) {
   if (!Array.isArray(coords) || coords.length !== 2) return [];
 
+  // 1. Primary: Valhalla locate (single best snap)
+  try {
+    const snapped = await valhallaLocate(coords);
+    if (snapped) return [coords, snapped];
+  } catch {
+    // Valhalla failed, try OSRM
+  }
+
+  // 2. Fallback: OSRM nearest with multiple candidates
   const [lat, lng] = coords;
   try {
     const data = await fetchJson(`${OSRM_NEAREST_BASE}/${lng},${lat}?number=${number}`);
@@ -421,16 +625,24 @@ async function requestBestStreetRoute(fromCandidates, toCandidates, maxDistance 
   const safeFromCandidates = (Array.isArray(fromCandidates) ? fromCandidates : []).filter(Array.isArray);
   const safeToCandidates = (Array.isArray(toCandidates) ? toCandidates : []).filter(Array.isArray);
 
-  let bestRoute = null;
-
+  // Build pairs prioritizing first candidates (closest to road), limit to 4 attempts max
+  const pairs = [];
   for (const from of safeFromCandidates) {
     for (const to of safeToCandidates) {
-      const route = await requestStreetRoute([from, to], maxDistance);
-      if (!route) continue;
+      pairs.push([from, to]);
+    }
+  }
+  const limitedPairs = pairs.slice(0, 4);
 
-      if (!bestRoute || route.distance < bestRoute.distance) {
-        bestRoute = route;
-      }
+  // Try pairs in parallel to avoid sequential stalling
+  const results = await Promise.all(
+    limitedPairs.map((pair) => requestStreetRoute(pair, maxDistance).catch(() => null)),
+  );
+
+  let bestRoute = null;
+  for (const route of results) {
+    if (route && (!bestRoute || route.distance < bestRoute.distance)) {
+      bestRoute = route;
     }
   }
 
@@ -452,12 +664,26 @@ async function snapPathToRoad(points) {
 }
 
 async function requestStreetRoute(points, maxDistance = 60000) {
+  // Try Valhalla first if exactly 2 points
+  if (Array.isArray(points) && points.length === 2) {
+    try {
+      const valResult = await valhallaRoute(points[0], points[1]);
+      if (valResult?.coordinates?.length > 1 && valResult.distance < maxDistance) {
+        const cacheKey = `val|${points[0].join(',')}->${points[1].join(',')}`;
+        routeCache.set(cacheKey, valResult);
+        return valResult;
+      }
+    } catch {
+      // Valhalla failed, try OSRM
+    }
+  }
+
   const coordinates = buildOsrmCoordinates(points);
   const cacheKey = `${coordinates}|${maxDistance}`;
   if (routeCache.has(cacheKey)) {
     return routeCache.get(cacheKey);
   }
-  const data = await fetchJson(`${OSRM_BASE}/${coordinates}?overview=full&geometries=geojson&continue_straight=false&steps=true`);
+  const data = await fetchJsonWithRetry(`${OSRM_BASE}/${coordinates}?overview=full&geometries=geojson&continue_straight=false&steps=true`, 1);
   if (data?.code === 'Ok' && Array.isArray(data.routes) && data.routes.length > 0) {
     const route = data.routes[0];
     if (isUsableRoadRoute(route, maxDistance)) {
@@ -529,6 +755,20 @@ export async function geocodeAddress(address, options = {}) {
   if (!result) result = await trySearch(clean, false);
 
   const resolved = result || (isWithinBuenaventuraZone(fallbackCoords) ? fallbackCoords : null);
+
+  // Snap geocoded coordinate to nearest road for precision
+  if (resolved) {
+    try {
+      const snapped = await valhallaLocate(resolved);
+      if (snapped) {
+        geocodeCache.set(cacheKey, snapped);
+        return snapped;
+      }
+    } catch {
+      // Use un-snapped coordinate
+    }
+  }
+
   geocodeCache.set(cacheKey, resolved);
   return resolved;
 }
@@ -570,36 +810,62 @@ export async function getStreetRoute(from, to) {
   const safeFrom = sanitizeBuenaventuraCoords(from) || from;
   const safeTo = sanitizeBuenaventuraCoords(to, safeFrom) || to;
 
-  try {
-    const [fromCandidates, toCandidates] = await Promise.all([
-      getNearestRoadCandidates(safeFrom),
-      getNearestRoadCandidates(safeTo),
-    ]);
+  // Helper: anchor first/last points of route to exact origin/destination
+  const anchorEndpoints = (coords) => {
+    if (!Array.isArray(coords) || coords.length < 2) return coords;
+    const result = [...coords];
+    result[0] = safeFrom;
+    result[result.length - 1] = safeTo;
+    return result;
+  };
 
-    const snappedRoute = await requestBestStreetRoute(
-      fromCandidates.length > 0 ? fromCandidates : [safeFrom],
-      toCandidates.length > 0 ? toCandidates : [safeTo],
-    );
-    if (snappedRoute) {
+  // 1. Primary: Valhalla (FOSSGIS) — reliable, fast, no rate limit
+  try {
+    const valRoute = await valhallaRoute(safeFrom, safeTo);
+    if (valRoute?.coordinates?.length > 1) {
+      const cacheKey = `${safeFrom.join(',')}->${safeTo.join(',')}`;
+      routeCache.set(cacheKey, valRoute);
       return {
-        ...snappedRoute,
-        coordinates: trimAccessRoadLoops(snappedRoute.coordinates, safeFrom, safeTo),
+        ...valRoute,
+        coordinates: anchorEndpoints(trimAccessRoadLoops(valRoute.coordinates, safeFrom, safeTo)),
       };
     }
   } catch {
-    // Si falla el ajuste a la vía, probamos con las coordenadas saneadas.
+    // Valhalla failed, try OSRM
   }
 
+  // 2. Fallback: direct OSRM route
   try {
     const directRoute = await requestStreetRoute([safeFrom, safeTo]);
     if (directRoute) {
       return {
         ...directRoute,
-        coordinates: trimAccessRoadLoops(directRoute.coordinates, safeFrom, safeTo),
+        coordinates: anchorEndpoints(trimAccessRoadLoops(directRoute.coordinates, safeFrom, safeTo)),
       };
     }
   } catch {
-    // Último recurso: línea recta.
+    // Continue to snap approach
+  }
+
+  // 3. Last resort with snapped endpoints (OSRM)
+  try {
+    const [snappedFrom, snappedTo] = await Promise.all([
+      snapToNearestRoad(safeFrom),
+      snapToNearestRoad(safeTo),
+    ]);
+
+    const routeFrom = snappedFrom || safeFrom;
+    const routeTo = snappedTo || safeTo;
+
+    const snappedRoute = await requestStreetRoute([routeFrom, routeTo]);
+    if (snappedRoute) {
+      return {
+        ...snappedRoute,
+        coordinates: anchorEndpoints(trimAccessRoadLoops(snappedRoute.coordinates, safeFrom, safeTo)),
+      };
+    }
+  } catch {
+    // Straight line fallback
   }
 
   return straightLineRoute(safeFrom, safeTo);
@@ -617,14 +883,33 @@ export async function getTrackedStreetRoute(points) {
   );
   if (normalized.length < 2) return null;
 
-  const sampled = sampleTrackMatchPoints(normalized, 14);
-  const snappedSampled = await snapPathToRoad(sampled);
-  const roadAnchoredPoints = snappedSampled.length > 1 ? snappedSampled : sampled;
-  const sampledCoordinates = buildOsrmCoordinates(roadAnchoredPoints.map((point) => point.coords));
-  const { radiuses, timestamps, bearings } = buildMatchParams(roadAnchoredPoints);
+  const sampled = sampleTrackMatchPoints(normalized, 20);
+  const sampledCoords = sampled.map((p) => p.coords);
 
+  // 1. Primary: Valhalla trace_route (map matching)
   try {
-    const matchUrl = `${OSRM_MATCH_BASE}/${sampledCoordinates}?geometries=geojson&overview=full&tidy=true&gaps=split&annotations=false&radiuses=${radiuses}&timestamps=${timestamps}&bearings=${bearings}`;
+    const traceResult = await valhallaTraceRoute(sampledCoords);
+    if (traceResult?.coordinates?.length > 1) return traceResult;
+  } catch {
+    // Valhalla trace failed, try waypoints route
+  }
+
+  // 2. Valhalla route with waypoints
+  try {
+    const waypointResult = await valhallaRouteWaypoints(sampledCoords);
+    if (waypointResult?.coordinates?.length > 1) return waypointResult;
+  } catch {
+    // Valhalla waypoints failed, try OSRM
+  }
+
+  // 3. Fallback: OSRM Match
+  try {
+    const snappedSampled = await snapPathToRoad(sampled);
+    const roadAnchoredPoints = snappedSampled.length > 1 ? snappedSampled : sampled;
+    const sampledCoordinates = buildOsrmCoordinates(roadAnchoredPoints.map((point) => point.coords));
+    const { radiuses, timestamps } = buildMatchParams(roadAnchoredPoints);
+
+    const matchUrl = `${OSRM_MATCH_BASE}/${sampledCoordinates}?geometries=geojson&overview=full&tidy=true&gaps=split&annotations=false&radiuses=${radiuses}&timestamps=${timestamps}`;
     const data = await fetchJson(matchUrl);
     if (data?.code === 'Ok' && Array.isArray(data.matchings) && data.matchings.length > 0) {
       const coordinates = mergePolylineSegments(
@@ -639,36 +924,14 @@ export async function getTrackedStreetRoute(points) {
       }
     }
   } catch {
-    // Seguimos con el fallback por waypoints.
+    // OSRM Match failed
   }
 
-  try {
-    const routeUrl = `${OSRM_BASE}/${sampledCoordinates}?overview=full&geometries=geojson&continue_straight=false&steps=true`;
-    const data = await fetchJson(routeUrl);
-    if (data?.code === 'Ok' && Array.isArray(data.routes) && data.routes.length > 0) {
-      const route = data.routes[0];
-      if (route.distance < 80000) {
-        return {
-          coordinates: route.geometry.coordinates.map(([lng, lat]) => [lat, lng]),
-          duration: route.duration,
-          distance: route.distance,
-        };
-      }
-    }
-  } catch {
-    // Seguimos con fallback por segmentos.
-  }
-
+  // 4. Segment-by-segment via getStreetRoute (already Valhalla-primary)
   const segmentRoutes = await Promise.all(
-    roadAnchoredPoints.slice(1).map(async (to, index) => {
-      const from = roadAnchoredPoints[index]?.coords;
-      const toCoords = to?.coords;
-      const directSegment = await requestStreetRoute([from, toCoords], 30000);
-      if (directSegment) {
-        return directSegment;
-      }
-
-      return getStreetRoute(from, toCoords);
+    sampledCoords.slice(1).map(async (to, index) => {
+      const from = sampledCoords[index];
+      return getStreetRoute(from, to);
     }),
   );
   const coordinates = mergePolylineSegments(segmentRoutes.map((segment) => segment?.coordinates || []));
@@ -681,9 +944,9 @@ export async function getTrackedStreetRoute(points) {
     };
   }
 
-  if (roadAnchoredPoints.length > 1) {
+  if (sampledCoords.length > 1) {
     return {
-      coordinates: roadAnchoredPoints.map((point) => point.coords),
+      coordinates: sampledCoords,
       duration: 0,
       distance: 0,
       isStraightLine: false,
@@ -703,4 +966,102 @@ export async function getETAMinutes(from, to) {
   const result = await getStreetRoute(from, to);
   if (!result) return null;
   return Math.ceil(result.duration / 60);
+}
+
+/**
+ * Ajusta un punto GPS individual a la vía más cercana.
+ * Usa caché para evitar llamadas repetidas a puntos cercanos.
+ * @param {[number, number]} coords [lat, lng]
+ * @returns {Promise<[number, number]>}
+ */
+export async function snapPointToRoad(coords) {
+  if (!Array.isArray(coords) || coords.length !== 2) return coords;
+  const [lat, lng] = coords;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return coords;
+
+  // Cuantizar a ~11 metros para aprovechar caché
+  const keyLat = (Math.round(lat * 10000) / 10000).toFixed(4);
+  const keyLng = (Math.round(lng * 10000) / 10000).toFixed(4);
+  const cacheKey = `${keyLat},${keyLng}`;
+  if (snapCache.has(cacheKey)) return snapCache.get(cacheKey);
+
+  try {
+    const snapped = await snapToNearestRoad(coords);
+    const result = snapped || coords;
+    if (snapCache.size >= SNAP_CACHE_MAX) {
+      const firstKey = snapCache.keys().next().value;
+      snapCache.delete(firstKey);
+    }
+    snapCache.set(cacheKey, result);
+    return result;
+  } catch {
+    return coords;
+  }
+}
+
+/**
+ * Construye una polilínea por calles entre puntos GPS dispersos.
+ * En lugar de líneas rectas, usa OSRM route entre cada par consecutivo.
+ * @param {[number, number][]} points Array de [lat, lng]
+ * @returns {Promise<[number, number][]>}
+ */
+export async function buildRoadPathBetweenPoints(points) {
+  const validPoints = (Array.isArray(points) ? points : [])
+    .filter((p) => Array.isArray(p) && p.length === 2 && Number.isFinite(p[0]) && Number.isFinite(p[1]));
+  if (validPoints.length < 2) return validPoints;
+
+  // Snap todos los puntos a vías
+  const snappedPoints = await Promise.all(validPoints.map((p) => snapPointToRoad(p)));
+  const dedupedPoints = dedupeConsecutivePoints(snappedPoints);
+  if (dedupedPoints.length < 2) return dedupedPoints;
+
+  const sampled = dedupedPoints.length > 25
+    ? sampleTrackMatchPoints(normalizeTrackMatchPoints(dedupedPoints), 25).map((p) => p.coords)
+    : dedupedPoints;
+
+  // 1. Primary: Valhalla route with waypoints
+  try {
+    const valResult = await valhallaRouteWaypoints(sampled);
+    if (valResult?.coordinates?.length > 1) return valResult.coordinates;
+  } catch {
+    // Valhalla failed, try OSRM
+  }
+
+  // 2. Fallback: OSRM route with all waypoints
+  try {
+    const coords = sampled.map(([lat, lng]) => `${lng},${lat}`).join(';');
+    const data = await fetchJson(
+      `${OSRM_BASE}/${coords}?overview=full&geometries=geojson&continue_straight=false`,
+    );
+    if (data?.code === 'Ok' && data.routes?.[0]?.geometry?.coordinates?.length > 1) {
+      const roadPath = data.routes[0].geometry.coordinates.map(([rLng, rLat]) => [rLat, rLng]);
+      if (roadPath.length > 1) return roadPath;
+    }
+  } catch {
+    // Fallback: segmento a segmento
+  }
+
+  // 3. Fallback: segment-by-segment via getStreetRoute (already Valhalla-primary)
+  const segments = await Promise.all(
+    sampled.slice(1).map(async (to, idx) => {
+      const from = sampled[idx];
+      try {
+        const route = await getStreetRoute(from, to);
+        return route?.coordinates || [from, to];
+      } catch {
+        return [from, to];
+      }
+    }),
+  );
+  return mergePolylineSegments(segments);
+}
+
+function dedupeConsecutivePoints(points) {
+  return (Array.isArray(points) ? points : []).reduce((acc, point) => {
+    if (!Array.isArray(point) || point.length !== 2) return acc;
+    const last = acc[acc.length - 1];
+    if (last && last[0] === point[0] && last[1] === point[1]) return acc;
+    acc.push(point);
+    return acc;
+  }, []);
 }

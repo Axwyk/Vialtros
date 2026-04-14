@@ -24,6 +24,10 @@ class Route(models.Model):
 	name = models.CharField(max_length=100)
 	origin = models.CharField(max_length=255)
 	destination = models.CharField(max_length=255)
+	origin_lat = models.FloatField(null=True, blank=True)
+	origin_lng = models.FloatField(null=True, blank=True)
+	destination_lat = models.FloatField(null=True, blank=True)
+	destination_lng = models.FloatField(null=True, blank=True)
 	driver = models.ForeignKey(Driver, on_delete=models.SET_NULL, null=True)
 	passengers = models.ManyToManyField(Passenger, blank=True)
 
