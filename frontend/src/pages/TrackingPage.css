@@ -395,6 +395,12 @@
   border: 1px solid #86efac;
 }
 
+.route-auth-badge.alternate {
+  background: #ecfeff;
+  color: #0f766e;
+  border: 1px solid #99f6e4;
+}
+
 .route-auth-badge.pending {
   background: #eff6ff;
   color: #1d4ed8;

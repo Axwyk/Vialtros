@@ -352,6 +352,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const [originCoords, setOriginCoords] = useState(null);
   const [destinationCoords, setDestinationCoords] = useState(null);
   const [routePolyline, setRoutePolyline] = useState(null);
+  const [routeGeometryMode, setRouteGeometryMode] = useState('pending');
   const [matchedLiveRouteHistory, setMatchedLiveRouteHistory] = useState([]);
   const [userCoords, setUserCoords] = useState(null);
   const [eta, setEta] = useState(null);
@@ -605,36 +606,34 @@ export default function TrackingPage({ routeId: routeIdProp }) {
             setOriginCoords(from);
             setDestinationCoords(to);
             setForceBuenaventuraDemo(false);
+            setRouteGeometryMode('pending');
 
-            // getStreetRoute incluye fallback a línea recta (islas / rutas sin asfalto)
+            // getStreetRoute includes retry+cache; fallback to straight line only as last resort
             const streetRoute = await getStreetRoute(from, to);
             if (!mounted) return;
-            if (streetRoute && !streetRoute.isStraightLine) {
+            if (streetRoute && streetRoute.coordinates?.length > 1) {
               setRoutePolyline(streetRoute.coordinates);
-              setEta(Math.ceil(streetRoute.duration / 60));
-              setEtaUpdated(new Date());
-            } else {
-              // OSRM route failed — try road-path building as fallback
-              try {
-                const roadPath = await buildRoadPathBetweenPoints([from, to]);
-                if (!mounted) return;
-                if (roadPath?.length > 2) {
-                  setRoutePolyline(roadPath);
-                } else {
-                  setRoutePolyline(null);
-                }
-              } catch {
-                if (mounted) setRoutePolyline(null);
+              if (!streetRoute.isStraightLine) {
+                setRouteGeometryMode('verified');
+                setEta(Math.ceil(streetRoute.duration / 60));
+                setEtaUpdated(new Date());
+              } else {
+                setRouteGeometryMode('alternate');
               }
+            } else {
+              setRoutePolyline(null);
+              setRouteGeometryMode('pending');
             }
           } else {
             // Geocoding devolvió null → usar demo
             setOriginCoords(null);
             setDestinationCoords(null);
             setRoutePolyline(null);
+            setRouteGeometryMode('pending');
             setForceBuenaventuraDemo(true);
           }
         } else {
+          setRouteGeometryMode('pending');
           setForceBuenaventuraDemo(true);
         }
       } finally {
@@ -687,18 +686,20 @@ export default function TrackingPage({ routeId: routeIdProp }) {
             setOriginCoords(from);
             setDestinationCoords(to);
             setForceBuenaventuraDemo(false);
+            setRouteGeometryMode('pending');
             const streetRoute = await getStreetRoute(from, to);
-            if (streetRoute && !streetRoute.isStraightLine) {
+            if (streetRoute && streetRoute.coordinates?.length > 1) {
               setRoutePolyline(streetRoute.coordinates);
-              setEta(Math.ceil(streetRoute.duration / 60));
-              setEtaUpdated(new Date());
-            } else {
-              try {
-                const roadPath = await buildRoadPathBetweenPoints([from, to]);
-                setRoutePolyline(roadPath?.length > 2 ? roadPath : null);
-              } catch {
-                setRoutePolyline(null);
+              if (!streetRoute.isStraightLine) {
+                setRouteGeometryMode('verified');
+                setEta(Math.ceil(streetRoute.duration / 60));
+                setEtaUpdated(new Date());
+              } else {
+                setRouteGeometryMode('alternate');
               }
+            } else {
+              setRoutePolyline(null);
+              setRouteGeometryMode('pending');
             }
           }
         }
@@ -997,6 +998,15 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const hasResolvedStops = Array.isArray(originCoords) && Array.isArray(destinationCoords);
   const showRouteContext = !forceBuenaventuraDemo && (hasResolvedStops || hasPlannedRoute);
   const canStartGuidedRoute = hasPlannedRoute || Boolean(routeInfo?.origin && routeInfo?.destination);
+  const routeBadge = useMemo(() => {
+    if (routeGeometryMode === 'verified') {
+      return { className: 'verified', label: 'Trazado verificado', statusLabel: 'Trazada' };
+    }
+    if (routeGeometryMode === 'alternate') {
+      return { className: 'alternate', label: 'Modo alterno', statusLabel: 'Alterna' };
+    }
+    return { className: 'pending', label: 'Pendiente de ubicar', statusLabel: 'Buscando' };
+  }, [routeGeometryMode]);
 
   const displayOriginCoords = showRouteContext ? originCoords : null;
   const displayDestinationCoords = showRouteContext ? destinationCoords : null;
@@ -1411,6 +1421,9 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           setOriginCoords(from);
           setDestinationCoords(to);
           setForceBuenaventuraDemo(false);
+          setRouteGeometryMode(streetRoute && !streetRoute.isStraightLine ? 'verified' : 'alternate');
+        } else if (Array.isArray(from) && Array.isArray(to)) {
+          setRouteGeometryMode('alternate');
         }
       }
 
@@ -1568,8 +1581,8 @@ export default function TrackingPage({ routeId: routeIdProp }) {
               <section className="kpi-card">
                 <div className="route-summary-topbar">
                   <p className="kpi-label mb-0">Ruta real</p>
-                  <span className={`route-auth-badge ${showRouteContext ? 'verified' : 'pending'}`}>
-                    {showRouteContext ? 'Puntos verificados' : 'Pendiente de ubicar'}
+                  <span className={`route-auth-badge ${routeBadge.className}`}>
+                    {routeBadge.label}
                   </span>
                 </div>
                 <div className="route-stop-stack">
@@ -1618,7 +1631,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                 </div>
                 <div className="kpi-eta-row">
                   <span className="kpi-label">Estado de ruta</span>
-                  <strong className="kpi-eta-value">{showRouteContext ? 'Trazada' : 'Buscando'}</strong>
+                  <strong className="kpi-eta-value">{routeBadge.statusLabel}</strong>
                 </div>
                 {etaUpdated && (
                   <p className="kpi-updated">
