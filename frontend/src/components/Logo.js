@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from 'react-router-dom';
 
 /**
  * Icono de Vialtros:
@@ -48,11 +49,11 @@ export function LogoIcon({ size = 26, color = "#2563EB" }) {
  *   "default" → icono azul + texto oscuro (para fondos blancos/claros)
  *   "light"   → icono blanco + texto blanco (para fondos oscuros/azul)
  */
-export function Logo({ variant = "default", iconSize = 26 }) {
-  const iconColor  = variant === "light" ? "#ffffff" : "#2563EB";
-  const textColor  = variant === "light" ? "#ffffff" : "#111827";
+export function Logo({ variant = "default", iconSize = 26, to }) {
+  const iconColor = variant === "light" ? "#ffffff" : "#2563EB";
+  const textColor = variant === "light" ? "#ffffff" : "#111827";
 
-  return (
+  const content = (
     <div
       className="flex items-center gap-2.5 select-none"
       aria-label="Vialtros"
@@ -72,4 +73,14 @@ export function Logo({ variant = "default", iconSize = 26 }) {
       </span>
     </div>
   );
+
+  if (to) {
+    return (
+      <Link to={to} className="inline-flex items-center cursor-pointer">
+        {content}
+      </Link>
+    );
+  }
+
+  return content;
 }

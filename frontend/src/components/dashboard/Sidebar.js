@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { icons } from "./icons";
 import { Logo } from "../Logo";
 import { getDriverAssignedRoutes, getUserAssignedRoute } from "../../services/dashboard";
@@ -8,6 +8,7 @@ import { getRoutes } from "../../services/admin";
 
 export default function Sidebar({ role, onLogout }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const [trackingLink, setTrackingLink] = useState("/tracking/1");
   const [trackingEnabled, setTrackingEnabled] = useState(true);
 
@@ -90,9 +91,13 @@ export default function Sidebar({ role, onLogout }) {
 
   return (
     <aside className="hidden md:flex flex-col bg-white border-r border-gray-200 shadow-sm min-h-screen w-60 py-8 px-4 sticky top-0">
-      <div className="mb-10 px-2">
-        <Logo variant="default" iconSize={30} />
-      </div>
+      <button
+  type="button"
+  onClick={() => navigate("/dashboard")}
+  className="mb-10 px-2 text-left cursor-pointer bg-transparent border-0 p-0"
+>
+  <Logo variant="default" iconSize={30} />
+</button>
       <nav className="flex flex-col gap-1 flex-1">
         {navItems.filter(item => (!item.admin || role === 'admin') && (!item.driver || role === 'driver')).map(item => {
           const Icon = item.icon;
