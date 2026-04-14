@@ -1,82 +1,14 @@
 
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { icons } from "./icons";
 import { Logo } from "../Logo";
-import { getDriverAssignedRoutes, getUserAssignedRoute } from "../../services/dashboard";
-import { getRoutes } from "../../services/admin";
+import useTrackingRoute from "./useTrackingRoute";
 
 export default function Sidebar({ role, onLogout }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const [trackingLink, setTrackingLink] = useState("/tracking/1");
-  const [trackingEnabled, setTrackingEnabled] = useState(true);
-
-  useEffect(() => {
-    let mounted = true;
-
-    async function resolveTrackingRoute() {
-      if (role === "driver") {
-        try {
-          const routes = await getDriverAssignedRoutes();
-          const firstRouteId = routes?.[0]?.id;
-          if (!mounted) return;
-          if (firstRouteId) {
-            setTrackingLink(`/tracking/${firstRouteId}`);
-            setTrackingEnabled(true);
-          } else {
-            setTrackingEnabled(false);
-          }
-        } catch {
-          if (mounted) setTrackingEnabled(false);
-        }
-        return;
-      }
-
-      if (role === "user") {
-        try {
-          const payload = await getUserAssignedRoute();
-          const routeId = payload?.route?.id;
-          if (!mounted) return;
-          if (routeId) {
-            setTrackingLink(`/tracking/${routeId}`);
-            setTrackingEnabled(true);
-          } else {
-            setTrackingEnabled(false);
-          }
-        } catch {
-          if (mounted) setTrackingEnabled(false);
-        }
-        return;
-      }
-
-      if (role === "admin") {
-        try {
-          const routes = await getRoutes();
-          const firstRouteId = routes?.[0]?.id;
-          if (!mounted) return;
-          if (firstRouteId) {
-            setTrackingLink(`/tracking/${firstRouteId}`);
-            setTrackingEnabled(true);
-          } else {
-            setTrackingEnabled(false);
-          }
-        } catch {
-          if (mounted) setTrackingEnabled(false);
-        }
-        return;
-      }
-
-      if (mounted) {
-        setTrackingEnabled(false);
-      }
-    }
-
-    resolveTrackingRoute();
-    return () => {
-      mounted = false;
-    };
-  }, [role]);
+  const { trackingLink, trackingEnabled } = useTrackingRoute(role);
 
   const navItems = [
     { to: "/dashboard", icon: icons.dashboard, label: "Inicio" },

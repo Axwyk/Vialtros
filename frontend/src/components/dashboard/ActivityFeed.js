@@ -61,31 +61,34 @@ const colorMap = {
 
 export default function ActivityFeed() {
   return (
-    <div className="bg-white rounded-xl border border-gray-100 shadow-sm h-full flex flex-col">
-      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
-        <h3 className="font-semibold text-gray-900 text-sm">Actividad reciente</h3>
-        <span className="text-xs text-gray-400 font-medium">Hoy</span>
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm h-full flex flex-col overflow-hidden">
+      <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0 bg-slate-50/70">
+        <div>
+          <h3 className="font-semibold text-slate-900 text-sm">Actividad reciente</h3>
+          <p className="text-xs text-slate-400 mt-1">Movimientos destacados de la jornada</p>
+        </div>
+        <span className="text-xs text-slate-400 font-medium">Hoy</span>
       </div>
 
-      <div className="flex-1 overflow-y-auto divide-y divide-gray-50">
+      <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
         {ACTIVITIES.map((a) => {
           const c = colorMap[a.color] || colorMap.blue;
           const Icon = icons[a.icon] || icons.activity;
           return (
             <div
               key={a.id}
-              className="flex items-start gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors duration-100"
+              className="flex items-start gap-3 px-5 py-3.5 hover:bg-slate-50 transition-colors duration-100"
             >
-              <div className={`${c.bg} rounded-lg p-2 flex-shrink-0 mt-0.5`}>
+              <div className={`${c.bg} rounded-xl p-2 flex-shrink-0 mt-0.5 border border-white shadow-sm`}>
                 <Icon size={14} strokeWidth={2} className={c.text} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-800 leading-tight truncate">
+                <p className="text-sm font-medium text-slate-800 leading-tight truncate">
                   {a.text}
                 </p>
-                <p className="text-xs text-gray-400 mt-0.5 truncate">{a.sub}</p>
+                <p className="text-xs text-slate-400 mt-0.5 truncate">{a.sub}</p>
               </div>
-              <span className="text-xs text-gray-300 whitespace-nowrap flex-shrink-0 mt-0.5">
+              <span className="text-xs text-slate-300 whitespace-nowrap flex-shrink-0 mt-0.5">
                 {a.time}
               </span>
             </div>
@@ -93,9 +96,10 @@ export default function ActivityFeed() {
         })}
       </div>
 
-      <div className="px-5 py-3 border-t border-gray-100 flex-shrink-0">
-        <button className="text-xs text-blue-600 font-medium hover:text-blue-700 transition-colors">
-          Ver todo el historial →
+      <div className="px-5 py-3 border-t border-slate-100 flex-shrink-0 bg-white">
+        <button className="inline-flex items-center gap-2 text-xs text-blue-600 font-semibold hover:text-blue-700 transition-colors">
+          Ver todo el historial
+          {icons.arrowRight({ size: 13, strokeWidth: 2.4 })}
         </button>
       </div>
     </div>

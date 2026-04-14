@@ -1,9 +1,15 @@
 // Página de login con JWT
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogoIcon } from '../components/Logo';
 import api from '../services/api';
 import { ensureLocalAccessSession, isLocalAccessEnabled } from '../services/auth';
+
+const LOGIN_FEATURES = [
+  'Ubicación en tiempo real del vehículo',
+  'Notificaciones de llegada y salida',
+  'Historial de rutas completadas',
+];
 
 /* ── Iconos inline ── */
 const IconUser = () => (
@@ -36,11 +42,29 @@ export default function LoginPage({ onLogin }) {
   const [error, setError]             = useState('');
   const navigate = useNavigate();
 
+  const finishLogin = useCallback((nextUsername) => {
+    if (nextUsername) {
+      localStorage.setItem('username', nextUsername);
+    }
+
+    if (onLogin) {
+      onLogin();
+    }
+
+    navigate('/dashboard', { replace: true });
+  }, [navigate, onLogin]);
+
   useEffect(() => {
     if (!isLocalAccessEnabled()) return;
 
     ensureLocalAccessSession();
-    onLogin && onLogin();
+    const localUsername = localStorage.getItem('username') || 'Invitado';
+    localStorage.setItem('username', localUsername);
+
+    if (onLogin) {
+      onLogin();
+    }
+
     navigate('/dashboard', { replace: true });
   }, [navigate, onLogin]);
 
@@ -53,14 +77,11 @@ export default function LoginPage({ onLogin }) {
       const res = await api.post('/token/', { username: normalizedUsername, password });
       localStorage.setItem('access',   res.data.access);
       localStorage.setItem('refresh',  res.data.refresh);
-      localStorage.setItem('username', normalizedUsername);
-      onLogin && onLogin();
-      navigate('/dashboard');
+      finishLogin(normalizedUsername);
     } catch (err) {
       if (isLocalAccessEnabled()) {
         ensureLocalAccessSession({ username: normalizedUsername || username || 'Invitado' });
-        onLogin && onLogin();
-        navigate('/dashboard');
+        finishLogin(normalizedUsername || username || 'Invitado');
         return;
       }
 
@@ -107,18 +128,14 @@ export default function LoginPage({ onLogin }) {
 
           {/* Feature chips */}
           <div className="mt-10 flex flex-col gap-3">
-            {[
-              { label: 'Ubicación en tiempo real del vehículo' },
-              { label: 'Notificaciones de llegada y salida' },
-              { label: 'Historial de rutas completadas' },
-            ].map(f => (
-              <div key={f.label} className="flex items-center gap-3">
+            {LOGIN_FEATURES.map((feature) => (
+              <div key={feature} className="flex items-center gap-3">
                 <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
                   <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
                     <path d="M2 6l3 3 5-5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                 </div>
-                <span className="text-blue-100 text-sm font-medium">{f.label}</span>
+                <span className="text-blue-100 text-sm font-medium">{feature}</span>
               </div>
             ))}
           </div>
