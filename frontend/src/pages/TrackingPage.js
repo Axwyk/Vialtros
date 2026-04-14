@@ -260,6 +260,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const [eta, setEta] = useState(null);
   const [etaUpdated, setEtaUpdated] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [routeContextLoading, setRouteContextLoading] = useState(false);
   const [wsStatus, setWsStatus] = useState('connecting');
   const [isPollingFallback, setIsPollingFallback] = useState(false);
   const [forceBuenaventuraDemo, setForceBuenaventuraDemo] = useState(false);
@@ -364,40 +365,6 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           dispatch({ type: 'SET_VEHICLE_POSITION', payload: null });
           dispatch({ type: 'SET_ROUTE_HISTORY', payload: [] });
         }
-
-        if (route?.origin && route?.destination) {
-          const [from, to] = await Promise.all([
-            geocodeAddress(route.origin, { fallbackCoords: userCoords }),
-            geocodeAddress(route.destination, { fallbackCoords: userCoords }),
-          ]);
-
-          if (!mounted) return;
-
-          // Confiamos en el geocoder con contexto de ciudad;
-          // solo forzamos demo si no se pudo geocodificar ninguno de los dos extremos.
-          if (Array.isArray(from) && Array.isArray(to)) {
-            setOriginCoords(from);
-            setDestinationCoords(to);
-            setForceBuenaventuraDemo(false);
-
-            // getStreetRoute incluye fallback a línea recta (islas / rutas sin asfalto)
-            const streetRoute = await getStreetRoute(from, to);
-            if (!mounted) return;
-            if (streetRoute) {
-              setRoutePolyline(streetRoute.coordinates);
-              setEta(Math.ceil(streetRoute.duration / 60));
-              setEtaUpdated(new Date());
-            }
-          } else {
-            // Geocoding devolvió null → usar demo
-            setOriginCoords(null);
-            setDestinationCoords(null);
-            setRoutePolyline(null);
-            setForceBuenaventuraDemo(true);
-          }
-        } else {
-          setForceBuenaventuraDemo(true);
-        }
       } finally {
         if (mounted) setLoading(false);
       }
@@ -405,7 +372,61 @@ export default function TrackingPage({ routeId: routeIdProp }) {
 
     loadData();
     return () => { mounted = false; };
-  }, [selectedRouteId, userCoords]);
+  }, [selectedRouteId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadRouteContext() {
+      if (!routeInfo?.origin || !routeInfo?.destination) {
+        setOriginCoords(null);
+        setDestinationCoords(null);
+        setRoutePolyline(null);
+        setForceBuenaventuraDemo(true);
+        setRouteContextLoading(false);
+        return;
+      }
+
+      setRouteContextLoading(true);
+
+      try {
+        const [from, to] = await Promise.all([
+          geocodeAddress(routeInfo.origin, { fallbackCoords: userCoords }),
+          geocodeAddress(routeInfo.destination, { fallbackCoords: userCoords }),
+        ]);
+
+        if (cancelled) return;
+
+        if (Array.isArray(from) && Array.isArray(to)) {
+          setOriginCoords(from);
+          setDestinationCoords(to);
+          setForceBuenaventuraDemo(false);
+
+          const streetRoute = await getStreetRoute(from, to);
+          if (cancelled) return;
+
+          if (streetRoute?.coordinates?.length > 1) {
+            setRoutePolyline(streetRoute.coordinates);
+            setEta(Math.ceil(streetRoute.duration / 60));
+            setEtaUpdated(new Date());
+            return;
+          }
+        }
+
+        setOriginCoords(null);
+        setDestinationCoords(null);
+        setRoutePolyline(null);
+        setForceBuenaventuraDemo(true);
+      } finally {
+        if (!cancelled) setRouteContextLoading(false);
+      }
+    }
+
+    void loadRouteContext();
+    return () => {
+      cancelled = true;
+    };
+  }, [routeInfo, userCoords]);
 
   useEffect(() => {
     if (!Number.isFinite(selectedRouteId)) return undefined;
@@ -678,6 +699,10 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     () => polylineDistanceKm(displayTraveledRoutePolyline),
     [displayTraveledRoutePolyline],
   );
+  const routeProgress = useMemo(() => {
+    if (!(plannedDistanceKm > 0) || !(traveledDistanceKm >= 0)) return 0;
+    return Math.min(100, Math.round((traveledDistanceKm / plannedDistanceKm) * 100));
+  }, [plannedDistanceKm, traveledDistanceKm]);
 
   const vehicleSummary = useMemo(() => {
     if (displayTrackings.length === 0) {
@@ -977,10 +1002,14 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                 <span className="route-metric-label">Recorrida</span>
                 <strong className="route-metric-value">{traveledDistanceKm > 0 ? `${traveledDistanceKm.toFixed(1)} km` : '0.0 km'}</strong>
               </div>
+              <div className="route-metric-tile">
+                <span className="route-metric-label">Avance</span>
+                <strong className="route-metric-value">{routeProgress}%</strong>
+              </div>
             </div>
             <div className="kpi-eta-row">
               <span className="kpi-label">Estado de ruta</span>
-              <strong className="kpi-eta-value">{showRouteContext ? 'Trazada' : 'Buscando'}</strong>
+              <strong className="kpi-eta-value">{routeContextLoading ? 'Calculando' : (showRouteContext ? 'Trazada' : 'Buscando')}</strong>
             </div>
             {etaUpdated && (
               <p className="kpi-updated">

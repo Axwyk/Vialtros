@@ -9,6 +9,8 @@ const NOMINATIM_BASE = 'https://nominatim.openstreetmap.org';
 // Buenaventura viewbox: minLng,minLat,maxLng,maxLat
 const BVA_VIEWBOX = '-77.18,3.72,-76.85,4.02';
 const BVA_CITY_SUFFIX = ', Buenaventura, Colombia';
+const geocodeCache = new Map();
+const routeCache = new Map();
 export const BUENAVENTURA_CENTER = [3.89243, -77.02824];
 export const BUENAVENTURA_URBAN_BOUNDS = {
   minLat: 3.84,
@@ -19,34 +21,42 @@ export const BUENAVENTURA_URBAN_BOUNDS = {
 
 const REAL_BUENAVENTURA_PLACES = [
   {
+    name: 'Pueblo Nuevo',
     aliases: ['pueblo nuevo', 'barrio pueblo nuevo'],
     coords: [3.88982, -77.07077],
   },
   {
+    name: 'Seminario San Buenaventura',
     aliases: ['seminario san buenaventura', 'seminario', 'seminario diocesan san buenaventura'],
     coords: [3.90188, -77.02293],
   },
   {
+    name: 'Termarit',
     aliases: ['termarit', 'institucion educativa termarit', 'ie termarit', 'terminal maritimo termarit', 'terminal maritimo termarit'],
     coords: [3.87851, -77.01242],
   },
   {
+    name: 'Centro, Buenaventura',
     aliases: ['centro buenaventura', 'centro, buenaventura', 'centro', 'centro de buenaventura'],
     coords: [3.87712, -77.02986],
   },
   {
+    name: 'Bellavista',
     aliases: ['bellavista', 'barrio bellavista'],
     coords: [3.88291, -77.04041],
   },
   {
+    name: 'Cascajal',
     aliases: ['cascajal', 'isla cascajal', 'localidad isla cascajal'],
     coords: [3.88563, -77.03138],
   },
   {
+    name: 'San Luis',
     aliases: ['san luis', 'barrio san luis'],
     coords: [3.87913, -77.03527],
   },
   {
+    name: 'Normal Superior Juan Ladrilleros',
     aliases: [
       'normal superior juan ladrilleros',
       'escuela normal superior juan ladrilleros',
@@ -58,6 +68,7 @@ const REAL_BUENAVENTURA_PLACES = [
     coords: [3.87829, -77.01886],
   },
   {
+    name: 'Pascual de Andagoya',
     aliases: [
       'pascual de andagoya',
       'institucion educativa pascual de andagoya',
@@ -67,6 +78,7 @@ const REAL_BUENAVENTURA_PLACES = [
     coords: [3.88129, -77.05968],
   },
   {
+    name: 'Terminal de Buenaventura',
     aliases: ['terminal', 'terminal de transporte', 'terminal de transportes', 'terminal de buenaventura'],
     coords: [3.89015, -77.07366],
   },
@@ -93,6 +105,61 @@ function resolveKnownPlace(address) {
   return knownPlace?.coords || null;
 }
 
+export async function searchBuenaventuraPlaces(query) {
+  const normalizedQuery = normalizePlaceName(query);
+  if (!normalizedQuery || normalizedQuery.length < 2) return [];
+
+  const localMatches = REAL_BUENAVENTURA_PLACES
+    .filter(({ aliases, name }) => {
+      const normalizedName = normalizePlaceName(name);
+      return normalizedName.includes(normalizedQuery)
+        || aliases.some((alias) => alias.includes(normalizedQuery));
+    })
+    .slice(0, 5)
+    .map(({ name, coords }) => ({
+      label: name,
+      subtitle: 'Lugar conocido en Buenaventura',
+      coords,
+      source: 'local',
+    }));
+
+  const url = new URL(`${NOMINATIM_BASE}/search`);
+  url.searchParams.set('q', query.toLowerCase().includes('buenaventura') ? query : `${query}${BVA_CITY_SUFFIX}`);
+  url.searchParams.set('format', 'json');
+  url.searchParams.set('limit', '5');
+  url.searchParams.set('accept-language', 'es');
+  url.searchParams.set('countrycodes', 'co');
+  url.searchParams.set('viewbox', BVA_VIEWBOX);
+
+  const remoteMatches = [];
+  try {
+    const res = await fetch(url.toString(), { headers: { 'User-Agent': 'Vialtros/1.0' } });
+    if (res.ok) {
+      const data = await res.json();
+      (Array.isArray(data) ? data : []).forEach((item) => {
+        const coords = sanitizeBuenaventuraCoords([parseFloat(item.lat), parseFloat(item.lon)]);
+        if (!Array.isArray(coords) || !isWithinBuenaventuraZone(coords)) return;
+        remoteMatches.push({
+          label: String(item.display_name || '').split(',').slice(0, 2).join(', '),
+          subtitle: 'Sugerencia del mapa',
+          coords,
+          source: 'nominatim',
+        });
+      });
+    }
+  } catch {
+    // Si falla Nominatim, devolvemos solo coincidencias locales.
+  }
+
+  const seen = new Set();
+  return [...localMatches, ...remoteMatches].filter((item) => {
+    const key = normalizePlaceName(item.label);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 6);
+}
+
 export function isWithinBuenaventuraZone(coords) {
   if (!Array.isArray(coords) || coords.length !== 2) return false;
   const [lat, lng] = coords;
@@ -109,7 +176,7 @@ export function isWithinBuenaventuraZone(coords) {
 function sanitizeBuenaventuraCoords(coords, fallbackCoords = null) {
   if (isWithinBuenaventuraZone(coords)) return coords;
   if (isWithinBuenaventuraZone(fallbackCoords)) return fallbackCoords;
-  return BUENAVENTURA_CENTER;
+  return null;
 }
 
 function normalizePathPoints(points) {
@@ -193,13 +260,20 @@ async function snapToNearestRoad(coords) {
 
 async function requestStreetRoute(points, maxDistance = 60000) {
   const coordinates = buildOsrmCoordinates(points);
+  const cacheKey = `${coordinates}|${maxDistance}`;
+  if (routeCache.has(cacheKey)) {
+    return routeCache.get(cacheKey);
+  }
   const data = await fetchJson(`${OSRM_BASE}/${coordinates}?overview=full&geometries=geojson&continue_straight=false&steps=true`);
   if (data?.code === 'Ok' && Array.isArray(data.routes) && data.routes.length > 0) {
     const route = data.routes[0];
     if (isUsableRoadRoute(route, maxDistance)) {
-      return toLatLngPolyline(route);
+      const resolved = toLatLngPolyline(route);
+      routeCache.set(cacheKey, resolved);
+      return resolved;
     }
   }
+  routeCache.set(cacheKey, null);
   return null;
 }
 
@@ -213,9 +287,18 @@ export async function geocodeAddress(address, options = {}) {
   if (!address?.trim()) return null;
   const clean = address.trim();
   const { fallbackCoords = null } = options;
+  const cacheKey = `${normalizePlaceName(clean)}|${Array.isArray(fallbackCoords) ? fallbackCoords.join(',') : 'no-fallback'}`;
+
+  if (geocodeCache.has(cacheKey)) {
+    return geocodeCache.get(cacheKey);
+  }
 
   const knownCoords = resolveKnownPlace(clean);
-  if (knownCoords) return sanitizeBuenaventuraCoords(knownCoords, fallbackCoords);
+  if (knownCoords) {
+    const resolved = sanitizeBuenaventuraCoords(knownCoords, fallbackCoords);
+    geocodeCache.set(cacheKey, resolved);
+    return resolved;
+  }
 
   const trySearch = async (query, bounded) => {
     const url = new URL(`${NOMINATIM_BASE}/search`);
@@ -252,7 +335,9 @@ export async function geocodeAddress(address, options = {}) {
   // 3. Fallback global (sin restricción geográfica)
   if (!result) result = await trySearch(clean, false);
 
-  return result || sanitizeBuenaventuraCoords(null, fallbackCoords);
+  const resolved = result || (isWithinBuenaventuraZone(fallbackCoords) ? fallbackCoords : null);
+  geocodeCache.set(cacheKey, resolved);
+  return resolved;
 }
 
 /** Haversine: distancia en km entre dos puntos [lat, lng]. */
@@ -289,8 +374,8 @@ function straightLineRoute(from, to) {
 export async function getStreetRoute(from, to) {
   if (!from || !to) return null;
 
-  const safeFrom = sanitizeBuenaventuraCoords(from);
-  const safeTo = sanitizeBuenaventuraCoords(to, safeFrom);
+  const safeFrom = sanitizeBuenaventuraCoords(from) || from;
+  const safeTo = sanitizeBuenaventuraCoords(to, safeFrom) || to;
 
   try {
     const [snappedFrom, snappedTo] = await Promise.all([

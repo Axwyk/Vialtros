@@ -4,6 +4,7 @@ import Sidebar from '../components/dashboard/Sidebar';
 import Modal from '../components/Modal';
 import { icons } from '../components/dashboard/icons';
 import { getRoutes, createRoute, updateRoute, deleteRoute, getDrivers, getPassengers } from '../services/admin';
+import { searchBuenaventuraPlaces } from '../services/routing';
 
 const EMPTY_FORM = { name: '', origin: '', destination: '', driver: '', passengers: [] };
 
@@ -21,6 +22,12 @@ export default function AdminRoutesPage({ role, onLogout }) {
   const [passengerListRoute, setPassengerListRoute] = useState(null);
   const [sortCol, setSortCol]     = useState(null);
   const [sortDir, setSortDir]     = useState('asc');
+  const [originSuggestions, setOriginSuggestions] = useState([]);
+  const [originSuggestionsOpen, setOriginSuggestionsOpen] = useState(false);
+  const [originSuggestionsEnabled, setOriginSuggestionsEnabled] = useState(false);
+  const [destinationSuggestions, setDestinationSuggestions] = useState([]);
+  const [destinationSuggestionsOpen, setDestinationSuggestionsOpen] = useState(false);
+  const [destinationSuggestionsEnabled, setDestinationSuggestionsEnabled] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -32,12 +39,94 @@ export default function AdminRoutesPage({ role, onLogout }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const openCreate = () => { setForm(EMPTY_FORM); setFormError(''); setModal('create'); };
+  const openCreate = () => {
+    setForm(EMPTY_FORM);
+    setFormError('');
+    setOriginSuggestions([]);
+    setOriginSuggestionsOpen(false);
+    setOriginSuggestionsEnabled(false);
+    setDestinationSuggestions([]);
+    setDestinationSuggestionsOpen(false);
+    setDestinationSuggestionsEnabled(false);
+    setModal('create');
+  };
   const openEdit   = (r) => {
     setForm({ name: r.name, origin: r.origin, destination: r.destination, driver: r.driver ?? '', passengers: r.passengers ?? [] });
     setFormError('');
+    setOriginSuggestions([]);
+    setOriginSuggestionsOpen(false);
+    setOriginSuggestionsEnabled(false);
+    setDestinationSuggestions([]);
+    setDestinationSuggestionsOpen(false);
+    setDestinationSuggestionsEnabled(false);
     setModal(r);
   };
+
+  useEffect(() => {
+    if (!modal || !originSuggestionsEnabled) return undefined;
+
+    const originValue = form.origin?.trim() || '';
+    if (originValue.length < 2) {
+      setOriginSuggestions([]);
+      setOriginSuggestionsOpen(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const timerId = setTimeout(() => {
+      searchBuenaventuraPlaces(originValue)
+        .then((results) => {
+          if (!cancelled) {
+            setOriginSuggestions(results);
+            setOriginSuggestionsOpen(results.length > 0);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setOriginSuggestions([]);
+            setOriginSuggestionsOpen(false);
+          }
+        });
+    }, 220);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timerId);
+    };
+  }, [form.origin, modal, originSuggestionsEnabled]);
+
+  useEffect(() => {
+    if (!modal || !destinationSuggestionsEnabled) return undefined;
+
+    const destinationValue = form.destination?.trim() || '';
+    if (destinationValue.length < 2) {
+      setDestinationSuggestions([]);
+      setDestinationSuggestionsOpen(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const timerId = setTimeout(() => {
+      searchBuenaventuraPlaces(destinationValue)
+        .then((results) => {
+          if (!cancelled) {
+            setDestinationSuggestions(results);
+            setDestinationSuggestionsOpen(results.length > 0);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setDestinationSuggestions([]);
+            setDestinationSuggestionsOpen(false);
+          }
+        });
+    }, 220);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timerId);
+    };
+  }, [form.destination, modal, destinationSuggestionsEnabled]);
 
   const handleSave = async () => {
     if (!form.name.trim())        { setFormError('El nombre es obligatorio'); return; }
@@ -199,20 +288,82 @@ export default function AdminRoutesPage({ role, onLogout }) {
               />
             </label>
             <label className="text-xs font-medium text-gray-600">Origen *
-              <input
-                className="mt-1 block w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                value={form.origin}
-                onChange={e => setForm(f => ({ ...f, origin: e.target.value }))}
-                placeholder="ej. Colegio Central"
-              />
+              <div className="relative mt-1">
+                <input
+                  className="block w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  value={form.origin}
+                  onChange={e => {
+                    setForm(f => ({ ...f, origin: e.target.value }));
+                    setOriginSuggestionsEnabled(true);
+                  }}
+                  placeholder="ej. Colegio Central"
+                  autoComplete="off"
+                />
+                {originSuggestionsOpen && originSuggestions.length > 0 && (
+                  <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-blue-100 bg-white shadow-xl shadow-blue-100/70">
+                    {originSuggestions.map((suggestion) => (
+                      <button
+                        key={`${suggestion.source}-${suggestion.label}`}
+                        type="button"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => {
+                          setForm((current) => ({ ...current, origin: suggestion.label }));
+                          setOriginSuggestionsEnabled(false);
+                          setOriginSuggestionsOpen(false);
+                        }}
+                        className="flex w-full items-start justify-between gap-3 border-b border-blue-50 px-3 py-2.5 text-left transition last:border-b-0 hover:bg-blue-50"
+                      >
+                        <span>
+                          <span className="block text-sm font-semibold text-slate-800">{suggestion.label}</span>
+                          <span className="mt-0.5 block text-xs text-slate-500">{suggestion.subtitle}</span>
+                        </span>
+                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-blue-700">
+                          {suggestion.source === 'local' ? 'Local' : 'Mapa'}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </label>
             <label className="text-xs font-medium text-gray-600">Destino *
-              <input
-                className="mt-1 block w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                value={form.destination}
-                onChange={e => setForm(f => ({ ...f, destination: e.target.value }))}
-                placeholder="ej. Sector Los Pinos"
-              />
+              <div className="relative mt-1">
+                <input
+                  className="block w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  value={form.destination}
+                  onChange={e => {
+                    setForm(f => ({ ...f, destination: e.target.value }));
+                    setDestinationSuggestionsEnabled(true);
+                  }}
+                  placeholder="ej. Sector Los Pinos"
+                  autoComplete="off"
+                />
+                {destinationSuggestionsOpen && destinationSuggestions.length > 0 && (
+                  <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-blue-100 bg-white shadow-xl shadow-blue-100/70">
+                    {destinationSuggestions.map((suggestion) => (
+                      <button
+                        key={`${suggestion.source}-${suggestion.label}`}
+                        type="button"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => {
+                          setForm((current) => ({ ...current, destination: suggestion.label }));
+                          setDestinationSuggestionsEnabled(false);
+                          setDestinationSuggestionsOpen(false);
+                        }}
+                        className="flex w-full items-start justify-between gap-3 border-b border-blue-50 px-3 py-2.5 text-left transition last:border-b-0 hover:bg-blue-50"
+                      >
+                        <span>
+                          <span className="block text-sm font-semibold text-slate-800">{suggestion.label}</span>
+                          <span className="mt-0.5 block text-xs text-slate-500">{suggestion.subtitle}</span>
+                        </span>
+                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-blue-700">
+                          {suggestion.source === 'local' ? 'Local' : 'Mapa'}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </label>
             <label className="text-xs font-medium text-gray-600">Conductor (opcional)
               <select
