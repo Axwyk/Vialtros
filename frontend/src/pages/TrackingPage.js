@@ -76,56 +76,92 @@ function sampleGuidedRoute(points, maxPoints = GUIDED_ROUTE_MAX_POINTS) {
     }
   }
 
-  return sampled;
-}
+        // Derivar velocidad promedio por modo de transporte (km/h)
+        const modeSpeeds = {
+          vehicle: 30,
+          bus: 22,
+          bicycle: 12,
+          other: 15,
+        };
 
-function normalizeIntermediateStops(stops) {
-  return (Array.isArray(stops) ? stops : [])
-    .map((stop, index) => {
-      const latitude = Number(stop?.latitude);
-      const longitude = Number(stop?.longitude);
-      if (!Number.isFinite(latitude) || !Number.isFinite(longitude))
-        return null;
+        const fallbackSpeedKmh =
+          toNumber(latest.speed ?? latest.speed_kmh ?? latest.velocity) ||
+          GUIDED_ROUTE_SPEED_KMH;
 
-      return {
-        id: stop?.id ?? `${index}-${latitude}-${longitude}`,
-        label: String(stop?.label || `Parada ${index + 1}`),
-        address: String(stop?.address || stop?.label || `Parada ${index + 1}`),
-        coords: [latitude, longitude],
-      };
-    })
-    .filter(Boolean);
-}
+        if (Array.isArray(routePolyline) && routePolyline.length > 1) {
+          const remainingKm = remainingRouteDistanceKm(routePolyline, latestPoint);
+          if (Number.isFinite(remainingKm)) {
+            const speed = modeSpeeds[transportMode] || fallbackSpeedKmh || 12;
+            const minutes =
+              remainingKm <= 0.03
+                ? 0
+                : Math.max(1, Math.ceil((remainingKm / Math.max(speed, 6)) * 60));
+            setEta(minutes);
+            setEtaUpdated(new Date());
+            lastEtaRequestRef.current = {
+              point: latestPoint,
+              destinationKey: destinationCoords.join(","),
+            };
+            return;
+          }
+        }
 
-function buildRouteWaypointCoordinates(from, to, intermediateStops = []) {
-  return dedupeConsecutivePoints(
-    [
-      from,
-      ...normalizeIntermediateStops(intermediateStops).map(
-        (stop) => stop.coords,
-      ),
-      to,
-    ].filter((point) => Array.isArray(point) && point.length === 2),
-  );
-}
+        const destinationKey = destinationCoords.join(",");
+        const previousEtaRequest = lastEtaRequestRef.current;
+        if (
+          previousEtaRequest.destinationKey === destinationKey &&
+          Array.isArray(previousEtaRequest.point) &&
+          distanceKm(
+            previousEtaRequest.point[0],
+            previousEtaRequest.point[1],
+            latest.latitude,
+            latest.longitude,
+          ) < ETA_REFRESH_DISTANCE_KM
+        ) {
+          return;
+        }
 
-function buildRouteSignature(route) {
-  const intermediateStops = normalizeIntermediateStops(
-    route?.intermediate_stops,
-  );
-  return [
-    route?.origin,
-    route?.destination,
-    route?.origin_lat,
-    route?.origin_lng,
-    route?.destination_lat,
-    route?.destination_lng,
-    JSON.stringify(
-      intermediateStops.map((stop) => [
-        stop.id,
-        stop.address,
-        stop.coords[0],
-        stop.coords[1],
+        // Si el modo es 'vehicle' o 'bus' usamos el servicio remoto (si está disponible),
+        // para bicicleta u 'otro' calculamos estimación local por velocidad promedio.
+        if (transportMode === "vehicle" || transportMode === "bus") {
+          getETAMinutes([latest.latitude, latest.longitude], destinationCoords)
+            .then((minutes) => {
+              if (minutes === null) return;
+              // Si es bus, ajustar ligeramente (buses más lentos en paradas)
+              const adjusted =
+                transportMode === "bus"
+                  ? Math.max(1, Math.ceil(minutes * 1.08))
+                  : Math.max(1, Math.ceil(minutes));
+              lastEtaRequestRef.current = {
+                point: [latest.latitude, latest.longitude],
+                destinationKey,
+              };
+              setEta(adjusted);
+              setEtaUpdated(new Date());
+            })
+            .catch(() => {
+              // fallback local simple: distancia / velocidad
+              const remainingKm = remainingDistanceKm;
+              if (Number.isFinite(remainingKm)) {
+                const speed = modeSpeeds[transportMode] || fallbackSpeedKmh || 12;
+                const minutes = Math.max(
+                  1,
+                  Math.ceil((remainingKm / Math.max(speed, 6)) * 60),
+                );
+                setEta(minutes);
+                setEtaUpdated(new Date());
+              }
+            });
+        } else {
+          // bicycle u other: calcular localmente según distancia restante
+          const remainingKm = remainingDistanceKm;
+          if (Number.isFinite(remainingKm)) {
+            const speed = modeSpeeds[transportMode] || 12;
+            const minutes = Math.max(1, Math.ceil((remainingKm / Math.max(speed, 3)) * 60));
+            setEta(minutes);
+            setEtaUpdated(new Date());
+          }
+        }
       ]),
     ),
   ].join("|");
@@ -469,6 +505,9 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const [userCoords, setUserCoords] = useState(null);
   const [eta, setEta] = useState(null);
   const [etaUpdated, setEtaUpdated] = useState(null);
+  const [transportMode, setTransportMode] = useState(
+    localStorage.getItem("transportMode") || "vehicle",
+  );
   const [loading, setLoading] = useState(true);
   const [wsStatus, setWsStatus] = useState("connecting");
   const [isPollingFallback, setIsPollingFallback] = useState(false);
@@ -1833,6 +1872,16 @@ export default function TrackingPage({ routeId: routeIdProp }) {
 
   const etaLabel = eta === null ? "Sin ETA" : `${eta} min`;
 
+  const transportModeDisplay = useMemo(() => {
+    const map = {
+      vehicle: "Vehículo",
+      bus: "Bus",
+      bicycle: "Bicicleta",
+      other: "Otro",
+    };
+    return map[transportMode] || transportMode;
+  }, [transportMode]);
+
   const stopGuidedRoute = () => {
     if (guidedRouteTimerRef.current) {
       clearTimeout(guidedRouteTimerRef.current);
@@ -2423,6 +2472,27 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                   <div className="route-metric-tile">
                     <span className="route-metric-label">ETA</span>
                     <strong className="route-metric-value">{etaLabel}</strong>
+                    <div style={{ marginTop: 8 }}>
+                      <label className="kpi-label" style={{ marginRight: 8 }}>
+                        Modo
+                      </label>
+                      <select
+                        value={transportMode}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setTransportMode(v);
+                          try {
+                            localStorage.setItem("transportMode", v);
+                          } catch (err) {}
+                        }}
+                        className="transport-mode-select"
+                      >
+                        <option value="vehicle">Vehículo</option>
+                        <option value="bus">Bus</option>
+                        <option value="bicycle">Bicicleta</option>
+                        <option value="other">Otro</option>
+                      </select>
+                    </div>
                   </div>
                   <div className="route-metric-tile">
                     <span className="route-metric-label">Planificada</span>
