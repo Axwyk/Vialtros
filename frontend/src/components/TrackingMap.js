@@ -151,7 +151,13 @@ export default function TrackingMap({
                   <path d="M17 8h3l3 4v4h-6V8z"/>
                   <circle cx="5.5" cy="18.5" r="2.5"/>
                   <circle cx="18.5" cy="18.5" r="2.5"/>
-                </svg>(
+                </svg>
+              </div>
+            </div>
+          </Marker>
+        )}
+
+        {normalizedRoute.length > 0 && normalizedRoute[0] && (
           <Marker longitude={normalizedRoute[0][1]} latitude={normalizedRoute[0][0]} anchor="center">
             <div className="location-marker origin" title="Origen">
               <svg viewBox="0 0 24 24" fill="currentColor" stroke="white" strokeWidth="1">
@@ -167,10 +173,10 @@ export default function TrackingMap({
               <svg viewBox="0 0 24 24" fill="currentColor" stroke="white" strokeWidth="1">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2m0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8m3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5z"/>
               </svg>
-            </div
+            </div>
           </Marker>
         )}
-Leyenda en esquina inferior izquierda */}
+        {/* Leyenda en esquina inferior izquierda */}
       <div className="map-legend">
         <div className="legend-title">Leyenda</div>
         <div className="legend-item">
