@@ -1,15 +1,15 @@
 // Servicio de enrutamiento real por calles usando Valhalla (FOSSGIS) como primario
 // y OSRM como fallback. Geocodificación con Nominatim (OpenStreetMap).
 
-const VALHALLA_BASE = 'https://valhalla1.openstreetmap.de';
-const OSRM_BASE = 'https://router.project-osrm.org/route/v1/driving';
-const OSRM_MATCH_BASE = 'https://router.project-osrm.org/match/v1/driving';
-const OSRM_NEAREST_BASE = 'https://router.project-osrm.org/nearest/v1/driving';
-const NOMINATIM_BASE = 'https://nominatim.openstreetmap.org';
+const VALHALLA_BASE = "https://valhalla1.openstreetmap.de";
+const OSRM_BASE = "https://router.project-osrm.org/route/v1/driving";
+const OSRM_MATCH_BASE = "https://router.project-osrm.org/match/v1/driving";
+const OSRM_NEAREST_BASE = "https://router.project-osrm.org/nearest/v1/driving";
+const NOMINATIM_BASE = "https://nominatim.openstreetmap.org";
 
 // Buenaventura viewbox: minLng,minLat,maxLng,maxLat
-const BVA_VIEWBOX = '-77.18,3.72,-76.85,4.02';
-const BVA_CITY_SUFFIX = ', Buenaventura, Colombia';
+const BVA_VIEWBOX = "-77.18,3.72,-76.85,4.02";
+const BVA_CITY_SUFFIX = ", Buenaventura, Colombia";
 const geocodeCache = new Map();
 const routeCache = new Map();
 const TRACK_MATCH_RADIUS_METERS = 100;
@@ -28,86 +28,112 @@ export const BUENAVENTURA_URBAN_BOUNDS = {
 
 const REAL_BUENAVENTURA_PLACES = [
   {
-    name: 'Pueblo Nuevo',
-    aliases: ['pueblo nuevo', 'barrio pueblo nuevo'],
+    name: "Pueblo Nuevo",
+    aliases: ["pueblo nuevo", "barrio pueblo nuevo"],
     coords: [3.88982, -77.07077],
   },
   {
-    name: 'Seminario San Buenaventura',
-    aliases: ['seminario san buenaventura', 'seminario', 'seminario diocesan san buenaventura'],
+    name: "Seminario San Buenaventura",
+    aliases: [
+      "seminario san buenaventura",
+      "seminario",
+      "seminario diocesan san buenaventura",
+    ],
     coords: [3.90188, -77.02293],
   },
   {
-    name: 'Termarit',
-    aliases: ['termarit', 'institucion educativa termarit', 'ie termarit', 'terminal maritimo termarit', 'terminal maritimo termarit'],
+    name: "Termarit",
+    aliases: [
+      "termarit",
+      "institucion educativa termarit",
+      "ie termarit",
+      "terminal maritimo termarit",
+      "terminal maritimo termarit",
+    ],
     coords: [3.87851, -77.01242],
   },
   {
-    name: 'Centro, Buenaventura',
-    aliases: ['centro buenaventura', 'centro, buenaventura', 'centro', 'centro de buenaventura'],
+    name: "Centro, Buenaventura",
+    aliases: [
+      "centro buenaventura",
+      "centro, buenaventura",
+      "centro",
+      "centro de buenaventura",
+    ],
     coords: [3.87712, -77.02986],
   },
   {
-    name: 'Bellavista',
-    aliases: ['bellavista', 'barrio bellavista'],
+    name: "Bellavista",
+    aliases: ["bellavista", "barrio bellavista"],
     coords: [3.88291, -77.04041],
   },
   {
-    name: 'Cascajal',
-    aliases: ['cascajal', 'isla cascajal', 'localidad isla cascajal'],
+    name: "Cascajal",
+    aliases: ["cascajal", "isla cascajal", "localidad isla cascajal"],
     coords: [3.88563, -77.03138],
   },
   {
-    name: 'San Luis',
-    aliases: ['san luis', 'barrio san luis'],
+    name: "San Luis",
+    aliases: ["san luis", "barrio san luis"],
     coords: [3.87913, -77.03527],
   },
   {
-    name: 'Normal Superior Juan Ladrilleros',
+    name: "Normal Superior Juan Ladrilleros",
     aliases: [
-      'normal superior juan ladrilleros',
-      'escuela normal superior juan ladrilleros',
-      'institucion educativa normal superior juan ladrilleros',
-      'normal juan ladrilleros',
-      'juan ladrilleros',
-      'normal superior',
+      "normal superior juan ladrilleros",
+      "escuela normal superior juan ladrilleros",
+      "institucion educativa normal superior juan ladrilleros",
+      "normal juan ladrilleros",
+      "juan ladrilleros",
+      "normal superior",
     ],
     coords: [3.87829, -77.01886],
   },
   {
-    name: 'Pascual de Andagoya',
+    name: "Pascual de Andagoya",
     aliases: [
-      'pascual de andagoya',
-      'institucion educativa pascual de andagoya',
-      'colegio pascual de andagoya',
-      'pascual',
+      "pascual de andagoya",
+      "institucion educativa pascual de andagoya",
+      "colegio pascual de andagoya",
+      "pascual",
     ],
     coords: [3.88129, -77.05968],
   },
   {
-    name: 'Terminal de Buenaventura',
-    aliases: ['terminal', 'terminal de transporte', 'terminal de transportes', 'terminal de buenaventura'],
+    name: "Terminal de Buenaventura",
+    aliases: [
+      "terminal",
+      "terminal de transporte",
+      "terminal de transportes",
+      "terminal de buenaventura",
+    ],
     coords: [3.89015, -77.07366],
   },
   {
-    name: 'Universidad del Valle sede Pacífico',
-    aliases: ['universidad del valle', 'univalle', 'univalle pacifico', 'universidad del valle sede pacifico', 'sede pacifico'],
+    name: "Universidad del Valle sede Pacífico",
+    aliases: [
+      "universidad del valle",
+      "univalle",
+      "univalle pacifico",
+      "universidad del valle sede pacifico",
+      "sede pacifico",
+    ],
     coords: [3.88126, -77.01018],
   },
   {
-    name: 'INSTITUCION EDUCATIVA TERMARIT',
-    aliases: ['institucion educativa termarit carrera 53'],
+    name: "INSTITUCION EDUCATIVA TERMARIT",
+    aliases: ["institucion educativa termarit carrera 53"],
     coords: [3.87851, -77.01242],
   },
 ];
 
 function normalizePlaceName(value) {
-  return String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -116,7 +142,12 @@ function resolveKnownPlace(address) {
   if (!normalized) return null;
 
   const knownPlace = REAL_BUENAVENTURA_PLACES.find(({ aliases }) =>
-    aliases.some((alias) => normalized === alias || normalized.includes(alias) || alias.includes(normalized))
+    aliases.some(
+      (alias) =>
+        normalized === alias ||
+        normalized.includes(alias) ||
+        alias.includes(normalized),
+    ),
   );
 
   return knownPlace?.coords || null;
@@ -126,41 +157,55 @@ export async function searchBuenaventuraPlaces(query) {
   const normalizedQuery = normalizePlaceName(query);
   if (!normalizedQuery || normalizedQuery.length < 2) return [];
 
-  const localMatches = REAL_BUENAVENTURA_PLACES
-    .filter(({ aliases, name }) => {
-      const normalizedName = normalizePlaceName(name);
-      return normalizedName.includes(normalizedQuery)
-        || aliases.some((alias) => alias.includes(normalizedQuery));
-    })
+  const localMatches = REAL_BUENAVENTURA_PLACES.filter(({ aliases, name }) => {
+    const normalizedName = normalizePlaceName(name);
+    return (
+      normalizedName.includes(normalizedQuery) ||
+      aliases.some((alias) => alias.includes(normalizedQuery))
+    );
+  })
     .slice(0, 5)
     .map(({ name, coords }) => ({
       label: name,
-      subtitle: 'Lugar conocido en Buenaventura',
+      subtitle: "Lugar conocido en Buenaventura",
       coords,
-      source: 'local',
+      source: "local",
     }));
 
   const url = new URL(`${NOMINATIM_BASE}/search`);
-  url.searchParams.set('q', query.toLowerCase().includes('buenaventura') ? query : `${query}${BVA_CITY_SUFFIX}`);
-  url.searchParams.set('format', 'json');
-  url.searchParams.set('limit', '5');
-  url.searchParams.set('accept-language', 'es');
-  url.searchParams.set('countrycodes', 'co');
-  url.searchParams.set('viewbox', BVA_VIEWBOX);
+  url.searchParams.set(
+    "q",
+    query.toLowerCase().includes("buenaventura")
+      ? query
+      : `${query}${BVA_CITY_SUFFIX}`,
+  );
+  url.searchParams.set("format", "json");
+  url.searchParams.set("limit", "5");
+  url.searchParams.set("accept-language", "es");
+  url.searchParams.set("countrycodes", "co");
+  url.searchParams.set("viewbox", BVA_VIEWBOX);
 
   const remoteMatches = [];
   try {
-    const res = await fetch(url.toString(), { headers: { 'User-Agent': 'Vialtros/1.0' } });
+    const res = await fetch(url.toString(), {
+      headers: { "User-Agent": "Vialtros/1.0" },
+    });
     if (res.ok) {
       const data = await res.json();
       (Array.isArray(data) ? data : []).forEach((item) => {
-        const coords = sanitizeBuenaventuraCoords([parseFloat(item.lat), parseFloat(item.lon)]);
+        const coords = sanitizeBuenaventuraCoords([
+          parseFloat(item.lat),
+          parseFloat(item.lon),
+        ]);
         if (!Array.isArray(coords) || !isWithinBuenaventuraZone(coords)) return;
         remoteMatches.push({
-          label: String(item.display_name || '').split(',').slice(0, 2).join(', '),
-          subtitle: 'Sugerencia del mapa',
+          label: String(item.display_name || "")
+            .split(",")
+            .slice(0, 2)
+            .join(", "),
+          subtitle: "Sugerencia del mapa",
           coords,
-          source: 'nominatim',
+          source: "nominatim",
         });
       });
     }
@@ -169,24 +214,26 @@ export async function searchBuenaventuraPlaces(query) {
   }
 
   const seen = new Set();
-  return [...localMatches, ...remoteMatches].filter((item) => {
-    const key = normalizePlaceName(item.label);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).slice(0, 6);
+  return [...localMatches, ...remoteMatches]
+    .filter((item) => {
+      const key = normalizePlaceName(item.label);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 6);
 }
 
 export function isWithinBuenaventuraZone(coords) {
   if (!Array.isArray(coords) || coords.length !== 2) return false;
   const [lat, lng] = coords;
   return (
-    Number.isFinite(lat)
-    && Number.isFinite(lng)
-    && lat >= BUENAVENTURA_URBAN_BOUNDS.minLat
-    && lat <= BUENAVENTURA_URBAN_BOUNDS.maxLat
-    && lng >= BUENAVENTURA_URBAN_BOUNDS.minLng
-    && lng <= BUENAVENTURA_URBAN_BOUNDS.maxLng
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    lat >= BUENAVENTURA_URBAN_BOUNDS.minLat &&
+    lat <= BUENAVENTURA_URBAN_BOUNDS.maxLat &&
+    lng >= BUENAVENTURA_URBAN_BOUNDS.minLng &&
+    lng <= BUENAVENTURA_URBAN_BOUNDS.maxLng
   );
 }
 
@@ -210,14 +257,16 @@ function normalizeTrackMatchPoints(points) {
         };
       }
 
-      if (!point || typeof point !== 'object') return null;
+      if (!point || typeof point !== "object") return null;
 
       const lat = Number(point.latitude ?? point.lat ?? point.coords?.[0]);
       const lng = Number(point.longitude ?? point.lng ?? point.coords?.[1]);
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
 
       const speedRaw = Number(point.speed ?? point.speed_kmh ?? point.velocity);
-      const timestampMs = point.timestamp ? new Date(point.timestamp).getTime() : Number.NaN;
+      const timestampMs = point.timestamp
+        ? new Date(point.timestamp).getTime()
+        : Number.NaN;
 
       return {
         coords: [lat, lng],
@@ -231,7 +280,11 @@ function normalizeTrackMatchPoints(points) {
 function dedupeConsecutiveTrackMatchPoints(points) {
   return (Array.isArray(points) ? points : []).reduce((acc, point) => {
     const last = acc[acc.length - 1];
-    if (last && last.coords[0] === point.coords[0] && last.coords[1] === point.coords[1]) {
+    if (
+      last &&
+      last.coords[0] === point.coords[0] &&
+      last.coords[1] === point.coords[1]
+    ) {
       return acc;
     }
     acc.push(point);
@@ -269,47 +322,64 @@ function filterAbruptPathJumps(points, maxJumpKm = TRACK_MAX_POINT_JUMP_KM) {
 }
 
 function buildMatchParams(points) {
-  const radiuses = points.map(() => String(TRACK_MATCH_RADIUS_METERS)).join(';');
-  const firstTimestampMs = points.find((point) => Number.isFinite(point.timestampMs))?.timestampMs ?? null;
-  const timestamps = points.map((point, index) => {
-    if (Number.isFinite(firstTimestampMs) && Number.isFinite(point.timestampMs)) {
-      return String(Math.max(1, Math.round(point.timestampMs / 1000)));
-    }
+  const radiuses = points
+    .map(() => String(TRACK_MATCH_RADIUS_METERS))
+    .join(";");
+  const firstTimestampMs =
+    points.find((point) => Number.isFinite(point.timestampMs))?.timestampMs ??
+    null;
+  const timestamps = points
+    .map((point, index) => {
+      if (
+        Number.isFinite(firstTimestampMs) &&
+        Number.isFinite(point.timestampMs)
+      ) {
+        return String(Math.max(1, Math.round(point.timestampMs / 1000)));
+      }
 
-    return String(1700000000 + (index * TRACK_MATCH_GAP_SECONDS));
-  }).join(';');
-  const bearings = points.map((point, index) => {
-    const previous = points[index - 1]?.coords;
-    const next = points[index + 1]?.coords;
-    const from = previous || point.coords;
-    const to = next || previous;
+      return String(1700000000 + index * TRACK_MATCH_GAP_SECONDS);
+    })
+    .join(";");
+  const bearings = points
+    .map((point, index) => {
+      const previous = points[index - 1]?.coords;
+      const next = points[index + 1]?.coords;
+      const from = previous || point.coords;
+      const to = next || previous;
 
-    if (!Array.isArray(from) || !Array.isArray(to) || (from[0] === to[0] && from[1] === to[1])) {
-      return '';
-    }
+      if (
+        !Array.isArray(from) ||
+        !Array.isArray(to) ||
+        (from[0] === to[0] && from[1] === to[1])
+      ) {
+        return "";
+      }
 
-    const deltaLng = to[1] - from[1];
-    const deltaLat = to[0] - from[0];
-    const bearing = (Math.atan2(deltaLng, deltaLat) * (180 / Math.PI) + 360) % 360;
-    const speed = point.speedKmh ?? 0;
-    const range = speed >= 45
-      ? 30
-      : speed >= 30
-        ? 45
-        : speed >= 18
-          ? 60
-          : speed >= 8
-            ? 90
-            : TRACK_MAX_BEARING_RANGE;
+      const deltaLng = to[1] - from[1];
+      const deltaLat = to[0] - from[0];
+      const bearing =
+        (Math.atan2(deltaLng, deltaLat) * (180 / Math.PI) + 360) % 360;
+      const speed = point.speedKmh ?? 0;
+      const range =
+        speed >= 45
+          ? 30
+          : speed >= 30
+            ? 45
+            : speed >= 18
+              ? 60
+              : speed >= 8
+                ? 90
+                : TRACK_MAX_BEARING_RANGE;
 
-    return `${Math.round(bearing)},${range}`;
-  }).join(';');
+      return `${Math.round(bearing)},${range}`;
+    })
+    .join(";");
 
   return { radiuses, timestamps, bearings };
 }
 
 function buildOsrmCoordinates(points) {
-  return points.map(([lat, lng]) => `${lng},${lat}`).join(';');
+  return points.map(([lat, lng]) => `${lng},${lat}`).join(";");
 }
 
 function mergePolylineSegments(segments) {
@@ -339,8 +409,8 @@ async function fetchPostJson(url, body, timeoutMs = 12000) {
   for (let attempt = 0; attempt < maxRetries; attempt += 1) {
     try {
       const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: serializedBody,
         signal: AbortSignal.timeout(timeoutMs),
       });
@@ -391,7 +461,7 @@ function decodePolyline6(encoded) {
       result |= (b & 0x1f) << shift;
       shift += 5;
     } while (b >= 0x20);
-    lat += (result & 1) ? ~(result >> 1) : (result >> 1);
+    lat += result & 1 ? ~(result >> 1) : result >> 1;
 
     shift = 0;
     result = 0;
@@ -400,7 +470,7 @@ function decodePolyline6(encoded) {
       result |= (b & 0x1f) << shift;
       shift += 5;
     } while (b >= 0x20);
-    lng += (result & 1) ? ~(result >> 1) : (result >> 1);
+    lng += result & 1 ? ~(result >> 1) : result >> 1;
 
     coords.push([lat / 1e6, lng / 1e6]);
   }
@@ -416,7 +486,7 @@ function enqueueValhallaRequest(fn) {
 }
 
 // Persistent route cache in localStorage
-const ROUTE_CACHE_LS_KEY = 'vialtros_route_cache';
+const ROUTE_CACHE_LS_KEY = "vialtros_route_cache";
 const ROUTE_CACHE_MAX_ENTRIES = 50;
 
 function loadPersistentRouteCache() {
@@ -427,7 +497,9 @@ function loadPersistentRouteCache() {
     if (Array.isArray(entries)) {
       entries.forEach(([key, value]) => routeCache.set(key, value));
     }
-  } catch { /* ignore corrupt cache */ }
+  } catch {
+    /* ignore corrupt cache */
+  }
 }
 
 function savePersistentRouteCache() {
@@ -436,7 +508,9 @@ function savePersistentRouteCache() {
       .filter(([, v]) => v && v.coordinates?.length > 1)
       .slice(-ROUTE_CACHE_MAX_ENTRIES);
     localStorage.setItem(ROUTE_CACHE_LS_KEY, JSON.stringify(entries));
-  } catch { /* ignore storage quota errors */ }
+  } catch {
+    /* ignore storage quota errors */
+  }
 }
 
 loadPersistentRouteCache();
@@ -467,9 +541,9 @@ async function valhallaRoute(from, to, timeoutMs = 15000) {
         { lat: from[0], lon: from[1] },
         { lat: to[0], lon: to[1] },
       ],
-      costing: 'auto',
+      costing: "auto",
       costing_options: VALHALLA_COSTING_OPTIONS,
-      directions_options: { units: 'km' },
+      directions_options: { units: "km" },
     };
 
     const data = await fetchPostJson(`${VALHALLA_BASE}/route`, body, timeoutMs);
@@ -496,19 +570,27 @@ async function valhallaLocate(coords, timeoutMs = 8000) {
   return enqueueValhallaRequest(async () => {
     const body = {
       locations: [{ lat: coords[0], lon: coords[1] }],
-      costing: 'auto',
+      costing: "auto",
       costing_options: VALHALLA_COSTING_OPTIONS,
       verbose: false,
     };
 
-    const data = await fetchPostJson(`${VALHALLA_BASE}/locate`, body, timeoutMs);
+    const data = await fetchPostJson(
+      `${VALHALLA_BASE}/locate`,
+      body,
+      timeoutMs,
+    );
     if (!Array.isArray(data) || data.length === 0) return null;
 
     const result = data[0];
     if (!result?.edges?.length) return null;
 
     const edge = result.edges[0];
-    if (!Number.isFinite(edge.correlated_lat) || !Number.isFinite(edge.correlated_lon)) return null;
+    if (
+      !Number.isFinite(edge.correlated_lat) ||
+      !Number.isFinite(edge.correlated_lon)
+    )
+      return null;
 
     return sanitizeBuenaventuraCoords(
       [edge.correlated_lat, edge.correlated_lon],
@@ -529,13 +611,17 @@ async function valhallaTraceRoute(points, timeoutMs = 12000) {
 
     const body = {
       shape,
-      costing: 'auto',
+      costing: "auto",
       costing_options: VALHALLA_COSTING_OPTIONS,
-      shape_match: 'map_snap',
+      shape_match: "map_snap",
       search_radius: 150,
     };
 
-    const data = await fetchPostJson(`${VALHALLA_BASE}/trace_route`, body, timeoutMs);
+    const data = await fetchPostJson(
+      `${VALHALLA_BASE}/trace_route`,
+      body,
+      timeoutMs,
+    );
     if (!data?.trip?.legs) return null;
 
     const allCoords = data.trip.legs.flatMap((leg) => {
@@ -544,8 +630,14 @@ async function valhallaTraceRoute(points, timeoutMs = 12000) {
     });
     if (allCoords.length < 2) return null;
 
-    const totalTime = data.trip.legs.reduce((s, l) => s + (l.summary?.time || 0), 0);
-    const totalDist = data.trip.legs.reduce((s, l) => s + (l.summary?.length || 0), 0);
+    const totalTime = data.trip.legs.reduce(
+      (s, l) => s + (l.summary?.time || 0),
+      0,
+    );
+    const totalDist = data.trip.legs.reduce(
+      (s, l) => s + (l.summary?.length || 0),
+      0,
+    );
     return {
       coordinates: allCoords,
       duration: totalTime,
@@ -560,14 +652,18 @@ async function valhallaRouteWaypoints(waypoints, timeoutMs = 15000) {
 
   return enqueueValhallaRequest(async () => {
     const body = {
-      locations: waypoints.map((p) => ({ lat: p[0], lon: p[1], type: 'through' })),
-      costing: 'auto',
+      locations: waypoints.map((p) => ({
+        lat: p[0],
+        lon: p[1],
+        type: "through",
+      })),
+      costing: "auto",
       costing_options: VALHALLA_COSTING_OPTIONS,
-      directions_options: { units: 'km' },
+      directions_options: { units: "km" },
     };
     // First and last must be 'break'
-    body.locations[0].type = 'break';
-    body.locations[body.locations.length - 1].type = 'break';
+    body.locations[0].type = "break";
+    body.locations[body.locations.length - 1].type = "break";
 
     const data = await fetchPostJson(`${VALHALLA_BASE}/route`, body, timeoutMs);
     if (!data?.trip?.legs) return null;
@@ -578,8 +674,14 @@ async function valhallaRouteWaypoints(waypoints, timeoutMs = 15000) {
     });
     if (allCoords.length < 2) return null;
 
-    const totalTime = data.trip.legs.reduce((s, l) => s + (l.summary?.time || 0), 0);
-    const totalDist = data.trip.legs.reduce((s, l) => s + (l.summary?.length || 0), 0);
+    const totalTime = data.trip.legs.reduce(
+      (s, l) => s + (l.summary?.time || 0),
+      0,
+    );
+    const totalDist = data.trip.legs.reduce(
+      (s, l) => s + (l.summary?.length || 0),
+      0,
+    );
     return {
       coordinates: allCoords,
       duration: totalTime,
@@ -589,7 +691,9 @@ async function valhallaRouteWaypoints(waypoints, timeoutMs = 15000) {
 }
 
 function isUsableRoadRoute(route, maxDistance = 60000) {
-  return Boolean(route?.geometry?.coordinates?.length > 1 && route?.distance < maxDistance);
+  return Boolean(
+    route?.geometry?.coordinates?.length > 1 && route?.distance < maxDistance,
+  );
 }
 
 function toLatLngPolyline(route) {
@@ -601,8 +705,9 @@ function toLatLngPolyline(route) {
 }
 
 function trimAccessRoadLoops(coordinates, from, to) {
-  const routePoints = (Array.isArray(coordinates) ? coordinates : [])
-    .filter((point) => Array.isArray(point) && point.length === 2);
+  const routePoints = (Array.isArray(coordinates) ? coordinates : []).filter(
+    (point) => Array.isArray(point) && point.length === 2,
+  );
 
   if (routePoints.length < 4 || !Array.isArray(from) || !Array.isArray(to)) {
     return routePoints;
@@ -619,7 +724,7 @@ function trimAccessRoadLoops(coordinates, from, to) {
     if (distanceFromOrigin > accessThresholdKm) break;
 
     const distanceToDestination = haversineKm(point, to);
-    const score = (distanceToDestination * 0.82) + (distanceFromOrigin * 0.18);
+    const score = distanceToDestination * 0.82 + distanceFromOrigin * 0.18;
     if (score < bestStartScore) {
       bestStartScore = score;
       startIndex = index;
@@ -635,7 +740,7 @@ function trimAccessRoadLoops(coordinates, from, to) {
     if (distanceToDestination > accessThresholdKm) break;
 
     const distanceFromOrigin = haversineKm(point, from);
-    const score = (distanceFromOrigin * 0.82) + (distanceToDestination * 0.18);
+    const score = distanceFromOrigin * 0.82 + distanceToDestination * 0.18;
     if (score < bestEndScore) {
       bestEndScore = score;
       endIndex = index;
@@ -672,66 +777,6 @@ async function snapToNearestRoad(coords) {
   }
 }
 
-async function getNearestRoadCandidates(coords, number = 3) {
-  if (!Array.isArray(coords) || coords.length !== 2) return [];
-
-  // 1. Primary: Valhalla locate (single best snap)
-  try {
-    const snapped = await valhallaLocate(coords);
-    if (snapped) return [coords, snapped];
-  } catch {
-    // Valhalla failed, try OSRM
-  }
-
-  // 2. Fallback: OSRM nearest with multiple candidates
-  const [lat, lng] = coords;
-  try {
-    const data = await fetchJson(`${OSRM_NEAREST_BASE}/${lng},${lat}?number=${number}`);
-    const candidates = (Array.isArray(data?.waypoints) ? data.waypoints : [])
-      .map((waypoint) => waypoint?.location)
-      .filter((location) => Array.isArray(location) && location.length === 2)
-      .map(([candidateLng, candidateLat]) => sanitizeBuenaventuraCoords([candidateLat, candidateLng], coords))
-      .filter(Boolean);
-
-    return dedupeConsecutiveTrackMatchPoints(
-      normalizeTrackMatchPoints([
-        { coords },
-        ...candidates.map((candidate) => ({ coords: candidate })),
-      ]),
-    ).map((point) => point.coords);
-  } catch {
-    return [coords];
-  }
-}
-
-async function requestBestStreetRoute(fromCandidates, toCandidates, maxDistance = 60000) {
-  const safeFromCandidates = (Array.isArray(fromCandidates) ? fromCandidates : []).filter(Array.isArray);
-  const safeToCandidates = (Array.isArray(toCandidates) ? toCandidates : []).filter(Array.isArray);
-
-  // Build pairs prioritizing first candidates (closest to road), limit to 4 attempts max
-  const pairs = [];
-  for (const from of safeFromCandidates) {
-    for (const to of safeToCandidates) {
-      pairs.push([from, to]);
-    }
-  }
-  const limitedPairs = pairs.slice(0, 4);
-
-  // Try pairs in parallel to avoid sequential stalling
-  const results = await Promise.all(
-    limitedPairs.map((pair) => requestStreetRoute(pair, maxDistance).catch(() => null)),
-  );
-
-  let bestRoute = null;
-  for (const route of results) {
-    if (route && (!bestRoute || route.distance < bestRoute.distance)) {
-      bestRoute = route;
-    }
-  }
-
-  return bestRoute;
-}
-
 async function snapPathToRoad(points) {
   const snapped = await Promise.all(
     (Array.isArray(points) ? points : []).map(async (point) => {
@@ -747,35 +792,176 @@ async function snapPathToRoad(points) {
 }
 
 async function requestStreetRoute(points, maxDistance = 60000) {
-  // Try Valhalla first if exactly 2 points
-  if (Array.isArray(points) && points.length === 2) {
-    try {
-      const valResult = await valhallaRoute(points[0], points[1]);
-      if (valResult?.coordinates?.length > 1 && valResult.distance < maxDistance) {
-        const cacheKey = `val|${points[0].join(',')}->${points[1].join(',')}`;
-        routeCache.set(cacheKey, valResult);
-        return valResult;
-      }
-    } catch {
-      // Valhalla failed, try OSRM
-    }
-  }
-
   const coordinates = buildOsrmCoordinates(points);
-  const cacheKey = `${coordinates}|${maxDistance}`;
+  const cacheKey = `osrm|${coordinates}|${maxDistance}`;
   if (routeCache.has(cacheKey)) {
     return routeCache.get(cacheKey);
   }
-  const data = await fetchJsonWithRetry(`${OSRM_BASE}/${coordinates}?overview=full&geometries=geojson&continue_straight=false&steps=true`, 1);
-  if (data?.code === 'Ok' && Array.isArray(data.routes) && data.routes.length > 0) {
-    const route = data.routes[0];
-    if (isUsableRoadRoute(route, maxDistance)) {
-      const resolved = toLatLngPolyline(route);
-      routeCache.set(cacheKey, resolved);
-      return resolved;
+
+  try {
+    const data = await fetchJsonWithRetry(
+      `${OSRM_BASE}/${coordinates}?overview=full&geometries=geojson&continue_straight=false&steps=true`,
+      1,
+    );
+    if (
+      data?.code === "Ok" &&
+      Array.isArray(data.routes) &&
+      data.routes.length > 0
+    ) {
+      const route = data.routes[0];
+      if (isUsableRoadRoute(route, maxDistance)) {
+        const resolved = toLatLngPolyline(route);
+        routeCache.set(cacheKey, resolved);
+        return resolved;
+      }
+    }
+  } catch {
+    // OSRM failed, try Valhalla for simple two-point trips.
+  }
+
+  if (Array.isArray(points) && points.length === 2) {
+    try {
+      const valResult = await valhallaRoute(points[0], points[1]);
+      if (
+        valResult?.coordinates?.length > 1 &&
+        valResult.distance < maxDistance
+      ) {
+        const fallbackCacheKey = `val|${points[0].join(",")}->${points[1].join(",")}`;
+        routeCache.set(cacheKey, valResult);
+        routeCache.set(fallbackCacheKey, valResult);
+        return valResult;
+      }
+    } catch {
+      // Valhalla fallback failed.
     }
   }
+
   routeCache.set(cacheKey, null);
+  return null;
+}
+
+function anchorRouteEndpoints(coordinates, from, to) {
+  if (!Array.isArray(coordinates) || coordinates.length < 2) return coordinates;
+  const anchored = [...coordinates];
+  anchored[0] = from;
+  anchored[anchored.length - 1] = to;
+  return anchored;
+}
+
+export async function getStreetRouteThroughPoints(points, options = {}) {
+  const validPoints = dedupeConsecutivePoints(
+    (Array.isArray(points) ? points : [])
+      .map((point) => {
+        if (!Array.isArray(point) || point.length !== 2) return null;
+        const lat = Number(point[0]);
+        const lng = Number(point[1]);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+        return sanitizeBuenaventuraCoords([lat, lng]) || [lat, lng];
+      })
+      .filter(Boolean),
+  );
+
+  if (validPoints.length < 2) {
+    return validPoints.length === 1
+      ? { coordinates: validPoints, duration: 0, distance: 0 }
+      : null;
+  }
+
+  const maxDistance = Number.isFinite(options.maxDistance)
+    ? Number(options.maxDistance)
+    : 60000 * Math.max(1, validPoints.length - 1);
+  const shouldSnapWaypoints = options.snapWaypoints !== false;
+
+  const snappedWaypoints = shouldSnapWaypoints
+    ? dedupeConsecutivePoints(
+        await Promise.all(
+          validPoints.map(async (point) =>
+            snapPointToRoad(point).catch(() => point),
+          ),
+        ),
+      )
+    : validPoints;
+
+  const routeCacheKey = `route-through|${snappedWaypoints.map((point) => point.join(",")).join("->")}|${maxDistance}`;
+  if (routeCache.has(routeCacheKey)) {
+    const cached = routeCache.get(routeCacheKey);
+    if (cached?.coordinates?.length > 1) {
+      return {
+        ...cached,
+        coordinates: anchorRouteEndpoints(
+          cached.coordinates,
+          validPoints[0],
+          validPoints[validPoints.length - 1],
+        ),
+      };
+    }
+  }
+
+  const directRoute = await requestStreetRoute(
+    snappedWaypoints,
+    maxDistance,
+  ).catch(() => null);
+  if (directRoute?.coordinates?.length > 1) {
+    const resolved = {
+      ...directRoute,
+      coordinates: anchorRouteEndpoints(
+        trimAccessRoadLoops(
+          directRoute.coordinates,
+          validPoints[0],
+          validPoints[validPoints.length - 1],
+        ),
+        validPoints[0],
+        validPoints[validPoints.length - 1],
+      ),
+    };
+    routeCache.set(routeCacheKey, resolved);
+    return resolved;
+  }
+
+  const segmentRoutes = await Promise.all(
+    snappedWaypoints.slice(1).map(async (to, index) => {
+      const from = snappedWaypoints[index];
+      const segment = await requestStreetRoute([from, to], 60000).catch(
+        () => null,
+      );
+      if (segment?.coordinates?.length > 1) {
+        return {
+          ...segment,
+          coordinates: anchorRouteEndpoints(
+            segment.coordinates,
+            validPoints[index],
+            validPoints[index + 1],
+          ),
+        };
+      }
+      return straightLineRoute(validPoints[index], validPoints[index + 1]);
+    }),
+  );
+
+  const mergedCoordinates = mergePolylineSegments(
+    segmentRoutes.map((segment) => segment?.coordinates || []),
+  );
+  if (mergedCoordinates.length > 1) {
+    const resolved = {
+      coordinates: anchorRouteEndpoints(
+        mergedCoordinates,
+        validPoints[0],
+        validPoints[validPoints.length - 1],
+      ),
+      duration: segmentRoutes.reduce(
+        (sum, segment) => sum + (segment?.duration || 0),
+        0,
+      ),
+      distance: segmentRoutes.reduce(
+        (sum, segment) => sum + (segment?.distance || 0),
+        0,
+      ),
+      isStraightLine: segmentRoutes.every((segment) => segment?.isStraightLine),
+    };
+    routeCache.set(routeCacheKey, resolved);
+    return resolved;
+  }
+
   return null;
 }
 
@@ -789,7 +975,7 @@ export async function geocodeAddress(address, options = {}) {
   if (!address?.trim()) return null;
   const clean = address.trim();
   const { fallbackCoords = null } = options;
-  const cacheKey = `${normalizePlaceName(clean)}|${Array.isArray(fallbackCoords) ? fallbackCoords.join(',') : 'no-fallback'}`;
+  const cacheKey = `${normalizePlaceName(clean)}|${Array.isArray(fallbackCoords) ? fallbackCoords.join(",") : "no-fallback"}`;
 
   if (geocodeCache.has(cacheKey)) {
     return geocodeCache.get(cacheKey);
@@ -804,15 +990,17 @@ export async function geocodeAddress(address, options = {}) {
 
   const trySearch = async (query, bounded) => {
     const url = new URL(`${NOMINATIM_BASE}/search`);
-    url.searchParams.set('q', query);
-    url.searchParams.set('format', 'json');
-    url.searchParams.set('limit', '1');
-    url.searchParams.set('accept-language', 'es');
-    url.searchParams.set('countrycodes', 'co');
-    url.searchParams.set('viewbox', BVA_VIEWBOX);
-    if (bounded) url.searchParams.set('bounded', '1');
+    url.searchParams.set("q", query);
+    url.searchParams.set("format", "json");
+    url.searchParams.set("limit", "1");
+    url.searchParams.set("accept-language", "es");
+    url.searchParams.set("countrycodes", "co");
+    url.searchParams.set("viewbox", BVA_VIEWBOX);
+    if (bounded) url.searchParams.set("bounded", "1");
     try {
-      const res = await fetch(url.toString(), { headers: { 'User-Agent': 'Vialtros/1.0' } });
+      const res = await fetch(url.toString(), {
+        headers: { "User-Agent": "Vialtros/1.0" },
+      });
       if (!res.ok) return null;
       const data = await res.json();
       if (!Array.isArray(data) || data.length === 0) return null;
@@ -826,7 +1014,7 @@ export async function geocodeAddress(address, options = {}) {
   };
 
   // 1. Con ciudad en la query, dentro del viewbox
-  const withCity = clean.toLowerCase().includes('buenaventura')
+  const withCity = clean.toLowerCase().includes("buenaventura")
     ? clean
     : `${clean}${BVA_CITY_SUFFIX}`;
   let result = await trySearch(withCity, true);
@@ -837,7 +1025,9 @@ export async function geocodeAddress(address, options = {}) {
   // 3. Fallback global (sin restricción geográfica)
   if (!result) result = await trySearch(clean, false);
 
-  const resolved = result || (isWithinBuenaventuraZone(fallbackCoords) ? fallbackCoords : null);
+  const resolved =
+    result ||
+    (isWithinBuenaventuraZone(fallbackCoords) ? fallbackCoords : null);
 
   // Snap geocoded coordinate to nearest road for precision
   if (resolved) {
@@ -874,10 +1064,18 @@ function straightLineRoute(from, to) {
   const coords = [];
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
-    coords.push([from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t]);
+    coords.push([
+      from[0] + (to[0] - from[0]) * t,
+      from[1] + (to[1] - from[1]) * t,
+    ]);
   }
   const distKm = haversineKm(from, to);
-  return { coordinates: coords, duration: (distKm / 30) * 3600, distance: distKm * 1000, isStraightLine: true };
+  return {
+    coordinates: coords,
+    duration: (distKm / 30) * 3600,
+    distance: distKm * 1000,
+    isStraightLine: true,
+  };
 }
 
 /**
@@ -893,59 +1091,10 @@ export async function getStreetRoute(from, to) {
   const safeFrom = sanitizeBuenaventuraCoords(from) || from;
   const safeTo = sanitizeBuenaventuraCoords(to, safeFrom) || to;
 
-  // Helper: anchor first/last points of route to exact origin/destination
-  const anchorEndpoints = (coords) => {
-    if (!Array.isArray(coords) || coords.length < 2) return coords;
-    const result = [...coords];
-    result[0] = safeFrom;
-    result[result.length - 1] = safeTo;
-    return result;
-  };
-
-  // 0. Check persistent cache
-  const cacheKey = `val|${safeFrom[0]},${safeFrom[1]}->${safeTo[0]},${safeTo[1]}`;
-  if (routeCache.has(cacheKey)) {
-    const cached = routeCache.get(cacheKey);
-    if (cached?.coordinates?.length > 1) {
-      return {
-        ...cached,
-        coordinates: anchorEndpoints(trimAccessRoadLoops(cached.coordinates, safeFrom, safeTo)),
-      };
-    }
-  }
-
-  // 1. Primary: Valhalla (FOSSGIS) — serialized with retry on 429
-  try {
-    const valRoute = await valhallaRoute(safeFrom, safeTo);
-    if (valRoute?.coordinates?.length > 1) {
-      return {
-        ...valRoute,
-        coordinates: anchorEndpoints(trimAccessRoadLoops(valRoute.coordinates, safeFrom, safeTo)),
-      };
-    }
-  } catch {
-    // Valhalla failed
-  }
-
-  // 2. Fallback: OSRM direct route (often unreachable but worth trying)
-  try {
-    const coordinates = buildOsrmCoordinates([safeFrom, safeTo]);
-    const data = await fetchJsonWithRetry(`${OSRM_BASE}/${coordinates}?overview=full&geometries=geojson&continue_straight=false&steps=true`, 1);
-    if (data?.code === 'Ok' && data.routes?.[0]) {
-      const route = data.routes[0];
-      if (isUsableRoadRoute(route, 60000)) {
-        const resolved = toLatLngPolyline(route);
-        return {
-          ...resolved,
-          coordinates: anchorEndpoints(trimAccessRoadLoops(resolved.coordinates, safeFrom, safeTo)),
-        };
-      }
-    }
-  } catch {
-    // OSRM unreachable
-  }
-
-  return straightLineRoute(safeFrom, safeTo);
+  const routed = await getStreetRouteThroughPoints([safeFrom, safeTo], {
+    maxDistance: 60000,
+  });
+  return routed || straightLineRoute(safeFrom, safeTo);
 }
 
 /**
@@ -982,21 +1131,38 @@ export async function getTrackedStreetRoute(points) {
   // 3. Fallback: OSRM Match
   try {
     const snappedSampled = await snapPathToRoad(sampled);
-    const roadAnchoredPoints = snappedSampled.length > 1 ? snappedSampled : sampled;
-    const sampledCoordinates = buildOsrmCoordinates(roadAnchoredPoints.map((point) => point.coords));
+    const roadAnchoredPoints =
+      snappedSampled.length > 1 ? snappedSampled : sampled;
+    const sampledCoordinates = buildOsrmCoordinates(
+      roadAnchoredPoints.map((point) => point.coords),
+    );
     const { radiuses, timestamps } = buildMatchParams(roadAnchoredPoints);
 
     const matchUrl = `${OSRM_MATCH_BASE}/${sampledCoordinates}?geometries=geojson&overview=full&tidy=true&gaps=split&annotations=false&radiuses=${radiuses}&timestamps=${timestamps}`;
     const data = await fetchJson(matchUrl);
-    if (data?.code === 'Ok' && Array.isArray(data.matchings) && data.matchings.length > 0) {
+    if (
+      data?.code === "Ok" &&
+      Array.isArray(data.matchings) &&
+      data.matchings.length > 0
+    ) {
       const coordinates = mergePolylineSegments(
-        data.matchings.map((matching) => matching.geometry?.coordinates?.map(([lng, lat]) => [lat, lng]) || []),
+        data.matchings.map(
+          (matching) =>
+            matching.geometry?.coordinates?.map(([lng, lat]) => [lat, lng]) ||
+            [],
+        ),
       );
       if (coordinates.length > 1) {
         return {
           coordinates,
-          duration: data.matchings.reduce((sum, matching) => sum + (matching.duration || 0), 0),
-          distance: data.matchings.reduce((sum, matching) => sum + (matching.distance || 0), 0),
+          duration: data.matchings.reduce(
+            (sum, matching) => sum + (matching.duration || 0),
+            0,
+          ),
+          distance: data.matchings.reduce(
+            (sum, matching) => sum + (matching.distance || 0),
+            0,
+          ),
         };
       }
     }
@@ -1011,12 +1177,20 @@ export async function getTrackedStreetRoute(points) {
       return getStreetRoute(from, to);
     }),
   );
-  const coordinates = mergePolylineSegments(segmentRoutes.map((segment) => segment?.coordinates || []));
+  const coordinates = mergePolylineSegments(
+    segmentRoutes.map((segment) => segment?.coordinates || []),
+  );
   if (coordinates.length > 1) {
     return {
       coordinates,
-      duration: segmentRoutes.reduce((sum, segment) => sum + (segment?.duration || 0), 0),
-      distance: segmentRoutes.reduce((sum, segment) => sum + (segment?.distance || 0), 0),
+      duration: segmentRoutes.reduce(
+        (sum, segment) => sum + (segment?.duration || 0),
+        0,
+      ),
+      distance: segmentRoutes.reduce(
+        (sum, segment) => sum + (segment?.distance || 0),
+        0,
+      ),
       isStraightLine: segmentRoutes.every((segment) => segment?.isStraightLine),
     };
   }
@@ -1083,54 +1257,19 @@ export async function snapPointToRoad(coords) {
  * @returns {Promise<[number, number][]>}
  */
 export async function buildRoadPathBetweenPoints(points) {
-  const validPoints = (Array.isArray(points) ? points : [])
-    .filter((p) => Array.isArray(p) && p.length === 2 && Number.isFinite(p[0]) && Number.isFinite(p[1]));
+  const validPoints = (Array.isArray(points) ? points : []).filter(
+    (point) =>
+      Array.isArray(point) &&
+      point.length === 2 &&
+      Number.isFinite(point[0]) &&
+      Number.isFinite(point[1]),
+  );
   if (validPoints.length < 2) return validPoints;
 
-  // Snap todos los puntos a vías
-  const snappedPoints = await Promise.all(validPoints.map((p) => snapPointToRoad(p)));
-  const dedupedPoints = dedupeConsecutivePoints(snappedPoints);
-  if (dedupedPoints.length < 2) return dedupedPoints;
-
-  const sampled = dedupedPoints.length > 25
-    ? sampleTrackMatchPoints(normalizeTrackMatchPoints(dedupedPoints), 25).map((p) => p.coords)
-    : dedupedPoints;
-
-  // 1. Primary: Valhalla route with waypoints
-  try {
-    const valResult = await valhallaRouteWaypoints(sampled);
-    if (valResult?.coordinates?.length > 1) return valResult.coordinates;
-  } catch {
-    // Valhalla failed, try OSRM
-  }
-
-  // 2. Fallback: OSRM route with all waypoints
-  try {
-    const coords = sampled.map(([lat, lng]) => `${lng},${lat}`).join(';');
-    const data = await fetchJson(
-      `${OSRM_BASE}/${coords}?overview=full&geometries=geojson&continue_straight=false`,
-    );
-    if (data?.code === 'Ok' && data.routes?.[0]?.geometry?.coordinates?.length > 1) {
-      const roadPath = data.routes[0].geometry.coordinates.map(([rLng, rLat]) => [rLat, rLng]);
-      if (roadPath.length > 1) return roadPath;
-    }
-  } catch {
-    // Fallback: segmento a segmento
-  }
-
-  // 3. Fallback: segment-by-segment via getStreetRoute (already Valhalla-primary)
-  const segments = await Promise.all(
-    sampled.slice(1).map(async (to, idx) => {
-      const from = sampled[idx];
-      try {
-        const route = await getStreetRoute(from, to);
-        return route?.coordinates || [from, to];
-      } catch {
-        return [from, to];
-      }
-    }),
-  );
-  return mergePolylineSegments(segments);
+  const routed = await getStreetRouteThroughPoints(validPoints, {
+    maxDistance: 60000 * Math.max(1, validPoints.length - 1),
+  });
+  return routed?.coordinates || validPoints;
 }
 
 function dedupeConsecutivePoints(points) {

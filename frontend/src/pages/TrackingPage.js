@@ -1,12 +1,22 @@
-import React, { useCallback, useEffect, useMemo, useRef, useReducer, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import MapView from '../components/MapView';
-import { connectTrackingWS } from '../services/ws';
-import { connectAdminMonitoring } from '../services/adminWs';
-import { getTrackingsByRoute } from '../services/tracking';
-import { getRoute, getRouteMonitoringSummary } from '../services/admin';
-import { getDriverAssignedRoutes, getUserAssignedRoute } from '../services/dashboard';
-import { sendDriverLocation } from '../services/driverLocation';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useReducer,
+  useState,
+} from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import MapView from "../components/MapView";
+import { connectTrackingWS } from "../services/ws";
+import { connectAdminMonitoring } from "../services/adminWs";
+import { getTrackingsByRoute } from "../services/tracking";
+import { getRoute, getRouteMonitoringSummary } from "../services/admin";
+import {
+  getDriverAssignedRoutes,
+  getUserAssignedRoute,
+} from "../services/dashboard";
+import { sendDriverLocation } from "../services/driverLocation";
 import {
   geocodeAddress,
   getStreetRouteThroughPoints,
@@ -15,9 +25,9 @@ import {
   isWithinBuenaventuraZone,
   snapPointToRoad,
   buildRoadPathBetweenPoints,
-} from '../services/routing';
-import TrackingHero from '../components/tracking/TrackingHero';
-import './TrackingPage.css';
+} from "../services/routing";
+import TrackingHero from "../components/tracking/TrackingHero";
+import "./TrackingPage.css";
 
 const LIVE_WINDOW_MINUTES = 20;
 const ETA_REFRESH_DISTANCE_KM = 0.08;
@@ -49,7 +59,8 @@ function toNumber(value) {
 }
 
 function sampleGuidedRoute(points, maxPoints = GUIDED_ROUTE_MAX_POINTS) {
-  if (!Array.isArray(points) || points.length <= maxPoints) return Array.isArray(points) ? points : [];
+  if (!Array.isArray(points) || points.length <= maxPoints)
+    return Array.isArray(points) ? points : [];
 
   const sampled = [];
   const lastIndex = points.length - 1;
@@ -57,7 +68,10 @@ function sampleGuidedRoute(points, maxPoints = GUIDED_ROUTE_MAX_POINTS) {
     const pointIndex = Math.round((index * lastIndex) / (maxPoints - 1));
     const point = points[pointIndex];
     const previous = sampled[sampled.length - 1];
-    if (point && (!previous || previous[0] !== point[0] || previous[1] !== point[1])) {
+    if (
+      point &&
+      (!previous || previous[0] !== point[0] || previous[1] !== point[1])
+    ) {
       sampled.push(point);
     }
   }
@@ -70,7 +84,8 @@ function normalizeIntermediateStops(stops) {
     .map((stop, index) => {
       const latitude = Number(stop?.latitude);
       const longitude = Number(stop?.longitude);
-      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude))
+        return null;
 
       return {
         id: stop?.id ?? `${index}-${latitude}-${longitude}`,
@@ -83,15 +98,21 @@ function normalizeIntermediateStops(stops) {
 }
 
 function buildRouteWaypointCoordinates(from, to, intermediateStops = []) {
-  return dedupeConsecutivePoints([
-    from,
-    ...normalizeIntermediateStops(intermediateStops).map((stop) => stop.coords),
-    to,
-  ].filter((point) => Array.isArray(point) && point.length === 2));
+  return dedupeConsecutivePoints(
+    [
+      from,
+      ...normalizeIntermediateStops(intermediateStops).map(
+        (stop) => stop.coords,
+      ),
+      to,
+    ].filter((point) => Array.isArray(point) && point.length === 2),
+  );
 }
 
 function buildRouteSignature(route) {
-  const intermediateStops = normalizeIntermediateStops(route?.intermediate_stops);
+  const intermediateStops = normalizeIntermediateStops(
+    route?.intermediate_stops,
+  );
   return [
     route?.origin,
     route?.destination,
@@ -99,8 +120,15 @@ function buildRouteSignature(route) {
     route?.origin_lng,
     route?.destination_lat,
     route?.destination_lng,
-    JSON.stringify(intermediateStops.map((stop) => [stop.id, stop.address, stop.coords[0], stop.coords[1]])),
-  ].join('|');
+    JSON.stringify(
+      intermediateStops.map((stop) => [
+        stop.id,
+        stop.address,
+        stop.coords[0],
+        stop.coords[1],
+      ]),
+    ),
+  ].join("|");
 }
 
 function distanceKm(lat1, lng1, lat2, lng2) {
@@ -110,8 +138,10 @@ function distanceKm(lat1, lng1, lat2, lng2) {
   const dLng = toRad(lng2 - lng1);
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return earthKm * c;
 }
@@ -128,20 +158,31 @@ function projectPointOnSegment(point, start, end) {
   const segmentLengthSquared = dx * dx + dy * dy;
 
   if (segmentLengthSquared === 0) {
-    const distanceSquared = ((pointX - startX) ** 2) + ((pointY - startY) ** 2);
+    const distanceSquared = (pointX - startX) ** 2 + (pointY - startY) ** 2;
     return { t: 0, distanceSquared };
   }
 
-  const t = Math.max(0, Math.min(1, (((pointX - startX) * dx) + ((pointY - startY) * dy)) / segmentLengthSquared));
-  const projectedX = startX + (dx * t);
-  const projectedY = startY + (dy * t);
-  const distanceSquared = ((pointX - projectedX) ** 2) + ((pointY - projectedY) ** 2);
+  const t = Math.max(
+    0,
+    Math.min(
+      1,
+      ((pointX - startX) * dx + (pointY - startY) * dy) / segmentLengthSquared,
+    ),
+  );
+  const projectedX = startX + dx * t;
+  const projectedY = startY + dy * t;
+  const distanceSquared =
+    (pointX - projectedX) ** 2 + (pointY - projectedY) ** 2;
 
   return { t, distanceSquared };
 }
 
 function remainingRouteDistanceKm(routeCoordinates, vehiclePoint) {
-  if (!Array.isArray(routeCoordinates) || routeCoordinates.length < 2 || !Array.isArray(vehiclePoint)) {
+  if (
+    !Array.isArray(routeCoordinates) ||
+    routeCoordinates.length < 2 ||
+    !Array.isArray(vehiclePoint)
+  ) {
     return null;
   }
 
@@ -163,12 +204,21 @@ function remainingRouteDistanceKm(routeCoordinates, vehiclePoint) {
   const start = routeCoordinates[closestSegmentIndex];
   const end = routeCoordinates[closestSegmentIndex + 1];
   const projectedPoint = [
-    start[0] + ((end[0] - start[0]) * closestProjection.t),
-    start[1] + ((end[1] - start[1]) * closestProjection.t),
+    start[0] + (end[0] - start[0]) * closestProjection.t,
+    start[1] + (end[1] - start[1]) * closestProjection.t,
   ];
 
-  let totalKm = distanceKm(projectedPoint[0], projectedPoint[1], end[0], end[1]);
-  for (let index = closestSegmentIndex + 2; index < routeCoordinates.length; index += 1) {
+  let totalKm = distanceKm(
+    projectedPoint[0],
+    projectedPoint[1],
+    end[0],
+    end[1],
+  );
+  for (
+    let index = closestSegmentIndex + 2;
+    index < routeCoordinates.length;
+    index += 1
+  ) {
     const previous = routeCoordinates[index - 1];
     const current = routeCoordinates[index];
     totalKm += distanceKm(previous[0], previous[1], current[0], current[1]);
@@ -178,7 +228,11 @@ function remainingRouteDistanceKm(routeCoordinates, vehiclePoint) {
 }
 
 function splitRouteByVehiclePoint(routeCoordinates, vehiclePoint) {
-  if (!Array.isArray(routeCoordinates) || routeCoordinates.length < 2 || !Array.isArray(vehiclePoint)) {
+  if (
+    !Array.isArray(routeCoordinates) ||
+    routeCoordinates.length < 2 ||
+    !Array.isArray(vehiclePoint)
+  ) {
     return {
       traveled: [],
       remaining: Array.isArray(routeCoordinates) ? routeCoordinates : [],
@@ -204,8 +258,8 @@ function splitRouteByVehiclePoint(routeCoordinates, vehiclePoint) {
   const start = routeCoordinates[closestSegmentIndex];
   const end = routeCoordinates[closestSegmentIndex + 1];
   const projectedPoint = [
-    start[0] + ((end[0] - start[0]) * closestProjection.t),
-    start[1] + ((end[1] - start[1]) * closestProjection.t),
+    start[0] + (end[0] - start[0]) * closestProjection.t,
+    start[1] + (end[1] - start[1]) * closestProjection.t,
   ];
 
   const traveled = [
@@ -282,16 +336,25 @@ const initialTrackingState = {
 
 function trackingReducer(state, action) {
   switch (action.type) {
-    case 'SET_TRACKINGS':
+    case "SET_TRACKINGS":
       return { ...state, trackings: action.payload };
-    case 'MERGE_TRACKINGS':
-      return { ...state, trackings: mergeTrackings(state.trackings, action.payload) };
-    case 'SET_VEHICLE_POSITION':
+    case "MERGE_TRACKINGS":
+      return {
+        ...state,
+        trackings: mergeTrackings(state.trackings, action.payload),
+      };
+    case "SET_VEHICLE_POSITION":
       return { ...state, vehiclePosition: action.payload };
-    case 'SET_ROUTE_HISTORY':
+    case "SET_ROUTE_HISTORY":
       return { ...state, liveRouteHistory: action.payload };
-    case 'APPEND_ROUTE_POINT':
-      return { ...state, liveRouteHistory: appendHistoryPoint(state.liveRouteHistory, action.payload) };
+    case "APPEND_ROUTE_POINT":
+      return {
+        ...state,
+        liveRouteHistory: appendHistoryPoint(
+          state.liveRouteHistory,
+          action.payload,
+        ),
+      };
     default:
       return state;
   }
@@ -310,12 +373,14 @@ function appendHistoryPoint(prev, point) {
 }
 
 function extractPositionPayload(rawData) {
-  if (!rawData || typeof rawData !== 'object') return rawData;
+  if (!rawData || typeof rawData !== "object") return rawData;
 
-  const eventName = String(rawData.event || rawData.type || rawData.action || '').toLowerCase();
+  const eventName = String(
+    rawData.event || rawData.type || rawData.action || "",
+  ).toLowerCase();
   if (!eventName) return rawData;
 
-  if (eventName === 'position_update') {
+  if (eventName === "position_update") {
     return rawData.data || rawData.payload || rawData.position || rawData;
   }
 
@@ -330,12 +395,12 @@ function isRecentTimestamp(timestamp, minutes = LIVE_WINDOW_MINUTES) {
 
 function isWithinBuenaventura(lat, lng) {
   return (
-    Number.isFinite(lat)
-    && Number.isFinite(lng)
-    && lat >= BUENAVENTURA_BOUNDS.minLat
-    && lat <= BUENAVENTURA_BOUNDS.maxLat
-    && lng >= BUENAVENTURA_BOUNDS.minLng
-    && lng <= BUENAVENTURA_BOUNDS.maxLng
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    lat >= BUENAVENTURA_BOUNDS.minLat &&
+    lat <= BUENAVENTURA_BOUNDS.maxLat &&
+    lng >= BUENAVENTURA_BOUNDS.minLng &&
+    lng <= BUENAVENTURA_BOUNDS.maxLng
   );
 }
 
@@ -344,19 +409,19 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const navigate = useNavigate();
   const rawRouteId = routeIdProp ?? params.routeId;
   const selectedRouteId = rawRouteId != null ? Number(rawRouteId) : Number.NaN;
-  const currentRole = localStorage.getItem('role') || 'user';
-  const isAdminView = currentRole === 'admin';
+  const currentRole = localStorage.getItem("role") || "user";
+  const isAdminView = currentRole === "admin";
   const [driverRoutes, setDriverRoutes] = useState([]);
   const [loadingRoutes, setLoadingRoutes] = useState(false);
   const [sharing, setSharing] = useState(false);
   const sharingWatchIdRef = useRef(null);
-  const [mode, setMode] = useState('manual'); // 'manual' | 'automatic'
+  const [mode, setMode] = useState("manual"); // 'manual' | 'automatic'
 
   // Auto-resolución dinámica: si no hay routeId, redirigir a la ruta asignada según el rol
   useEffect(() => {
     if (Number.isFinite(selectedRouteId)) return;
     // For admin view, do not auto-redirect to a single route — admin monitors all routes
-    if (currentRole === 'admin') return undefined;
+    if (currentRole === "admin") return undefined;
 
     let cancelled = false;
 
@@ -364,10 +429,10 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       try {
         let resolvedId = null;
 
-        if (currentRole === 'driver') {
+        if (currentRole === "driver") {
           const routes = await getDriverAssignedRoutes().catch(() => []);
           resolvedId = (Array.isArray(routes) ? routes : [])[0]?.id ?? null;
-        } else if (currentRole === 'user') {
+        } else if (currentRole === "user") {
           const payload = await getUserAssignedRoute().catch(() => null);
           resolvedId = payload?.route?.id ?? null;
         }
@@ -377,30 +442,35 @@ export default function TrackingPage({ routeId: routeIdProp }) {
         if (resolvedId) {
           navigate(`/tracking/${resolvedId}`, { replace: true });
         } else {
-          navigate('/dashboard', { replace: true });
+          navigate("/dashboard", { replace: true });
         }
       } catch {
-        if (!cancelled) navigate('/dashboard', { replace: true });
+        if (!cancelled) navigate("/dashboard", { replace: true });
       }
     }
 
     void resolveDefaultRoute();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [currentRole, navigate, selectedRouteId]);
 
-  const [trackingState, dispatch] = useReducer(trackingReducer, initialTrackingState);
+  const [trackingState, dispatch] = useReducer(
+    trackingReducer,
+    initialTrackingState,
+  );
   const { trackings, vehiclePosition, liveRouteHistory } = trackingState;
   const [routeInfo, setRouteInfo] = useState(null);
   const [originCoords, setOriginCoords] = useState(null);
   const [destinationCoords, setDestinationCoords] = useState(null);
   const [routePolyline, setRoutePolyline] = useState(null);
-  const [routeGeometryMode, setRouteGeometryMode] = useState('pending');
+  const [routeGeometryMode, setRouteGeometryMode] = useState("pending");
   const [matchedLiveRouteHistory, setMatchedLiveRouteHistory] = useState([]);
   const [userCoords, setUserCoords] = useState(null);
   const [eta, setEta] = useState(null);
   const [etaUpdated, setEtaUpdated] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [wsStatus, setWsStatus] = useState('connecting');
+  const [wsStatus, setWsStatus] = useState("connecting");
   const [isPollingFallback, setIsPollingFallback] = useState(false);
   const [forceBuenaventuraDemo, setForceBuenaventuraDemo] = useState(false);
   const [showLiveTransition, setShowLiveTransition] = useState(false);
@@ -408,7 +478,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const [showRouteFinishedToast, setShowRouteFinishedToast] = useState(false);
   const [guidedRouteLoading, setGuidedRouteLoading] = useState(false);
   const [guidedRouteRunning, setGuidedRouteRunning] = useState(false);
-  const [guidedRouteError, setGuidedRouteError] = useState('');
+  const [guidedRouteError, setGuidedRouteError] = useState("");
   const [guidedRouteDisplayPath, setGuidedRouteDisplayPath] = useState([]);
   const [adminStats, setAdminStats] = useState(null);
   const [adminRouteSummaries, setAdminRouteSummaries] = useState([]);
@@ -417,28 +487,35 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const [adminRouteFilterIds, setAdminRouteFilterIds] = useState([]);
   const [adminRouteOverlays, setAdminRouteOverlays] = useState([]);
 
-  const resolveRouteInfo = useCallback(async (routeId) => {
-    // Resolve by role first to avoid unnecessary 403s on admin-only endpoints
-    if (currentRole === 'driver') {
-      const assignedRoutes = await getDriverAssignedRoutes().catch(() => []);
-      const found = (Array.isArray(assignedRoutes) ? assignedRoutes : []).find((route) => Number(route.id) === routeId);
-      if (found) return found;
-    }
+  const resolveRouteInfo = useCallback(
+    async (routeId) => {
+      // Resolve by role first to avoid unnecessary 403s on admin-only endpoints
+      if (currentRole === "driver") {
+        const assignedRoutes = await getDriverAssignedRoutes().catch(() => []);
+        const found = (
+          Array.isArray(assignedRoutes) ? assignedRoutes : []
+        ).find((route) => Number(route.id) === routeId);
+        if (found) return found;
+      }
 
-    if (currentRole === 'user') {
-      const assignedRouteData = await getUserAssignedRoute().catch(() => null);
-      const assignedRoute = assignedRouteData?.route || null;
-      if (Number(assignedRoute?.id) === routeId) return assignedRoute;
-    }
+      if (currentRole === "user") {
+        const assignedRouteData = await getUserAssignedRoute().catch(
+          () => null,
+        );
+        const assignedRoute = assignedRouteData?.route || null;
+        if (Number(assignedRoute?.id) === routeId) return assignedRoute;
+      }
 
-    // Admin or fallback: direct route fetch
-    return getRoute(routeId).catch(() => null);
-  }, [currentRole]);
+      // Admin or fallback: direct route fetch
+      return getRoute(routeId).catch(() => null);
+    },
+    [currentRole],
+  );
 
   const trackingsCountRef = useRef(0);
   const liveTransitionTimerRef = useRef(null);
   const liveToastTimerRef = useRef(null);
-  const lastEtaRequestRef = useRef({ point: null, destinationKey: '' });
+  const lastEtaRequestRef = useRef({ point: null, destinationKey: "" });
   const lastMatchedRouteRef = useRef({ historyLength: 0, lastPoint: null });
   const guidedRouteTimerRef = useRef(null);
   const guidedRoutePointsRef = useRef([]);
@@ -458,12 +535,16 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     guidedRouteIndexRef.current = 0;
     setGuidedRouteLoading(false);
     setGuidedRouteRunning(false);
-    setGuidedRouteError('');
+    setGuidedRouteError("");
   }, [selectedRouteId]);
 
-  useEffect(() => () => {
-    if (guidedRouteTimerRef.current) clearTimeout(guidedRouteTimerRef.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (guidedRouteTimerRef.current)
+        clearTimeout(guidedRouteTimerRef.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!navigator.geolocation) return undefined;
@@ -492,24 +573,39 @@ export default function TrackingPage({ routeId: routeIdProp }) {
 
   // Cargar rutas asignadas al conductor para selección rápida
   useEffect(() => {
-    if (currentRole !== 'driver') return undefined;
+    if (currentRole !== "driver") return undefined;
     let cancelled = false;
     setLoadingRoutes(true);
     getDriverAssignedRoutes()
-      .then((routes) => { if (!cancelled) setDriverRoutes(Array.isArray(routes) ? routes : []); })
-      .catch(() => { if (!cancelled) setDriverRoutes([]); })
-      .finally(() => { if (!cancelled) setLoadingRoutes(false); });
+      .then((routes) => {
+        if (!cancelled) setDriverRoutes(Array.isArray(routes) ? routes : []);
+      })
+      .catch(() => {
+        if (!cancelled) setDriverRoutes([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingRoutes(false);
+      });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [currentRole]);
 
   // Cleanup global: detener watch de geolocalizacion al desmontar
-  useEffect(() => () => {
-    if (sharingWatchIdRef.current) {
-      try { navigator.geolocation.clearWatch(sharingWatchIdRef.current); } catch (e) { /* ignore */ }
-      sharingWatchIdRef.current = null;
-    }
-  }, []);
+  useEffect(
+    () => () => {
+      if (sharingWatchIdRef.current) {
+        try {
+          navigator.geolocation.clearWatch(sharingWatchIdRef.current);
+        } catch (e) {
+          /* ignore */
+        }
+        sharingWatchIdRef.current = null;
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!isAdminView) {
@@ -530,8 +626,14 @@ export default function TrackingPage({ routeId: routeIdProp }) {
         if (cancelled) return;
 
         setAdminStats(summary?.stats || null);
-        setAdminRouteSummaries(Array.isArray(summary?.routes) ? summary.routes : []);
-        setAdminActiveVehicles(Array.isArray(summary?.active_vehicles) ? summary.active_vehicles : []);
+        setAdminRouteSummaries(
+          Array.isArray(summary?.routes) ? summary.routes : [],
+        );
+        setAdminActiveVehicles(
+          Array.isArray(summary?.active_vehicles)
+            ? summary.active_vehicles
+            : [],
+        );
         setAdminAlerts(Array.isArray(summary?.alerts) ? summary.alerts : []);
       } catch {
         if (!cancelled) {
@@ -558,49 +660,76 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   useEffect(() => {
     if (!isAdminView) return undefined;
 
-    const client = connectAdminMonitoring((msg) => {
-      try {
-        const event = String(msg.event || '').toLowerCase();
-        const data = msg.data || msg.payload || msg;
-        if (event === 'position_update' && data) {
-          // upsert active vehicle by route+vehicle or driver
-          setAdminActiveVehicles((prev) => {
-            const copy = Array.isArray(prev) ? [...prev] : [];
-            const key = `${data.route}:${data.driver || data.vehicle || data.id || ''}`;
-            const idx = copy.findIndex((v) => `${v.route}:${v.driver || v.vehicle || v.id || ''}` === key);
-            const entry = {
-              route: data.route,
-              latitude: data.latitude,
-              longitude: data.longitude,
-              timestamp: data.timestamp,
-              raw: data,
-            };
-            if (idx >= 0) { copy[idx] = { ...copy[idx], ...entry }; }
-            else { copy.push(entry); }
-            return copy.slice(0, 200);
-          });
+    const client = connectAdminMonitoring(
+      (msg) => {
+        try {
+          const event = String(msg.event || "").toLowerCase();
+          const data = msg.data || msg.payload || msg;
+          if (event === "position_update" && data) {
+            // upsert active vehicle by route+vehicle or driver
+            setAdminActiveVehicles((prev) => {
+              const copy = Array.isArray(prev) ? [...prev] : [];
+              const key = `${data.route}:${data.driver || data.vehicle || data.id || ""}`;
+              const idx = copy.findIndex(
+                (v) =>
+                  `${v.route}:${v.driver || v.vehicle || v.id || ""}` === key,
+              );
+              const entry = {
+                route: data.route,
+                latitude: data.latitude,
+                longitude: data.longitude,
+                timestamp: data.timestamp,
+                raw: data,
+              };
+              if (idx >= 0) {
+                copy[idx] = { ...copy[idx], ...entry };
+              } else {
+                copy.push(entry);
+              }
+              return copy.slice(0, 200);
+            });
+          }
+          if (event === "route_state" && data) {
+            // update summaries if payload includes route summary info
+            setAdminRouteSummaries((prev) => {
+              const copy = Array.isArray(prev) ? [...prev] : [];
+              const idx = copy.findIndex(
+                (r) => Number(r.id) === Number(data.id),
+              );
+              if (idx >= 0) {
+                copy[idx] = { ...copy[idx], ...data };
+              } else if (data.id) {
+                copy.push(data);
+              }
+              return copy.slice(0, 500);
+            });
+          }
+        } catch (e) {
+          // ignore parse errors
         }
-        if (event === 'route_state' && data) {
-          // update summaries if payload includes route summary info
-          setAdminRouteSummaries((prev) => {
-            const copy = Array.isArray(prev) ? [...prev] : [];
-            const idx = copy.findIndex((r) => Number(r.id) === Number(data.id));
-            if (idx >= 0) { copy[idx] = { ...copy[idx], ...data }; }
-            else if (data.id) { copy.push(data); }
-            return copy.slice(0, 500);
-          });
-        }
-      } catch (e) {
-        // ignore parse errors
-      }
-    }, {
-      onOpen: () => { setWsStatus('live'); setIsPollingFallback(false); },
-      onClose: () => { setWsStatus('offline'); },
-      onError: () => { setWsStatus('offline'); },
-    });
+      },
+      {
+        onOpen: () => {
+          setWsStatus("live");
+          setIsPollingFallback(false);
+        },
+        onClose: () => {
+          setWsStatus("offline");
+        },
+        onError: () => {
+          setWsStatus("offline");
+        },
+      },
+    );
 
     // Cleanup
-    return () => { try { client.close(); } catch (e) { /* ignore */ } };
+    return () => {
+      try {
+        client.close();
+      } catch (e) {
+        /* ignore */
+      }
+    };
   }, [isAdminView, adminActiveVehicles, adminRouteSummaries]);
 
   useEffect(() => {
@@ -620,25 +749,44 @@ export default function TrackingPage({ routeId: routeIdProp }) {
 
           try {
             // Prefer stored coordinates
-            const hasStoredOrigin = Number.isFinite(route.origin_lat) && Number.isFinite(route.origin_lng);
-            const hasStoredDest = Number.isFinite(route.destination_lat) && Number.isFinite(route.destination_lng);
+            const hasStoredOrigin =
+              Number.isFinite(route.origin_lat) &&
+              Number.isFinite(route.origin_lng);
+            const hasStoredDest =
+              Number.isFinite(route.destination_lat) &&
+              Number.isFinite(route.destination_lng);
 
             const [from, to] = await Promise.all([
-              hasStoredOrigin ? Promise.resolve([route.origin_lat, route.origin_lng]) : geocodeAddress(route.origin),
-              hasStoredDest ? Promise.resolve([route.destination_lat, route.destination_lng]) : geocodeAddress(route.destination),
+              hasStoredOrigin
+                ? Promise.resolve([route.origin_lat, route.origin_lng])
+                : geocodeAddress(route.origin),
+              hasStoredDest
+                ? Promise.resolve([
+                    route.destination_lat,
+                    route.destination_lng,
+                  ])
+                : geocodeAddress(route.destination),
             ]);
 
             if (!Array.isArray(from) || !Array.isArray(to)) {
               return { id: route.id, polyline: [] };
             }
 
-            const waypointCoords = buildRouteWaypointCoordinates(from, to, route.intermediate_stops);
-            const streetRoute = await getStreetRouteThroughPoints(waypointCoords);
+            const waypointCoords = buildRouteWaypointCoordinates(
+              from,
+              to,
+              route.intermediate_stops,
+            );
+            const streetRoute =
+              await getStreetRouteThroughPoints(waypointCoords);
             if (streetRoute?.coordinates?.length > 1) {
               return { id: route.id, polyline: streetRoute.coordinates };
             }
 
-            return { id: route.id, polyline: waypointCoords.length > 1 ? waypointCoords : [from, to] };
+            return {
+              id: route.id,
+              polyline: waypointCoords.length > 1 ? waypointCoords : [from, to],
+            };
           } catch {
             return { id: route.id, polyline: [] };
           }
@@ -646,7 +794,9 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       );
 
       if (!cancelled) {
-        setAdminRouteOverlays(overlays.filter((overlay) => overlay.polyline.length > 1));
+        setAdminRouteOverlays(
+          overlays.filter((overlay) => overlay.polyline.length > 1),
+        );
       }
     };
 
@@ -678,13 +828,17 @@ export default function TrackingPage({ routeId: routeIdProp }) {
         const normalizedInitial = initialTrackings
           .map((t) => normalizeTracking(t, new Date().toISOString()))
           .filter(Boolean)
-          .filter((t) => isRecentTimestamp(t.timestamp) && isWithinBuenaventura(t.latitude, t.longitude));
-        dispatch({ type: 'SET_TRACKINGS', payload: normalizedInitial });
+          .filter(
+            (t) =>
+              isRecentTimestamp(t.timestamp) &&
+              isWithinBuenaventura(t.latitude, t.longitude),
+          );
+        dispatch({ type: "SET_TRACKINGS", payload: normalizedInitial });
 
         if (normalizedInitial.length > 0) {
           const latest = normalizedInitial[normalizedInitial.length - 1];
           dispatch({
-            type: 'SET_VEHICLE_POSITION',
+            type: "SET_VEHICLE_POSITION",
             payload: {
               latitude: latest.latitude,
               longitude: latest.longitude,
@@ -692,26 +846,43 @@ export default function TrackingPage({ routeId: routeIdProp }) {
             },
           });
 
-          const historyPoints = normalizedInitial.map((t) => [t.latitude, t.longitude]);
-          dispatch({ type: 'SET_ROUTE_HISTORY', payload: historyPoints });
+          const historyPoints = normalizedInitial.map((t) => [
+            t.latitude,
+            t.longitude,
+          ]);
+          dispatch({ type: "SET_ROUTE_HISTORY", payload: historyPoints });
         } else {
-          dispatch({ type: 'SET_VEHICLE_POSITION', payload: null });
-          dispatch({ type: 'SET_ROUTE_HISTORY', payload: [] });
+          dispatch({ type: "SET_VEHICLE_POSITION", payload: null });
+          dispatch({ type: "SET_ROUTE_HISTORY", payload: [] });
         }
 
         if (route?.origin && route?.destination) {
           // Prefer stored coordinates from Route model (precise, pre-resolved)
-          const hasStoredOrigin = Number.isFinite(route.origin_lat) && Number.isFinite(route.origin_lng);
-          const hasStoredDest = Number.isFinite(route.destination_lat) && Number.isFinite(route.destination_lng);
+          const hasStoredOrigin =
+            Number.isFinite(route.origin_lat) &&
+            Number.isFinite(route.origin_lng);
+          const hasStoredDest =
+            Number.isFinite(route.destination_lat) &&
+            Number.isFinite(route.destination_lng);
 
-          let from = hasStoredOrigin ? [route.origin_lat, route.origin_lng] : null;
-          let to = hasStoredDest ? [route.destination_lat, route.destination_lng] : null;
+          let from = hasStoredOrigin
+            ? [route.origin_lat, route.origin_lng]
+            : null;
+          let to = hasStoredDest
+            ? [route.destination_lat, route.destination_lng]
+            : null;
 
           // Fallback: geocode if no stored coordinates
           if (!from || !to) {
             const [geocodedFrom, geocodedTo] = await Promise.all([
-              from ? Promise.resolve(from) : geocodeAddress(route.origin, { fallbackCoords: userCoords }),
-              to ? Promise.resolve(to) : geocodeAddress(route.destination, { fallbackCoords: userCoords }),
+              from
+                ? Promise.resolve(from)
+                : geocodeAddress(route.origin, { fallbackCoords: userCoords }),
+              to
+                ? Promise.resolve(to)
+                : geocodeAddress(route.destination, {
+                    fallbackCoords: userCoords,
+                  }),
             ]);
             from = from || geocodedFrom;
             to = to || geocodedTo;
@@ -722,35 +893,40 @@ export default function TrackingPage({ routeId: routeIdProp }) {
             setOriginCoords(from);
             setDestinationCoords(to);
             setForceBuenaventuraDemo(false);
-            setRouteGeometryMode('pending');
+            setRouteGeometryMode("pending");
 
             // getStreetRoute includes retry+cache; fallback to straight line only as last resort
-            const waypointCoords = buildRouteWaypointCoordinates(from, to, route.intermediate_stops);
-            const streetRoute = await getStreetRouteThroughPoints(waypointCoords);
+            const waypointCoords = buildRouteWaypointCoordinates(
+              from,
+              to,
+              route.intermediate_stops,
+            );
+            const streetRoute =
+              await getStreetRouteThroughPoints(waypointCoords);
             if (!mounted) return;
             if (streetRoute && streetRoute.coordinates?.length > 1) {
               setRoutePolyline(streetRoute.coordinates);
               if (!streetRoute.isStraightLine) {
-                setRouteGeometryMode('verified');
+                setRouteGeometryMode("verified");
                 setEta(Math.ceil(streetRoute.duration / 60));
                 setEtaUpdated(new Date());
               } else {
-                setRouteGeometryMode('alternate');
+                setRouteGeometryMode("alternate");
               }
             } else {
               setRoutePolyline(null);
-              setRouteGeometryMode('pending');
+              setRouteGeometryMode("pending");
             }
           } else {
             // Geocoding devolvió null → usar demo
             setOriginCoords(null);
             setDestinationCoords(null);
             setRoutePolyline(null);
-            setRouteGeometryMode('pending');
+            setRouteGeometryMode("pending");
             setForceBuenaventuraDemo(true);
           }
         } else {
-          setRouteGeometryMode('pending');
+          setRouteGeometryMode("pending");
           setForceBuenaventuraDemo(true);
         }
       } finally {
@@ -759,7 +935,9 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     }
 
     loadData();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [resolveRouteInfo, selectedRouteId, userCoords]);
 
   // Periodic route info refresh: detect admin changes to origin/destination
@@ -776,20 +954,39 @@ export default function TrackingPage({ routeId: routeIdProp }) {
 
         const key = buildRouteSignature(freshRoute);
 
-        if (lastRouteVersionRef.current && lastRouteVersionRef.current !== key) {
+        if (
+          lastRouteVersionRef.current &&
+          lastRouteVersionRef.current !== key
+        ) {
           // Route changed — update state and re-resolve polyline
           setRouteInfo(freshRoute);
 
-          const hasOrigin = Number.isFinite(freshRoute.origin_lat) && Number.isFinite(freshRoute.origin_lng);
-          const hasDest = Number.isFinite(freshRoute.destination_lat) && Number.isFinite(freshRoute.destination_lng);
+          const hasOrigin =
+            Number.isFinite(freshRoute.origin_lat) &&
+            Number.isFinite(freshRoute.origin_lng);
+          const hasDest =
+            Number.isFinite(freshRoute.destination_lat) &&
+            Number.isFinite(freshRoute.destination_lng);
 
-          let from = hasOrigin ? [freshRoute.origin_lat, freshRoute.origin_lng] : null;
-          let to = hasDest ? [freshRoute.destination_lat, freshRoute.destination_lng] : null;
+          let from = hasOrigin
+            ? [freshRoute.origin_lat, freshRoute.origin_lng]
+            : null;
+          let to = hasDest
+            ? [freshRoute.destination_lat, freshRoute.destination_lng]
+            : null;
 
           if (!from || !to) {
             const [geoFrom, geoTo] = await Promise.all([
-              from ? Promise.resolve(from) : geocodeAddress(freshRoute.origin, { fallbackCoords: userCoords }),
-              to ? Promise.resolve(to) : geocodeAddress(freshRoute.destination, { fallbackCoords: userCoords }),
+              from
+                ? Promise.resolve(from)
+                : geocodeAddress(freshRoute.origin, {
+                    fallbackCoords: userCoords,
+                  }),
+              to
+                ? Promise.resolve(to)
+                : geocodeAddress(freshRoute.destination, {
+                    fallbackCoords: userCoords,
+                  }),
             ]);
             from = from || geoFrom;
             to = to || geoTo;
@@ -799,21 +996,26 @@ export default function TrackingPage({ routeId: routeIdProp }) {
             setOriginCoords(from);
             setDestinationCoords(to);
             setForceBuenaventuraDemo(false);
-            setRouteGeometryMode('pending');
-            const waypointCoords = buildRouteWaypointCoordinates(from, to, freshRoute.intermediate_stops);
-            const streetRoute = await getStreetRouteThroughPoints(waypointCoords);
+            setRouteGeometryMode("pending");
+            const waypointCoords = buildRouteWaypointCoordinates(
+              from,
+              to,
+              freshRoute.intermediate_stops,
+            );
+            const streetRoute =
+              await getStreetRouteThroughPoints(waypointCoords);
             if (streetRoute && streetRoute.coordinates?.length > 1) {
               setRoutePolyline(streetRoute.coordinates);
               if (!streetRoute.isStraightLine) {
-                setRouteGeometryMode('verified');
+                setRouteGeometryMode("verified");
                 setEta(Math.ceil(streetRoute.duration / 60));
                 setEtaUpdated(new Date());
               } else {
-                setRouteGeometryMode('alternate');
+                setRouteGeometryMode("alternate");
               }
             } else {
               setRoutePolyline(null);
-              setRouteGeometryMode('pending');
+              setRouteGeometryMode("pending");
             }
           }
         }
@@ -836,11 +1038,13 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   useEffect(() => {
     if (!Number.isFinite(selectedRouteId)) return undefined;
 
-    setWsStatus('connecting');
+    setWsStatus("connecting");
     let opened = false;
 
     const openingTimeoutId = setTimeout(() => {
-      setWsStatus((current) => (current === 'connecting' ? 'offline' : current));
+      setWsStatus((current) =>
+        current === "connecting" ? "offline" : current,
+      );
     }, 7000);
 
     const socketClient = connectTrackingWS(
@@ -856,57 +1060,78 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           setShowLiveTransition(true);
           setShowLiveToast(true);
 
-          if (liveTransitionTimerRef.current) clearTimeout(liveTransitionTimerRef.current);
-          if (liveToastTimerRef.current) clearTimeout(liveToastTimerRef.current);
+          if (liveTransitionTimerRef.current)
+            clearTimeout(liveTransitionTimerRef.current);
+          if (liveToastTimerRef.current)
+            clearTimeout(liveToastTimerRef.current);
 
-          liveTransitionTimerRef.current = setTimeout(() => setShowLiveTransition(false), 1800);
-          liveToastTimerRef.current = setTimeout(() => setShowLiveToast(false), 2600);
+          liveTransitionTimerRef.current = setTimeout(
+            () => setShowLiveTransition(false),
+            1800,
+          );
+          liveToastTimerRef.current = setTimeout(
+            () => setShowLiveToast(false),
+            2600,
+          );
         }
 
         // Snap GPS point to nearest road for accurate display
-        snapPointToRoad([normalized.latitude, normalized.longitude]).then((snapped) => {
-          const lat = snapped[0];
-          const lng = snapped[1];
-          dispatch({ type: 'MERGE_TRACKINGS', payload: [{ ...normalized, latitude: lat, longitude: lng }] });
-          dispatch({
-            type: 'SET_VEHICLE_POSITION',
-            payload: { latitude: lat, longitude: lng, timestamp: normalized.timestamp },
+        snapPointToRoad([normalized.latitude, normalized.longitude])
+          .then((snapped) => {
+            const lat = snapped[0];
+            const lng = snapped[1];
+            dispatch({
+              type: "MERGE_TRACKINGS",
+              payload: [{ ...normalized, latitude: lat, longitude: lng }],
+            });
+            dispatch({
+              type: "SET_VEHICLE_POSITION",
+              payload: {
+                latitude: lat,
+                longitude: lng,
+                timestamp: normalized.timestamp,
+              },
+            });
+            dispatch({ type: "APPEND_ROUTE_POINT", payload: [lat, lng] });
+          })
+          .catch(() => {
+            dispatch({ type: "MERGE_TRACKINGS", payload: [normalized] });
+            dispatch({
+              type: "SET_VEHICLE_POSITION",
+              payload: {
+                latitude: normalized.latitude,
+                longitude: normalized.longitude,
+                timestamp: normalized.timestamp,
+              },
+            });
+            dispatch({
+              type: "APPEND_ROUTE_POINT",
+              payload: [normalized.latitude, normalized.longitude],
+            });
           });
-          dispatch({ type: 'APPEND_ROUTE_POINT', payload: [lat, lng] });
-        }).catch(() => {
-          dispatch({ type: 'MERGE_TRACKINGS', payload: [normalized] });
-          dispatch({
-            type: 'SET_VEHICLE_POSITION',
-            payload: {
-              latitude: normalized.latitude,
-              longitude: normalized.longitude,
-              timestamp: normalized.timestamp,
-            },
-          });
-          dispatch({ type: 'APPEND_ROUTE_POINT', payload: [normalized.latitude, normalized.longitude] });
-        });
       },
       {
         onOpen: () => {
           opened = true;
           clearTimeout(openingTimeoutId);
-          setWsStatus('live');
+          setWsStatus("live");
           setIsPollingFallback(false);
         },
         onClose: () => {
           setWsStatus((current) => {
-            if (current === 'live' || opened) return 'connecting';
-            return 'offline';
+            if (current === "live" || opened) return "connecting";
+            return "offline";
           });
         },
-        onError: () => setWsStatus('offline'),
+        onError: () => setWsStatus("offline"),
       },
     );
 
     return () => {
       clearTimeout(openingTimeoutId);
       socketClient.close();
-      if (liveTransitionTimerRef.current) clearTimeout(liveTransitionTimerRef.current);
+      if (liveTransitionTimerRef.current)
+        clearTimeout(liveTransitionTimerRef.current);
       if (liveToastTimerRef.current) clearTimeout(liveToastTimerRef.current);
     };
   }, [selectedRouteId]);
@@ -918,20 +1143,26 @@ export default function TrackingPage({ routeId: routeIdProp }) {
 
     const fetchLatest = async () => {
       try {
-        const latest = await getTrackingsByRoute(selectedRouteId).catch(() => []);
+        const latest = await getTrackingsByRoute(selectedRouteId).catch(
+          () => [],
+        );
         if (cancelled || !Array.isArray(latest) || latest.length === 0) return;
 
         const normalized = latest
           .map((t) => normalizeTracking(t, new Date().toISOString()))
           .filter(Boolean)
-          .filter((t) => isRecentTimestamp(t.timestamp) && isWithinBuenaventura(t.latitude, t.longitude));
+          .filter(
+            (t) =>
+              isRecentTimestamp(t.timestamp) &&
+              isWithinBuenaventura(t.latitude, t.longitude),
+          );
 
         if (normalized.length === 0) return;
 
-        dispatch({ type: 'MERGE_TRACKINGS', payload: normalized });
+        dispatch({ type: "MERGE_TRACKINGS", payload: normalized });
         const latestPoint = normalized[normalized.length - 1];
         dispatch({
-          type: 'SET_VEHICLE_POSITION',
+          type: "SET_VEHICLE_POSITION",
           payload: {
             latitude: latestPoint.latitude,
             longitude: latestPoint.longitude,
@@ -939,7 +1170,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           },
         });
         dispatch({
-          type: 'SET_ROUTE_HISTORY',
+          type: "SET_ROUTE_HISTORY",
           payload: normalized.reduce(
             (acc, t) => appendHistoryPoint(acc, [t.latitude, t.longitude]),
             [],
@@ -947,14 +1178,14 @@ export default function TrackingPage({ routeId: routeIdProp }) {
         });
 
         // mark that polling provided recent data only when websocket isn't the primary source
-        if (wsStatus !== 'live') setIsPollingFallback(true);
+        if (wsStatus !== "live") setIsPollingFallback(true);
       } catch {
         // ignore transient network errors
       }
     };
 
     // Poll faster when websocket is not live; otherwise poll less frequently as backup
-    const intervalMs = wsStatus === 'live' ? 10000 : 5000;
+    const intervalMs = wsStatus === "live" ? 10000 : 5000;
 
     fetchLatest();
     const id = setInterval(fetchLatest, intervalMs);
@@ -969,30 +1200,36 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     if (!destinationCoords || trackings.length === 0) return;
     const latest = trackings[trackings.length - 1];
     const latestPoint = [latest.latitude, latest.longitude];
-    const fallbackSpeedKmh = toNumber(latest.speed ?? latest.speed_kmh ?? latest.velocity) || GUIDED_ROUTE_SPEED_KMH;
+    const fallbackSpeedKmh =
+      toNumber(latest.speed ?? latest.speed_kmh ?? latest.velocity) ||
+      GUIDED_ROUTE_SPEED_KMH;
 
     if (Array.isArray(routePolyline) && routePolyline.length > 1) {
       const remainingKm = remainingRouteDistanceKm(routePolyline, latestPoint);
       if (Number.isFinite(remainingKm)) {
-        const minutes = remainingKm <= 0.03
-          ? 0
-          : Math.max(1, Math.ceil((remainingKm / Math.max(fallbackSpeedKmh, 12)) * 60));
+        const minutes =
+          remainingKm <= 0.03
+            ? 0
+            : Math.max(
+                1,
+                Math.ceil((remainingKm / Math.max(fallbackSpeedKmh, 12)) * 60),
+              );
         setEta(minutes);
         setEtaUpdated(new Date());
         lastEtaRequestRef.current = {
           point: latestPoint,
-          destinationKey: destinationCoords.join(','),
+          destinationKey: destinationCoords.join(","),
         };
         return;
       }
     }
 
-    const destinationKey = destinationCoords.join(',');
+    const destinationKey = destinationCoords.join(",");
     const previousEtaRequest = lastEtaRequestRef.current;
     if (
-      previousEtaRequest.destinationKey === destinationKey
-      && Array.isArray(previousEtaRequest.point)
-      && distanceKm(
+      previousEtaRequest.destinationKey === destinationKey &&
+      Array.isArray(previousEtaRequest.point) &&
+      distanceKm(
         previousEtaRequest.point[0],
         previousEtaRequest.point[1],
         latest.latitude,
@@ -1029,20 +1266,23 @@ export default function TrackingPage({ routeId: routeIdProp }) {
 
     const latestPoint = liveRouteHistory[liveRouteHistory.length - 1];
     const lastMatchedRoute = lastMatchedRouteRef.current;
-    const newPointsSinceLastMatch = liveRouteHistory.length - lastMatchedRoute.historyLength;
-    const movedDistanceSinceLastMatch = Array.isArray(lastMatchedRoute.lastPoint)
+    const newPointsSinceLastMatch =
+      liveRouteHistory.length - lastMatchedRoute.historyLength;
+    const movedDistanceSinceLastMatch = Array.isArray(
+      lastMatchedRoute.lastPoint,
+    )
       ? distanceKm(
-        lastMatchedRoute.lastPoint[0],
-        lastMatchedRoute.lastPoint[1],
-        latestPoint[0],
-        latestPoint[1],
-      )
+          lastMatchedRoute.lastPoint[0],
+          lastMatchedRoute.lastPoint[1],
+          latestPoint[0],
+          latestPoint[1],
+        )
       : Number.POSITIVE_INFINITY;
 
     if (
-      lastMatchedRoute.historyLength > 0
-      && newPointsSinceLastMatch < ROUTE_MATCH_MIN_NEW_POINTS
-      && movedDistanceSinceLastMatch < ROUTE_MATCH_REFRESH_DISTANCE_KM
+      lastMatchedRoute.historyLength > 0 &&
+      newPointsSinceLastMatch < ROUTE_MATCH_MIN_NEW_POINTS &&
+      movedDistanceSinceLastMatch < ROUTE_MATCH_REFRESH_DISTANCE_KM
     ) {
       return undefined;
     }
@@ -1068,7 +1308,9 @@ export default function TrackingPage({ routeId: routeIdProp }) {
               setMatchedLiveRouteHistory(roadPath);
               return;
             }
-          } catch { /* use raw points */ }
+          } catch {
+            /* use raw points */
+          }
           if (!cancelled) setMatchedLiveRouteHistory(liveRouteHistory);
         })
         .catch(async () => {
@@ -1084,7 +1326,9 @@ export default function TrackingPage({ routeId: routeIdProp }) {
               setMatchedLiveRouteHistory(roadPath);
               return;
             }
-          } catch { /* use raw points */ }
+          } catch {
+            /* use raw points */
+          }
           if (!cancelled) setMatchedLiveRouteHistory(liveRouteHistory);
         });
     }, 600);
@@ -1097,35 +1341,42 @@ export default function TrackingPage({ routeId: routeIdProp }) {
 
   const statusBadge = useMemo(() => {
     const badges = {
-      connecting: { label: 'Conectando', color: 'connecting' },
-      live: { label: 'En vivo', color: 'live' },
-      offline: { label: 'Sin conexion', color: 'offline' },
-      fallback: { label: 'En vivo (respaldo)', color: 'live' },
+      connecting: { label: "Conectando", color: "connecting" },
+      live: { label: "En vivo", color: "live" },
+      offline: { label: "Sin conexion", color: "offline" },
+      fallback: { label: "En vivo (respaldo)", color: "live" },
     };
-    if (isPollingFallback && wsStatus !== 'live') return badges.fallback;
+    if (isPollingFallback && wsStatus !== "live") return badges.fallback;
     return badges[wsStatus] || badges.connecting;
   }, [wsStatus, isPollingFallback]);
 
   const hasLiveData = trackings.length > 0;
   const showEmptyCityCanvas = !hasLiveData;
-  const hasPlannedRoute = Array.isArray(routePolyline) && routePolyline.length > 1;
-  const hasResolvedStops = Array.isArray(originCoords) && Array.isArray(destinationCoords);
-  const showRouteContext = !forceBuenaventuraDemo && (hasResolvedStops || hasPlannedRoute);
-  const canManageGuidedRoute = currentRole === 'driver';
+  const hasPlannedRoute =
+    Array.isArray(routePolyline) && routePolyline.length > 1;
+  const hasResolvedStops =
+    Array.isArray(originCoords) && Array.isArray(destinationCoords);
+  const showRouteContext =
+    !forceBuenaventuraDemo && (hasResolvedStops || hasPlannedRoute);
+  const canManageGuidedRoute = currentRole === "driver";
   const routeIsLive = guidedRouteRunning || hasLiveData;
-  const canStartGuidedRoute = canManageGuidedRoute
-    && (hasPlannedRoute || Boolean(routeInfo?.origin && routeInfo?.destination));
-  
+  const canStartGuidedRoute =
+    canManageGuidedRoute &&
+    (hasPlannedRoute || Boolean(routeInfo?.origin && routeInfo?.destination));
 
   const displayOriginCoords = showRouteContext ? originCoords : null;
   const displayDestinationCoords = showRouteContext ? destinationCoords : null;
   const displayIntermediateStops = useMemo(
-    () => (showRouteContext ? normalizeIntermediateStops(routeInfo?.intermediate_stops) : []),
+    () =>
+      showRouteContext
+        ? normalizeIntermediateStops(routeInfo?.intermediate_stops)
+        : [],
     [showRouteContext, routeInfo],
   );
-  const displayPlannedRoutePolyline = showRouteContext && Array.isArray(routePolyline) && routePolyline.length > 1
-    ? routePolyline
-    : null;
+  const displayPlannedRoutePolyline =
+    showRouteContext && Array.isArray(routePolyline) && routePolyline.length > 1
+      ? routePolyline
+      : null;
   const displayTrackings = useMemo(
     () => (hasLiveData ? trackings : []),
     [hasLiveData, trackings],
@@ -1139,14 +1390,28 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       return matchedLiveRouteHistory[matchedLiveRouteHistory.length - 1];
     }
 
-    if (Number.isFinite(vehiclePosition?.latitude) && Number.isFinite(vehiclePosition?.longitude)) {
-      return [Number(vehiclePosition.latitude), Number(vehiclePosition.longitude)];
+    if (
+      Number.isFinite(vehiclePosition?.latitude) &&
+      Number.isFinite(vehiclePosition?.longitude)
+    ) {
+      return [
+        Number(vehiclePosition.latitude),
+        Number(vehiclePosition.longitude),
+      ];
     }
 
     return null;
-  }, [guidedRouteDisplayPath, matchedLiveRouteHistory, vehiclePosition?.latitude, vehiclePosition?.longitude]);
+  }, [
+    guidedRouteDisplayPath,
+    matchedLiveRouteHistory,
+    vehiclePosition?.latitude,
+    vehiclePosition?.longitude,
+  ]);
   const plannedRouteProgress = useMemo(() => {
-    if (!Array.isArray(displayPlannedRoutePolyline) || displayPlannedRoutePolyline.length < 2) {
+    if (
+      !Array.isArray(displayPlannedRoutePolyline) ||
+      displayPlannedRoutePolyline.length < 2
+    ) {
       return { traveled: null, remaining: null, projectedPoint: null };
     }
 
@@ -1164,25 +1429,34 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     );
 
     return {
-      traveled: Array.isArray(traveled) && traveled.length > 1 ? traveled : null,
-      remaining: Array.isArray(remaining) && remaining.length > 1 ? remaining : null,
+      traveled:
+        Array.isArray(traveled) && traveled.length > 1 ? traveled : null,
+      remaining:
+        Array.isArray(remaining) && remaining.length > 1 ? remaining : null,
       projectedPoint,
     };
   }, [displayPlannedRoutePolyline, rawVehicleRoutePoint]);
-  const displayTraveledRoutePolyline = guidedRouteDisplayPath.length > 1
-    ? guidedRouteDisplayPath
-    : (plannedRouteProgress.traveled?.length > 1
-      ? plannedRouteProgress.traveled
-      : (hasLiveData && matchedLiveRouteHistory.length > 1
-        ? matchedLiveRouteHistory
-        : null));
+  const displayTraveledRoutePolyline =
+    guidedRouteDisplayPath.length > 1
+      ? guidedRouteDisplayPath
+      : plannedRouteProgress.traveled?.length > 1
+        ? plannedRouteProgress.traveled
+        : hasLiveData && matchedLiveRouteHistory.length > 1
+          ? matchedLiveRouteHistory
+          : null;
   const snappedVehiclePoint = useMemo(() => {
     if (Array.isArray(plannedRouteProgress.projectedPoint)) {
       return plannedRouteProgress.projectedPoint;
     }
 
-    if (!Array.isArray(displayTraveledRoutePolyline) || displayTraveledRoutePolyline.length === 0) return null;
-    return displayTraveledRoutePolyline[displayTraveledRoutePolyline.length - 1];
+    if (
+      !Array.isArray(displayTraveledRoutePolyline) ||
+      displayTraveledRoutePolyline.length === 0
+    )
+      return null;
+    return displayTraveledRoutePolyline[
+      displayTraveledRoutePolyline.length - 1
+    ];
   }, [displayTraveledRoutePolyline, plannedRouteProgress.projectedPoint]);
   const plannedDistanceKm = useMemo(
     () => polylineDistanceKm(displayPlannedRoutePolyline),
@@ -1193,12 +1467,17 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     [displayTraveledRoutePolyline],
   );
   const remainingDistanceKm = useMemo(() => {
-    if (!Array.isArray(displayPlannedRoutePolyline) || displayPlannedRoutePolyline.length < 2) {
+    if (
+      !Array.isArray(displayPlannedRoutePolyline) ||
+      displayPlannedRoutePolyline.length < 2
+    ) {
       return null;
     }
 
-    const routePoint = snappedVehiclePoint
-      || (Number.isFinite(vehiclePosition?.latitude) && Number.isFinite(vehiclePosition?.longitude)
+    const routePoint =
+      snappedVehiclePoint ||
+      (Number.isFinite(vehiclePosition?.latitude) &&
+      Number.isFinite(vehiclePosition?.longitude)
         ? [Number(vehiclePosition.latitude), Number(vehiclePosition.longitude)]
         : null);
 
@@ -1206,15 +1485,27 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       return plannedDistanceKm > 0 ? plannedDistanceKm : null;
     }
 
-    const remainingKm = remainingRouteDistanceKm(displayPlannedRoutePolyline, routePoint);
+    const remainingKm = remainingRouteDistanceKm(
+      displayPlannedRoutePolyline,
+      routePoint,
+    );
     if (!Number.isFinite(remainingKm)) {
       return plannedDistanceKm > 0 ? plannedDistanceKm : null;
     }
 
     return Math.max(0, remainingKm);
-  }, [displayPlannedRoutePolyline, plannedDistanceKm, snappedVehiclePoint, vehiclePosition?.latitude, vehiclePosition?.longitude]);
+  }, [
+    displayPlannedRoutePolyline,
+    plannedDistanceKm,
+    snappedVehiclePoint,
+    vehiclePosition?.latitude,
+    vehiclePosition?.longitude,
+  ]);
   const routeProgressSegments = useMemo(() => {
-    if (!Array.isArray(displayPlannedRoutePolyline) || displayPlannedRoutePolyline.length < 2) {
+    if (
+      !Array.isArray(displayPlannedRoutePolyline) ||
+      displayPlannedRoutePolyline.length < 2
+    ) {
       return { remaining: null };
     }
 
@@ -1233,15 +1524,18 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       return 0;
     }
 
-    return clampPercent(((plannedDistanceKm - remainingDistanceKm) / plannedDistanceKm) * 100);
+    return clampPercent(
+      ((plannedDistanceKm - remainingDistanceKm) / plannedDistanceKm) * 100,
+    );
   }, [plannedDistanceKm, remainingDistanceKm]);
 
   const vehicleLabel = useMemo(() => {
     const driverDetail = routeInfo?.driver_detail;
     if (driverDetail?.license_number) return driverDetail.license_number;
-    if (driverDetail?.user_detail?.username) return driverDetail.user_detail.username;
+    if (driverDetail?.user_detail?.username)
+      return driverDetail.user_detail.username;
     if (routeInfo?.name) return routeInfo.name;
-    return 'Vehiculo';
+    return "Vehiculo";
   }, [routeInfo]);
 
   const vehicleSummary = useMemo(() => {
@@ -1252,20 +1546,29 @@ export default function TrackingPage({ routeId: routeIdProp }) {
         longitude: null,
         speedKmh: 0,
         studentsOnboard: 0,
-        status: 'Detenido',
+        status: "Detenido",
       };
     }
 
     const latest = displayTrackings[displayTrackings.length - 1];
-    const previous = displayTrackings.length > 1 ? displayTrackings[displayTrackings.length - 2] : null;
+    const previous =
+      displayTrackings.length > 1
+        ? displayTrackings[displayTrackings.length - 2]
+        : null;
 
-    let speedKmh = toNumber(latest.speed ?? latest.speed_kmh ?? latest.velocity) || 0;
+    let speedKmh =
+      toNumber(latest.speed ?? latest.speed_kmh ?? latest.velocity) || 0;
     if (!speedKmh && previous?.timestamp && latest.timestamp) {
       const t1 = new Date(previous.timestamp).getTime();
       const t2 = new Date(latest.timestamp).getTime();
       const deltaH = (t2 - t1) / 3600000;
       if (deltaH > 0) {
-        const dist = distanceKm(previous.latitude, previous.longitude, latest.latitude, latest.longitude);
+        const dist = distanceKm(
+          previous.latitude,
+          previous.longitude,
+          latest.latitude,
+          latest.longitude,
+        );
         speedKmh = Math.max(0, Math.round(dist / deltaH));
       }
     }
@@ -1275,9 +1578,9 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       if (t.passenger == null) return;
       latestByPassenger.set(String(t.passenger), t);
     });
-    const studentsOnboard = Array.from(latestByPassenger.values())
-      .filter((t) => t.status === 'picked')
-      .length;
+    const studentsOnboard = Array.from(latestByPassenger.values()).filter(
+      (t) => t.status === "picked",
+    ).length;
 
     return {
       label: vehicleLabel,
@@ -1285,53 +1588,87 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       longitude: latest.longitude,
       speedKmh,
       studentsOnboard,
-      status: speedKmh > 3 ? 'En ruta' : 'Detenido',
+      status: speedKmh > 3 ? "En ruta" : "Detenido",
     };
   }, [displayTrackings, vehicleLabel]);
 
   // Derivar estado legible de la ruta: 'en_curso' | 'finalizada' | 'detenida'
   const routeState = useMemo(() => {
     if (routeIsLive) {
-      if (Number.isFinite(remainingDistanceKm) && remainingDistanceKm <= 0.03) return 'finalizada';
-      return 'en_curso';
+      if (Number.isFinite(remainingDistanceKm) && remainingDistanceKm <= 0.03)
+        return "finalizada";
+      return "en_curso";
     }
-    if (vehicleSummary?.status === 'Detenido') return 'detenida';
-    return 'detenida';
+    if (vehicleSummary?.status === "Detenido") return "detenida";
+    return "detenida";
   }, [routeIsLive, remainingDistanceKm, vehicleSummary]);
 
   const routeBadge = useMemo(() => {
-    if (routeState === 'finalizada') {
-      return { className: 'verified', label: 'Recorrido finalizado', statusLabel: 'Finalizada' };
+    if (routeState === "finalizada") {
+      return {
+        className: "verified",
+        label: "Recorrido finalizado",
+        statusLabel: "Finalizada",
+      };
     }
 
     if (routeIsLive) {
-      if (routeGeometryMode === 'verified') {
-        return { className: 'verified', label: 'Trazado verificado', statusLabel: 'En ruta' };
+      if (routeGeometryMode === "verified") {
+        return {
+          className: "verified",
+          label: "Trazado verificado",
+          statusLabel: "En ruta",
+        };
       }
-      if (routeGeometryMode === 'alternate') {
-        return { className: 'alternate', label: 'Modo alterno', statusLabel: 'En ruta' };
+      if (routeGeometryMode === "alternate") {
+        return {
+          className: "alternate",
+          label: "Modo alterno",
+          statusLabel: "En ruta",
+        };
       }
-      return { className: 'pending', label: 'Monitoreo activo', statusLabel: 'En ruta' };
+      return {
+        className: "pending",
+        label: "Monitoreo activo",
+        statusLabel: "En ruta",
+      };
     }
 
-    if (routeGeometryMode === 'verified') {
-      return { className: 'verified', label: 'Trazado verificado', statusLabel: 'Trazada' };
+    if (routeGeometryMode === "verified") {
+      return {
+        className: "verified",
+        label: "Trazado verificado",
+        statusLabel: "Trazada",
+      };
     }
-    if (routeGeometryMode === 'alternate') {
-      return { className: 'alternate', label: 'Modo alterno', statusLabel: 'Alterna' };
+    if (routeGeometryMode === "alternate") {
+      return {
+        className: "alternate",
+        label: "Modo alterno",
+        statusLabel: "Alterna",
+      };
     }
-    return { className: 'pending', label: 'Pendiente de ubicar', statusLabel: 'Buscando' };
+    return {
+      className: "pending",
+      label: "Pendiente de ubicar",
+      statusLabel: "Buscando",
+    };
   }, [routeGeometryMode, routeIsLive, routeState]);
 
   const activeVehicles = useMemo(() => {
     if (!hasLiveData) return [];
 
-    if (Number.isFinite(vehiclePosition?.latitude) && Number.isFinite(vehiclePosition?.longitude)) {
-      return [{
-        ...vehicleSummary,
-        latitude: vehiclePosition.latitude,
-        longitude: vehiclePosition.longitude,
-      }];
+    if (
+      Number.isFinite(vehiclePosition?.latitude) &&
+      Number.isFinite(vehiclePosition?.longitude)
+    ) {
+      return [
+        {
+          ...vehicleSummary,
+          latitude: vehiclePosition.latitude,
+          longitude: vehiclePosition.longitude,
+        },
+      ];
     }
 
     const latestByPassenger = new Map();
@@ -1341,29 +1678,44 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     });
 
     if (latestByPassenger.size > 0) {
-      const groupedVehicles = Array.from(latestByPassenger.entries()).map(([passengerId, t], idx) => {
-        const speed = toNumber(t.speed ?? t.speed_kmh ?? t.velocity) || 0;
-        return {
-          label: `${vehicleLabel}-P${String(passengerId).padStart(2, '0')}`,
-          latitude: t.latitude,
-          longitude: t.longitude,
-          speedKmh: speed,
-          studentsOnboard: t.status === 'picked' ? 1 : 0,
-          status: speed > 3 ? 'En ruta' : 'Detenido',
-          _order: idx,
-        };
-      }).filter((v) => Number.isFinite(v.latitude) && Number.isFinite(v.longitude));
+      const groupedVehicles = Array.from(latestByPassenger.entries())
+        .map(([passengerId, t], idx) => {
+          const speed = toNumber(t.speed ?? t.speed_kmh ?? t.velocity) || 0;
+          return {
+            label: `${vehicleLabel}-P${String(passengerId).padStart(2, "0")}`,
+            latitude: t.latitude,
+            longitude: t.longitude,
+            speedKmh: speed,
+            studentsOnboard: t.status === "picked" ? 1 : 0,
+            status: speed > 3 ? "En ruta" : "Detenido",
+            _order: idx,
+          };
+        })
+        .filter(
+          (v) => Number.isFinite(v.latitude) && Number.isFinite(v.longitude),
+        );
 
       if (groupedVehicles.length > 0) {
-        return groupedVehicles.slice(0, 4).sort((a, b) => b.speedKmh - a.speedKmh || a._order - b._order);
+        return groupedVehicles
+          .slice(0, 4)
+          .sort((a, b) => b.speedKmh - a.speedKmh || a._order - b._order);
       }
     }
 
-    if (!Number.isFinite(vehicleSummary.latitude) || !Number.isFinite(vehicleSummary.longitude)) {
+    if (
+      !Number.isFinite(vehicleSummary.latitude) ||
+      !Number.isFinite(vehicleSummary.longitude)
+    ) {
       return [];
     }
     return [vehicleSummary];
-  }, [displayTrackings, hasLiveData, vehicleLabel, vehiclePosition, vehicleSummary]);
+  }, [
+    displayTrackings,
+    hasLiveData,
+    vehicleLabel,
+    vehiclePosition,
+    vehicleSummary,
+  ]);
 
   const displayVehiclePosition = useMemo(() => {
     if (!snappedVehiclePoint) return vehiclePosition;
@@ -1375,16 +1727,22 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   }, [snappedVehiclePoint, vehiclePosition]);
 
   const normalizedAdminRouteFilterIds = useMemo(
-    () => adminRouteFilterIds.map((routeId) => Number(routeId)).filter(Number.isFinite),
+    () =>
+      adminRouteFilterIds
+        .map((routeId) => Number(routeId))
+        .filter(Number.isFinite),
     [adminRouteFilterIds],
   );
 
-  const hasAdminRouteFilter = isAdminView && normalizedAdminRouteFilterIds.length > 0;
+  const hasAdminRouteFilter =
+    isAdminView && normalizedAdminRouteFilterIds.length > 0;
 
   const filteredAdminRouteSummaries = useMemo(() => {
     if (!hasAdminRouteFilter) return adminRouteSummaries;
     const routeIdSet = new Set(normalizedAdminRouteFilterIds);
-    return adminRouteSummaries.filter((route) => routeIdSet.has(Number(route.id)));
+    return adminRouteSummaries.filter((route) =>
+      routeIdSet.has(Number(route.id)),
+    );
   }, [adminRouteSummaries, hasAdminRouteFilter, normalizedAdminRouteFilterIds]);
 
   const highlightedAdminRouteIds = useMemo(
@@ -1394,7 +1752,8 @@ export default function TrackingPage({ routeId: routeIdProp }) {
 
   const displayActiveVehicles = useMemo(() => {
     if (isAdminView) return adminActiveVehicles;
-    if (!snappedVehiclePoint || activeVehicles.length === 0) return activeVehicles;
+    if (!snappedVehiclePoint || activeVehicles.length === 0)
+      return activeVehicles;
 
     return activeVehicles.map((vehicle, index) => {
       if (index !== 0) return vehicle;
@@ -1410,7 +1769,9 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const contextualAdminAlerts = useMemo(() => {
     if (!isAdminView) return [];
 
-    const selectedRouteSummary = adminRouteSummaries.find((route) => Number(route.id) === selectedRouteId);
+    const selectedRouteSummary = adminRouteSummaries.find(
+      (route) => Number(route.id) === selectedRouteId,
+    );
     if (!selectedRouteSummary || selectedRouteSummary.is_live) {
       return adminAlerts;
     }
@@ -1418,9 +1779,9 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     return [
       ...adminAlerts,
       {
-        id: 'selected-route-without-live-monitoring',
-        tone: 'info',
-        title: 'Ruta abierta sin monitoreo vivo',
+        id: "selected-route-without-live-monitoring",
+        tone: "info",
+        title: "Ruta abierta sin monitoreo vivo",
         detail: `La ruta ${selectedRouteSummary.name} aparece como ${selectedRouteSummary.state_label.toLowerCase()}.`,
         route_ids: [selectedRouteSummary.id],
       },
@@ -1429,7 +1790,9 @@ export default function TrackingPage({ routeId: routeIdProp }) {
 
   const handleAdminAlertAction = (alert) => {
     const routeIds = Array.isArray(alert?.route_ids)
-      ? alert.route_ids.map((routeId) => Number(routeId)).filter(Number.isFinite)
+      ? alert.route_ids
+          .map((routeId) => Number(routeId))
+          .filter(Number.isFinite)
       : [];
 
     if (routeIds.length === 1) {
@@ -1439,8 +1802,11 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     }
 
     if (routeIds.length > 1) {
-      const isSameFilter = routeIds.length === normalizedAdminRouteFilterIds.length
-        && routeIds.every((routeId) => normalizedAdminRouteFilterIds.includes(routeId));
+      const isSameFilter =
+        routeIds.length === normalizedAdminRouteFilterIds.length &&
+        routeIds.every((routeId) =>
+          normalizedAdminRouteFilterIds.includes(routeId),
+        );
       setAdminRouteFilterIds(isSameFilter ? [] : routeIds);
       return;
     }
@@ -1450,17 +1816,22 @@ export default function TrackingPage({ routeId: routeIdProp }) {
 
   const getAdminAlertActionLabel = (alert) => {
     const routeIds = Array.isArray(alert?.route_ids) ? alert.route_ids : [];
-    if (routeIds.length === 1) return 'Abrir ruta';
+    if (routeIds.length === 1) return "Abrir ruta";
     if (routeIds.length > 1) {
-      const normalizedRouteIds = routeIds.map((routeId) => Number(routeId)).filter(Number.isFinite);
-      const isSameFilter = normalizedRouteIds.length === normalizedAdminRouteFilterIds.length
-        && normalizedRouteIds.every((routeId) => normalizedAdminRouteFilterIds.includes(routeId));
-      return isSameFilter ? 'Limpiar filtro' : 'Filtrar mapa';
+      const normalizedRouteIds = routeIds
+        .map((routeId) => Number(routeId))
+        .filter(Number.isFinite);
+      const isSameFilter =
+        normalizedRouteIds.length === normalizedAdminRouteFilterIds.length &&
+        normalizedRouteIds.every((routeId) =>
+          normalizedAdminRouteFilterIds.includes(routeId),
+        );
+      return isSameFilter ? "Limpiar filtro" : "Filtrar mapa";
     }
-    return 'Ver impacto';
+    return "Ver impacto";
   };
 
-  const etaLabel = eta === null ? 'Sin ETA' : `${eta} min`;
+  const etaLabel = eta === null ? "Sin ETA" : `${eta} min`;
 
   const stopGuidedRoute = () => {
     if (guidedRouteTimerRef.current) {
@@ -1481,22 +1852,25 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       longitude: point[1],
       speed_kmh: GUIDED_ROUTE_SPEED_KMH,
       timestamp,
-      source: 'tracking-guided-route',
-      status: 'picked',
+      source: "tracking-guided-route",
+      status: "picked",
     };
 
     const normalized = normalizeTracking(payload, timestamp);
     if (normalized) {
-      dispatch({ type: 'MERGE_TRACKINGS', payload: [normalized] });
+      dispatch({ type: "MERGE_TRACKINGS", payload: [normalized] });
       dispatch({
-        type: 'SET_VEHICLE_POSITION',
+        type: "SET_VEHICLE_POSITION",
         payload: {
           latitude: normalized.latitude,
           longitude: normalized.longitude,
           timestamp: normalized.timestamp,
         },
       });
-      dispatch({ type: 'APPEND_ROUTE_POINT', payload: [normalized.latitude, normalized.longitude] });
+      dispatch({
+        type: "APPEND_ROUTE_POINT",
+        payload: [normalized.latitude, normalized.longitude],
+      });
     }
 
     await sendDriverLocation(payload);
@@ -1514,9 +1888,13 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       const fullPath = guidedRouteFullPathRef.current;
       const sampledPath = guidedRoutePointsRef.current;
       if (fullPath.length > 1 && sampledPath.length > 0) {
-        const exactIndex = sampledPath.length === 1
-          ? fullPath.length - 1
-          : Math.round((currentStepIndex / (sampledPath.length - 1)) * (fullPath.length - 1));
+        const exactIndex =
+          sampledPath.length === 1
+            ? fullPath.length - 1
+            : Math.round(
+                (currentStepIndex / (sampledPath.length - 1)) *
+                  (fullPath.length - 1),
+              );
         setGuidedRouteDisplayPath(fullPath.slice(0, exactIndex + 1));
       }
 
@@ -1534,70 +1912,107 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       }, GUIDED_ROUTE_STEP_MS);
     } catch {
       stopGuidedRoute();
-      setGuidedRouteError('No se pudo iniciar o continuar la ruta guiada.');
+      setGuidedRouteError("No se pudo iniciar o continuar la ruta guiada.");
     }
   };
 
   const startGuidedRoute = async () => {
-    if (guidedRouteLoading || guidedRouteRunning || !Number.isFinite(selectedRouteId)) return;
+    if (
+      guidedRouteLoading ||
+      guidedRouteRunning ||
+      !Number.isFinite(selectedRouteId)
+    )
+      return;
     if (!canManageGuidedRoute) {
-      setGuidedRouteError('Solo el conductor puede iniciar la ruta. El seguimiento del usuario se activara cuando el conductor empiece el recorrido.');
+      setGuidedRouteError(
+        "Solo el conductor puede iniciar la ruta. El seguimiento del usuario se activara cuando el conductor empiece el recorrido.",
+      );
       return;
     }
 
-    setGuidedRouteError('');
+    setGuidedRouteError("");
     setGuidedRouteLoading(true);
 
     try {
-      let playbackRoute = Array.isArray(routePolyline) && routePolyline.length > 1 ? routePolyline : null;
+      let playbackRoute =
+        Array.isArray(routePolyline) && routePolyline.length > 1
+          ? routePolyline
+          : null;
       if (!playbackRoute && routeInfo?.origin && routeInfo?.destination) {
         const [from, to] = await Promise.all([
           geocodeAddress(routeInfo.origin, { fallbackCoords: userCoords }),
           geocodeAddress(routeInfo.destination, { fallbackCoords: userCoords }),
         ]);
-        const waypointCoords = buildRouteWaypointCoordinates(from, to, routeInfo?.intermediate_stops);
-        const streetRoute = waypointCoords.length > 1 ? await getStreetRouteThroughPoints(waypointCoords) : null;
-        let routeCoordinates = streetRoute && !streetRoute.isStraightLine ? streetRoute.coordinates : null;
+        const waypointCoords = buildRouteWaypointCoordinates(
+          from,
+          to,
+          routeInfo?.intermediate_stops,
+        );
+        const streetRoute =
+          waypointCoords.length > 1
+            ? await getStreetRouteThroughPoints(waypointCoords)
+            : null;
+        let routeCoordinates =
+          streetRoute && !streetRoute.isStraightLine
+            ? streetRoute.coordinates
+            : null;
 
         // If OSRM route failed, build road path between endpoints as last resort
         if (!routeCoordinates && waypointCoords.length > 1) {
           try {
             const roadPath = await buildRoadPathBetweenPoints(waypointCoords);
             if (roadPath?.length > 2) routeCoordinates = roadPath;
-          } catch { /* use straight line as last resort */ }
+          } catch {
+            /* use straight line as last resort */
+          }
         }
 
-        playbackRoute = routeCoordinates || (waypointCoords.length > 1 ? waypointCoords : null);
+        playbackRoute =
+          routeCoordinates ||
+          (waypointCoords.length > 1 ? waypointCoords : null);
         if (routeCoordinates?.length > 1) {
           setRoutePolyline(playbackRoute);
           setOriginCoords(from);
           setDestinationCoords(to);
           setForceBuenaventuraDemo(false);
-          setRouteGeometryMode(streetRoute && !streetRoute.isStraightLine ? 'verified' : 'alternate');
+          setRouteGeometryMode(
+            streetRoute && !streetRoute.isStraightLine
+              ? "verified"
+              : "alternate",
+          );
         } else if (Array.isArray(from) && Array.isArray(to)) {
-          setRouteGeometryMode('alternate');
+          setRouteGeometryMode("alternate");
         }
       }
 
       const exactRoute = dedupeConsecutivePoints(playbackRoute);
       const sampledRoute = sampleGuidedRoute(exactRoute);
       if (!sampledRoute || sampledRoute.length < 2) {
-        throw new Error('guided-route-unavailable');
+        throw new Error("guided-route-unavailable");
       }
 
       // notify start immediately so backend/admin views mark route as live
       try {
-        const startPoint = (exactRoute && exactRoute.length > 0 && exactRoute[0])
-          || (Number.isFinite(vehiclePosition?.latitude) && Number.isFinite(vehiclePosition?.longitude) && [Number(vehiclePosition.latitude), Number(vehiclePosition.longitude)])
-          || (Array.isArray(originCoords) && originCoords);
-        if (startPoint && Number.isFinite(startPoint[0]) && Number.isFinite(startPoint[1])) {
+        const startPoint =
+          (exactRoute && exactRoute.length > 0 && exactRoute[0]) ||
+          (Number.isFinite(vehiclePosition?.latitude) &&
+            Number.isFinite(vehiclePosition?.longitude) && [
+              Number(vehiclePosition.latitude),
+              Number(vehiclePosition.longitude),
+            ]) ||
+          (Array.isArray(originCoords) && originCoords);
+        if (
+          startPoint &&
+          Number.isFinite(startPoint[0]) &&
+          Number.isFinite(startPoint[1])
+        ) {
           await sendDriverLocation({
             route: selectedRouteId,
             latitude: startPoint[0],
             longitude: startPoint[1],
             speed_kmh: 0,
             timestamp: new Date().toISOString(),
-            source: 'route-start',
+            source: "route-start",
           }).catch(() => {});
         }
       } catch {
@@ -1615,7 +2030,9 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       void runGuidedRouteStep();
     } catch {
       stopGuidedRoute();
-      setGuidedRouteError('No fue posible preparar la ruta guiada para esta ruta.');
+      setGuidedRouteError(
+        "No fue posible preparar la ruta guiada para esta ruta.",
+      );
     } finally {
       setGuidedRouteLoading(false);
     }
@@ -1623,13 +2040,17 @@ export default function TrackingPage({ routeId: routeIdProp }) {
 
   // Notificar fin de ruta cuando el estado derive a 'finalizada'
   useEffect(() => {
-    if (routeState !== 'finalizada') return undefined;
+    if (routeState !== "finalizada") return undefined;
     if (routeEndNotifiedRef.current) {
       // Show toast for users even if already notified to backend
-      if (currentRole !== 'driver') {
+      if (currentRole !== "driver") {
         setShowRouteFinishedToast(true);
-        if (routeFinishedTimerRef.current) clearTimeout(routeFinishedTimerRef.current);
-        routeFinishedTimerRef.current = setTimeout(() => setShowRouteFinishedToast(false), 3600);
+        if (routeFinishedTimerRef.current)
+          clearTimeout(routeFinishedTimerRef.current);
+        routeFinishedTimerRef.current = setTimeout(
+          () => setShowRouteFinishedToast(false),
+          3600,
+        );
       }
       return undefined;
     }
@@ -1637,19 +2058,30 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     routeEndNotifiedRef.current = true;
 
     // Mostrar toast para usuarios
-    if (currentRole !== 'driver') {
+    if (currentRole !== "driver") {
       setShowRouteFinishedToast(true);
-      if (routeFinishedTimerRef.current) clearTimeout(routeFinishedTimerRef.current);
-      routeFinishedTimerRef.current = setTimeout(() => setShowRouteFinishedToast(false), 3600);
+      if (routeFinishedTimerRef.current)
+        clearTimeout(routeFinishedTimerRef.current);
+      routeFinishedTimerRef.current = setTimeout(
+        () => setShowRouteFinishedToast(false),
+        3600,
+      );
     }
 
     // Si somos conductor, enviar notificación final al backend
-    if (currentRole === 'driver' && Number.isFinite(selectedRouteId)) {
+    if (currentRole === "driver" && Number.isFinite(selectedRouteId)) {
       (async () => {
         try {
-          const endPoint = (Number.isFinite(vehiclePosition?.latitude) && Number.isFinite(vehiclePosition?.longitude))
-            ? [Number(vehiclePosition.latitude), Number(vehiclePosition.longitude)]
-            : (Array.isArray(destinationCoords) ? destinationCoords : null);
+          const endPoint =
+            Number.isFinite(vehiclePosition?.latitude) &&
+            Number.isFinite(vehiclePosition?.longitude)
+              ? [
+                  Number(vehiclePosition.latitude),
+                  Number(vehiclePosition.longitude),
+                ]
+              : Array.isArray(destinationCoords)
+                ? destinationCoords
+                : null;
           if (endPoint) {
             await sendDriverLocation({
               route: selectedRouteId,
@@ -1657,7 +2089,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
               longitude: endPoint[1],
               speed_kmh: 0,
               timestamp: new Date().toISOString(),
-              source: 'route-end',
+              source: "route-end",
             }).catch(() => {});
           }
         } catch {
@@ -1675,30 +2107,49 @@ export default function TrackingPage({ routeId: routeIdProp }) {
         routeFinishedTimerRef.current = null;
       }
     };
-
-    
-  }, [routeState, currentRole, selectedRouteId, vehiclePosition, destinationCoords, guidedRouteRunning]);
+  }, [
+    routeState,
+    currentRole,
+    selectedRouteId,
+    vehiclePosition,
+    destinationCoords,
+    guidedRouteRunning,
+  ]);
 
   // Transmisión en vivo (conductor) se controla con `sharingWatchIdRef` y `stopSharing`.
 
   const stopSharing = async () => {
     if (sharingWatchIdRef.current) {
-      try { navigator.geolocation.clearWatch(sharingWatchIdRef.current); } catch (e) { /* ignore */ }
+      try {
+        navigator.geolocation.clearWatch(sharingWatchIdRef.current);
+      } catch (e) {
+        /* ignore */
+      }
       sharingWatchIdRef.current = null;
     }
     setSharing(false);
 
     try {
       const pos = displayVehiclePosition;
-      if (Number.isFinite(selectedRouteId) && pos && Number.isFinite(pos.latitude) && Number.isFinite(pos.longitude)) {
-        await sendDriverLocation({ route: selectedRouteId, latitude: pos.latitude, longitude: pos.longitude, speed_kmh: 0, timestamp: new Date().toISOString(), source: 'transmission-stop' }).catch(() => {});
+      if (
+        Number.isFinite(selectedRouteId) &&
+        pos &&
+        Number.isFinite(pos.latitude) &&
+        Number.isFinite(pos.longitude)
+      ) {
+        await sendDriverLocation({
+          route: selectedRouteId,
+          latitude: pos.latitude,
+          longitude: pos.longitude,
+          speed_kmh: 0,
+          timestamp: new Date().toISOString(),
+          source: "transmission-stop",
+        }).catch(() => {});
       }
     } catch {
       // ignore
     }
   };
-
-  
 
   const handleStopAll = async () => {
     // Stop guided playback and live transmission
@@ -1723,19 +2174,32 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           eyebrow="Sistema activo"
           title="Tracking en tiempo real"
           description="Monitorea rutas activas, localiza conductores y sigue cada recorrido en tiempo real."
-          subtitle={isAdminView ? '' : (routeInfo?.name || (Number.isFinite(selectedRouteId) ? `Ruta #${selectedRouteId}` : ''))}
-          meta={(
+          subtitle={
+            isAdminView
+              ? ""
+              : routeInfo?.name ||
+                (Number.isFinite(selectedRouteId)
+                  ? `Ruta #${selectedRouteId}`
+                  : "")
+          }
+          meta={
             <>
               <span className={`status-badge ${statusBadge.color}`}>
                 <span className="status-dot" />
                 {statusBadge.label}
               </span>
-              <span className="tracking-page-hero-updates">{trackings.length} actualizaciones</span>
+              <span className="tracking-page-hero-updates">
+                {trackings.length} actualizaciones
+              </span>
             </>
-          )}
+          }
         />
         {showRouteFinishedToast && (
-          <div className="route-finished-toast" role="status" aria-live="polite">
+          <div
+            className="route-finished-toast"
+            role="status"
+            aria-live="polite"
+          >
             Recorrido finalizado
           </div>
         )}
@@ -1751,18 +2215,26 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                     <p className="kpi-label">KPIs globales</p>
                     <h2 className="panel-title">Vision general</h2>
                   </div>
-                  <span className="panel-counter">{displayActiveVehicles.length}</span>
+                  <span className="panel-counter">
+                    {displayActiveVehicles.length}
+                  </span>
                 </div>
 
                 <div className="admin-kpi-grid">
                   <article className="admin-kpi-tile">
                     <span className="admin-kpi-name">Vehiculos activos</span>
-                    <strong className="admin-kpi-number">{displayActiveVehicles.length}</strong>
-                    <span className="admin-kpi-helper">de {adminStats?.vehicles_registered ?? 0} registrados</span>
+                    <strong className="admin-kpi-number">
+                      {displayActiveVehicles.length}
+                    </strong>
+                    <span className="admin-kpi-helper">
+                      de {adminStats?.vehicles_registered ?? 0} registrados
+                    </span>
                   </article>
                   <article className="admin-kpi-tile">
                     <span className="admin-kpi-name">Estudiantes</span>
-                    <strong className="admin-kpi-number">{totalStudents}</strong>
+                    <strong className="admin-kpi-number">
+                      {totalStudents}
+                    </strong>
                     <span className="admin-kpi-helper">asignados a rutas</span>
                   </article>
                 </div>
@@ -1774,13 +2246,22 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                     <p className="kpi-label">Rutas activas</p>
                     <h2 className="panel-title">Operacion en ciudad</h2>
                   </div>
-                  <span className="panel-counter">{filteredAdminRouteSummaries.length}</span>
+                  <span className="panel-counter">
+                    {filteredAdminRouteSummaries.length}
+                  </span>
                 </div>
 
                 {hasAdminRouteFilter && (
                   <div className="admin-filter-banner">
-                    <span className="admin-filter-text">Filtro activo sobre {filteredAdminRouteSummaries.length} ruta(s).</span>
-                    <button type="button" className="admin-filter-clear" onClick={() => setAdminRouteFilterIds([])}>
+                    <span className="admin-filter-text">
+                      Filtro activo sobre {filteredAdminRouteSummaries.length}{" "}
+                      ruta(s).
+                    </span>
+                    <button
+                      type="button"
+                      className="admin-filter-clear"
+                      onClick={() => setAdminRouteFilterIds([])}
+                    >
                       Limpiar
                     </button>
                   </div>
@@ -1791,20 +2272,39 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                 ) : (
                   <div className="admin-route-list" role="list">
                     {filteredAdminRouteSummaries.map((route) => (
-                      <article key={route.id} className="admin-route-item" role="listitem">
+                      <article
+                        key={route.id}
+                        className="admin-route-item"
+                        role="listitem"
+                      >
                         <div className="admin-route-head">
                           <div>
                             <h3 className="admin-route-name">{route.name}</h3>
-                            <p className="admin-route-driver">{route.driver_name}</p>
+                            <p className="admin-route-driver">
+                              {route.driver_name}
+                            </p>
                           </div>
-                          <span className={`admin-route-state ${route.is_live ? 'live' : 'idle'}`}>{route.state_label}</span>
+                          <span
+                            className={`admin-route-state ${route.is_live ? "live" : "idle"}`}
+                          >
+                            {route.state_label}
+                          </span>
                         </div>
                         <div className="admin-route-progress-row">
-                          <span className="admin-route-progress-label">Avance</span>
-                          <strong className="admin-route-progress-value">{route.progress_percent}%</strong>
+                          <span className="admin-route-progress-label">
+                            Avance
+                          </span>
+                          <strong className="admin-route-progress-value">
+                            {route.progress_percent}%
+                          </strong>
                         </div>
-                        <div className="admin-route-progress-bar" aria-hidden="true">
-                          <span style={{ width: `${route.progress_percent}%` }} />
+                        <div
+                          className="admin-route-progress-bar"
+                          aria-hidden="true"
+                        >
+                          <span
+                            style={{ width: `${route.progress_percent}%` }}
+                          />
                         </div>
                       </article>
                     ))}
@@ -1818,15 +2318,22 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                     <p className="kpi-label">Alertas</p>
                     <h2 className="panel-title">Monitoreo operativo</h2>
                   </div>
-                  <span className="panel-counter">{contextualAdminAlerts.length}</span>
+                  <span className="panel-counter">
+                    {contextualAdminAlerts.length}
+                  </span>
                 </div>
 
                 {contextualAdminAlerts.length === 0 ? (
-                  <p className="panel-muted">Sin alertas operativas por ahora.</p>
+                  <p className="panel-muted">
+                    Sin alertas operativas por ahora.
+                  </p>
                 ) : (
                   <div className="admin-alert-list">
                     {contextualAdminAlerts.map((alert) => (
-                      <article key={alert.id || `${alert.title}-${alert.detail}`} className={`admin-alert-item ${alert.tone}`}>
+                      <article
+                        key={alert.id || `${alert.title}-${alert.detail}`}
+                        className={`admin-alert-item ${alert.tone}`}
+                      >
                         <div className="admin-alert-head">
                           <div>
                             <p className="admin-alert-title">{alert.title}</p>
@@ -1849,11 +2356,13 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           ) : (
             <>
               <section className="kpi-card">
-                {currentRole === 'driver' && (
+                {currentRole === "driver" && (
                   <div className="route-select-row">
                     <label className="kpi-label">Ruta activa</label>
                     <select
-                      value={Number.isFinite(selectedRouteId) ? selectedRouteId : ''}
+                      value={
+                        Number.isFinite(selectedRouteId) ? selectedRouteId : ""
+                      }
                       onChange={(e) => {
                         const val = Number(e.target.value);
                         if (Number.isFinite(val)) navigate(`/tracking/${val}`);
@@ -1863,7 +2372,9 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                     >
                       <option value="">Selecciona una ruta</option>
                       {driverRoutes.map((r) => (
-                        <option key={r.id} value={r.id}>{r.name || `Ruta ${r.id}`}</option>
+                        <option key={r.id} value={r.id}>
+                          {r.name || `Ruta ${r.id}`}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -1873,13 +2384,17 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                   <span className={`route-auth-badge ${routeBadge.className}`}>
                     {routeBadge.label}
                   </span>
-                  {currentRole === 'driver' && (
+                  {currentRole === "driver" && (
                     <button
                       type="button"
-                      onClick={() => setMode((m) => (m === 'manual' ? 'automatic' : 'manual'))}
-                      className={`mode-toggle ${mode === 'manual' ? 'manual' : 'automatic'}`}
+                      onClick={() =>
+                        setMode((m) =>
+                          m === "manual" ? "automatic" : "manual",
+                        )
+                      }
+                      className={`mode-toggle ${mode === "manual" ? "manual" : "automatic"}`}
                     >
-                      Modo {mode === 'manual' ? 'Manual' : 'Auto'}
+                      Modo {mode === "manual" ? "Manual" : "Auto"}
                     </button>
                   )}
                 </div>
@@ -1888,7 +2403,9 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                     <span className="route-stop-dot" aria-hidden="true" />
                     <div>
                       <p className="kpi-label">Origen</p>
-                      <p className="kpi-value">{routeInfo?.origin || 'Centro, Buenaventura'}</p>
+                      <p className="kpi-value">
+                        {routeInfo?.origin || "Centro, Buenaventura"}
+                      </p>
                     </div>
                   </div>
                   <div className="route-stop-divider" aria-hidden="true" />
@@ -1896,7 +2413,9 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                     <span className="route-stop-dot" aria-hidden="true" />
                     <div>
                       <p className="kpi-label">Destino</p>
-                      <p className="kpi-value">{routeInfo?.destination || 'Seminario San Buenaventura'}</p>
+                      <p className="kpi-value">
+                        {routeInfo?.destination || "Seminario San Buenaventura"}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -1907,22 +2426,38 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                   </div>
                   <div className="route-metric-tile">
                     <span className="route-metric-label">Planificada</span>
-                    <strong className="route-metric-value">{plannedDistanceKm > 0 ? `${plannedDistanceKm.toFixed(1)} km` : 'Sin trazo'}</strong>
+                    <strong className="route-metric-value">
+                      {plannedDistanceKm > 0
+                        ? `${plannedDistanceKm.toFixed(1)} km`
+                        : "Sin trazo"}
+                    </strong>
                   </div>
                   <div className="route-metric-tile">
                     <span className="route-metric-label">Recorrida</span>
-                    <strong className="route-metric-value">{traveledDistanceKm > 0 ? `${traveledDistanceKm.toFixed(1)} km` : '0.0 km'}</strong>
+                    <strong className="route-metric-value">
+                      {traveledDistanceKm > 0
+                        ? `${traveledDistanceKm.toFixed(1)} km`
+                        : "0.0 km"}
+                    </strong>
                   </div>
                   <div className="route-metric-tile">
                     <span className="route-metric-label">Pendiente</span>
-                    <strong className="route-metric-value">{remainingDistanceKm !== null ? `${remainingDistanceKm.toFixed(1)} km` : 'Sin trazo'}</strong>
+                    <strong className="route-metric-value">
+                      {remainingDistanceKm !== null
+                        ? `${remainingDistanceKm.toFixed(1)} km`
+                        : "Sin trazo"}
+                    </strong>
                   </div>
                 </div>
                 {(canManageGuidedRoute || isAdminView) && (
                   <div className="route-progress-block">
                     <div className="route-progress-row">
-                      <span className="route-progress-label">Progreso del recorrido</span>
-                      <strong className="route-progress-value">{routeProgressPercent}%</strong>
+                      <span className="route-progress-label">
+                        Progreso del recorrido
+                      </span>
+                      <strong className="route-progress-value">
+                        {routeProgressPercent}%
+                      </strong>
                     </div>
                     <div className="route-progress-bar" aria-hidden="true">
                       <span style={{ width: `${routeProgressPercent}%` }} />
@@ -1933,11 +2468,17 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                   <>
                     <div className="kpi-eta-row">
                       <span className="kpi-label">Estado de ruta</span>
-                      <strong className="kpi-eta-value">{routeBadge.statusLabel}</strong>
+                      <strong className="kpi-eta-value">
+                        {routeBadge.statusLabel}
+                      </strong>
                     </div>
                     {etaUpdated && (
                       <p className="kpi-updated">
-                        Actualizado: {etaUpdated.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
+                        Actualizado:{" "}
+                        {etaUpdated.toLocaleTimeString("es", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
                       </p>
                     )}
                   </>
@@ -1947,42 +2488,69 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                     {/** Primary route button: label and enabled state reflect routeState and playback */}
                     <button
                       type="button"
-                      onClick={() => { setGuidedRouteError(''); void startGuidedRoute(); }}
-                      disabled={loading || guidedRouteLoading || guidedRouteRunning}
-                      className={`route-action-button primary ${guidedRouteRunning || routeState === 'en_curso' ? 'active' : ''}`}
+                      onClick={() => {
+                        setGuidedRouteError("");
+                        void startGuidedRoute();
+                      }}
+                      disabled={
+                        loading || guidedRouteLoading || guidedRouteRunning
+                      }
+                      className={`route-action-button primary ${guidedRouteRunning || routeState === "en_curso" ? "active" : ""}`}
                     >
-                      {guidedRouteLoading ? 'Preparando ruta...' : (
-                        (guidedRouteRunning || sharing) ? 'Ruta en curso' : (routeState === 'finalizada' ? 'Finalizada' : 'Iniciar Ruta')
-                      )}
+                      {guidedRouteLoading
+                        ? "Preparando ruta..."
+                        : guidedRouteRunning || sharing
+                          ? "Ruta en curso"
+                          : routeState === "finalizada"
+                            ? "Finalizada"
+                            : "Iniciar Ruta"}
                     </button>
                     <button
                       type="button"
-                      onClick={() => { void handleStopAll(); }}
-                      disabled={(!sharing && !guidedRouteRunning && !guidedRouteLoading) || routeState === 'finalizada'}
+                      onClick={() => {
+                        void handleStopAll();
+                      }}
+                      disabled={
+                        (!sharing &&
+                          !guidedRouteRunning &&
+                          !guidedRouteLoading) ||
+                        routeState === "finalizada"
+                      }
                       className="route-action-button secondary"
                     >
                       Detener
                     </button>
-                    
                   </div>
                 ) : (
                   <div className="route-status-user">
-                    <div className="route-status-row" style={{alignItems: 'center'}}>
-                      <div style={{flex: 1}}>
+                    <div
+                      className="route-status-row"
+                      style={{ alignItems: "center" }}
+                    >
+                      <div style={{ flex: 1 }}>
                         <span className="kpi-label">Estado de ruta</span>
-                        <div className={`route-status-badge ${routeBadge.className}`}>{routeBadge.statusLabel}</div>
+                        <div
+                          className={`route-status-badge ${routeBadge.className}`}
+                        >
+                          {routeBadge.statusLabel}
+                        </div>
                       </div>
-                      <div style={{textAlign: 'right'}}>
+                      <div style={{ textAlign: "right" }}>
                         <div className="eta-small">{etaLabel}</div>
                       </div>
                     </div>
 
-                    {routeState === 'finalizada' ? (
+                    {routeState === "finalizada" ? (
                       <div className="panel-empty-state">
-                        <p className="panel-muted">El recorrido ha finalizado. Gracias por usar el servicio.</p>
+                        <p className="panel-muted">
+                          El recorrido ha finalizado. Gracias por usar el
+                          servicio.
+                        </p>
                         <button
                           type="button"
-                          onClick={() => { navigate('/dashboard'); }}
+                          onClick={() => {
+                            navigate("/dashboard");
+                          }}
                           className="route-action-button primary compact"
                         >
                           Ver historial
@@ -1990,43 +2558,67 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                       </div>
                     ) : (
                       <>
-                        <p className="panel-muted">Esperando inicio por parte del conductor.</p>
+                        <p className="panel-muted">
+                          Esperando inicio por parte del conductor.
+                        </p>
                         <div className="route-progress-compact">
-                          <div className="route-progress-bar small" aria-hidden="true">
-                            <span style={{ width: `${routeProgressPercent}%` }} />
+                          <div
+                            className="route-progress-bar small"
+                            aria-hidden="true"
+                          >
+                            <span
+                              style={{ width: `${routeProgressPercent}%` }}
+                            />
                           </div>
-                          <strong className="route-progress-percent">{routeProgressPercent}%</strong>
+                          <strong className="route-progress-percent">
+                            {routeProgressPercent}%
+                          </strong>
                         </div>
-                        
                       </>
                     )}
                   </div>
                 )}
-                {guidedRouteError && <p className="panel-error">{guidedRouteError}</p>}
+                {guidedRouteError && (
+                  <p className="panel-error">{guidedRouteError}</p>
+                )}
               </section>
 
               <section className="kpi-card">
                 <div className="panel-title-row">
                   <h2 className="panel-title">Vehiculos activos</h2>
-                  <span className="panel-counter">{displayActiveVehicles.length}</span>
+                  <span className="panel-counter">
+                    {displayActiveVehicles.length}
+                  </span>
                 </div>
 
                 {loading ? (
                   <p className="panel-muted">Cargando datos...</p>
                 ) : displayActiveVehicles.length === 0 ? (
                   <div className="panel-empty-state">
-                    <p className="panel-muted">Aun no hay posicion activa para esta ruta.</p>
+                    <p className="panel-muted">
+                      Aun no hay posicion activa para esta ruta.
+                    </p>
                     {canManageGuidedRoute ? (
                       <button
                         type="button"
-                        onClick={() => { void startGuidedRoute(); }}
-                        disabled={guidedRouteLoading || guidedRouteRunning || !canStartGuidedRoute}
+                        onClick={() => {
+                          void startGuidedRoute();
+                        }}
+                        disabled={
+                          guidedRouteLoading ||
+                          guidedRouteRunning ||
+                          !canStartGuidedRoute
+                        }
                         className="route-action-button primary compact"
                       >
-                        {guidedRouteLoading ? 'Preparando...' : 'Iniciar recorrido'}
+                        {guidedRouteLoading
+                          ? "Preparando..."
+                          : "Iniciar recorrido"}
                       </button>
                     ) : (
-                      <p className="panel-muted">Esperando a que el conductor active el recorrido.</p>
+                      <p className="panel-muted">
+                        Esperando a que el conductor active el recorrido.
+                      </p>
                     )}
                   </div>
                 ) : (
@@ -2034,8 +2626,20 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                     {displayActiveVehicles.map((vehicle) => (
                       <article key={vehicle.label} className="vehicle-item">
                         <div className="vehicle-chip">
-                          <span className="vehicle-chip-icon" aria-hidden="true">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <span
+                            className="vehicle-chip-icon"
+                            aria-hidden="true"
+                          >
+                            <svg
+                              width="12"
+                              height="12"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
                               <rect x="1" y="4" width="16" height="12" rx="2" />
                               <path d="M17 8h3l3 4v4h-6V8z" />
                               <circle cx="5.5" cy="18.5" r="2.5" />
@@ -2047,14 +2651,20 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                         <div className="vehicle-stats">
                           <div>
                             <p className="stat-label">Velocidad</p>
-                            <p className="stat-value">{vehicle.speedKmh} km/h</p>
+                            <p className="stat-value">
+                              {vehicle.speedKmh} km/h
+                            </p>
                           </div>
                           <div>
                             <p className="stat-label">A bordo</p>
-                            <p className="stat-value">{vehicle.studentsOnboard}</p>
+                            <p className="stat-value">
+                              {vehicle.studentsOnboard}
+                            </p>
                           </div>
                         </div>
-                        <span className={`vehicle-status ${vehicle.status === 'En ruta' ? 'moving' : 'idle'}`}>
+                        <span
+                          className={`vehicle-status ${vehicle.status === "En ruta" ? "moving" : "idle"}`}
+                        >
                           {vehicle.status}
                         </span>
                       </article>
@@ -2066,7 +2676,9 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           )}
         </aside>
 
-        <main className={`map-container-wrapper h-[640px] ${showLiveTransition ? 'map-live-transition' : ''}`}>
+        <main
+          className={`map-container-wrapper h-[640px] ${showLiveTransition ? "map-live-transition" : ""}`}
+        >
           {showLiveToast && (
             <div className="live-toast" role="status" aria-live="polite">
               <span className="live-toast-dot" /> Conectado en vivo
@@ -2079,11 +2691,15 @@ export default function TrackingPage({ routeId: routeIdProp }) {
             traveledRoutePolyline={displayTraveledRoutePolyline}
             originCoords={displayOriginCoords}
             destinationCoords={displayDestinationCoords}
-            originName={routeInfo?.origin || 'Centro'}
-            destinationName={routeInfo?.destination || 'Seminario San Buenaventura'}
+            originName={routeInfo?.origin || "Centro"}
+            destinationName={
+              routeInfo?.destination || "Seminario San Buenaventura"
+            }
             intermediateStops={displayIntermediateStops}
             activeVehicles={displayActiveVehicles}
-            vehiclePosition={showEmptyCityCanvas ? null : displayVehiclePosition}
+            vehiclePosition={
+              showEmptyCityCanvas ? null : displayVehiclePosition
+            }
             userCoords={userCoords}
             mapHeight="640px"
             focusAllVehicles={isAdminView}

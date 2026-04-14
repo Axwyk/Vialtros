@@ -1,5 +1,5 @@
 import React from "react";
-import { Link } from 'react-router-dom';
+import { Link } from "react-router-dom";
 
 /**
  * Icono de Vialtros:
@@ -23,16 +23,20 @@ export function LogoIcon({ size = 26, color = "#2563EB" }) {
       <circle cx="19.5" cy="5.5" r="2.5" fill={color} />
       {/* Línea izquierda hacia destino */}
       <line
-        x1="4.5" y1="7.8"
-        x2="12"   y2="19.5"
+        x1="4.5"
+        y1="7.8"
+        x2="12"
+        y2="19.5"
         stroke={color}
         strokeWidth="2.2"
         strokeLinecap="round"
       />
       {/* Línea derecha hacia destino */}
       <line
-        x1="19.5" y1="7.8"
-        x2="12"    y2="19.5"
+        x1="19.5"
+        y1="7.8"
+        x2="12"
+        y2="19.5"
         stroke={color}
         strokeWidth="2.2"
         strokeLinecap="round"

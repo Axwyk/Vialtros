@@ -1,5 +1,5 @@
 // Servicio para conexión WebSocket de monitoring administrativo
-import { resolveWsBaseUrl } from './ws';
+import { resolveWsBaseUrl } from "./ws";
 
 function parseMsg(raw) {
   try {
@@ -10,13 +10,20 @@ function parseMsg(raw) {
 }
 
 export function connectAdminMonitoring(onMessage, handlers = {}) {
-  const { onOpen, onClose, onError, reconnectDelayMs = 2000, maxReconnectAttempts = 20 } = handlers;
+  const {
+    onOpen,
+    onClose,
+    onError,
+    reconnectDelayMs = 2000,
+    maxReconnectAttempts = 20,
+  } = handlers;
   let socket = null;
   let closedManually = false;
   let reconnectAttempts = 0;
   let reconnectTimer = null;
 
-  if (typeof WebSocket === 'undefined') throw new Error('WebSocket no disponible');
+  if (typeof WebSocket === "undefined")
+    throw new Error("WebSocket no disponible");
 
   const connect = () => {
     const wsUrl = `${resolveWsBaseUrl()}/monitoring/`;
@@ -33,7 +40,9 @@ export function connectAdminMonitoring(onMessage, handlers = {}) {
       if (onMessage) onMessage(data);
     };
 
-    socket.onerror = () => { if (onError) onError(); };
+    socket.onerror = () => {
+      if (onError) onError();
+    };
 
     socket.onclose = () => {
       if (onClose) onClose();
@@ -54,7 +63,9 @@ export function connectAdminMonitoring(onMessage, handlers = {}) {
     },
     send: (payload) => {
       if (!socket || socket.readyState !== WebSocket.OPEN) return false;
-      socket.send(typeof payload === 'string' ? payload : JSON.stringify(payload));
+      socket.send(
+        typeof payload === "string" ? payload : JSON.stringify(payload),
+      );
       return true;
     },
     readyState: () => socket?.readyState ?? WebSocket.CLOSED,

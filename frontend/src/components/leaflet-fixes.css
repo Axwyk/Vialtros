@@ -1,11 +1,16 @@
-@import url('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
+@import url("https://unpkg.com/leaflet@1.9.4/dist/leaflet.css");
 
 .leaflet-container {
   width: 100%;
   height: 100%;
   z-index: 1;
   font-family: inherit;
-  background: radial-gradient(780px 320px at 14% 5%, #e8f3ff 0%, #e2efff 42%, #dbe9fb 100%);
+  background: radial-gradient(
+    780px 320px at 14% 5%,
+    #e8f3ff 0%,
+    #e2efff 42%,
+    #dbe9fb 100%
+  );
 }
 
 /* Filtro SVG de colorización — referencia al <filter id="vt-map-colorize"> en MapView.js
@@ -43,12 +48,14 @@
   border-radius: 50%;
   background: #0ea5e9;
   border: 4px solid #ffffff;
-  box-shadow: 0 3px 12px rgba(14, 165, 233, 0.4), inset 0 -1px 4px rgba(0, 0, 0, 0.1);
+  box-shadow:
+    0 3px 12px rgba(14, 165, 233, 0.4),
+    inset 0 -1px 4px rgba(0, 0, 0, 0.1);
   position: relative;
 }
 
 .vt-route-point::before {
-  content: '';
+  content: "";
   position: absolute;
   width: 26px;
   height: 26px;
@@ -64,7 +71,7 @@
 }
 
 .vt-route-point-start::after {
-  content: '';
+  content: "";
   position: absolute;
   width: 36px;
   height: 36px;
@@ -79,6 +86,39 @@
 .vt-route-point-end {
   border-radius: 4px;
   background: linear-gradient(135deg, #2d56d6 0%, #1b3ea7 100%);
+}
+
+.vt-route-stop-marker {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+}
+
+.vt-route-stop-ring {
+  position: absolute;
+  inset: 1px;
+  border-radius: 999px;
+  background: rgba(10, 43, 61, 0.14);
+  box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.18);
+}
+
+.vt-route-stop-core {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 2px solid #0a2b3d;
+  color: #0a2b3d;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .vt-planned-route-line-shadow,
@@ -289,7 +329,11 @@
   position: absolute;
   bottom: 18px;
   left: 18px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 250, 255, 0.96));
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.96),
+    rgba(244, 250, 255, 0.96)
+  );
   border-radius: 12px;
   padding: 10px 12px;
   border: 1px solid #c7daf8;
@@ -346,6 +390,15 @@
   background: #1d4ed8;
 }
 
+.legend-marker.stop-dot {
+  background: radial-gradient(
+    circle at 50% 50%,
+    #ffffff 0 35%,
+    #0a2b3d 36% 100%
+  );
+  border: 1px solid rgba(10, 43, 61, 0.24);
+}
+
 .legend-line {
   width: 14px;
   height: 3px;
@@ -354,12 +407,20 @@
 }
 
 .legend-line.planned {
-  background: repeating-linear-gradient(90deg, #475569 0 6px, transparent 6px 10px);
+  background: repeating-linear-gradient(
+    90deg,
+    #475569 0 6px,
+    transparent 6px 10px
+  );
   border: 1px solid rgba(71, 85, 105, 0.2);
 }
 
 .legend-line.remaining {
-  background: repeating-linear-gradient(90deg, #0891b2 0 8px, transparent 8px 13px);
+  background: repeating-linear-gradient(
+    90deg,
+    #0891b2 0 8px,
+    transparent 8px 13px
+  );
   border: 1px solid rgba(8, 145, 178, 0.28);
 }
 
@@ -399,4 +460,3 @@
   background-color: #f0f4f8;
   color: #0a5ccc;
 }
-

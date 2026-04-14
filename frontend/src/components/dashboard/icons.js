@@ -1,7 +1,13 @@
 import React from "react";
 
 // Componente base de icono SVG
-function Icon({ size = 22, strokeWidth = 2, className = "", children, viewBox = "0 0 24 24" }) {
+function Icon({
+  size = 22,
+  strokeWidth = 2,
+  className = "",
+  children,
+  viewBox = "0 0 24 24",
+}) {
   return (
     <svg
       width={size}

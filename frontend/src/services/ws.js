@@ -1,28 +1,28 @@
 // Servicio para conexión WebSocket de tracking en tiempo real
 
-function resolveWsBaseUrl() {
+export function resolveWsBaseUrl() {
   if (process.env.REACT_APP_WS_URL) {
-    return process.env.REACT_APP_WS_URL.replace(/\/+$/, '');
+    return process.env.REACT_APP_WS_URL.replace(/\/+$/, "");
   }
 
   const apiUrl = process.env.REACT_APP_API_URL;
   if (apiUrl) {
     try {
       const url = new URL(apiUrl);
-      const protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+      const protocol = url.protocol === "https:" ? "wss:" : "ws:";
       return `${protocol}//${url.host}/ws`;
     } catch {
       // Si la URL es inválida, se usa fallback abajo.
     }
   }
 
-  if (typeof window !== 'undefined') {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  if (typeof window !== "undefined") {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const host = window.location.hostname;
     return `${protocol}//${host}:8000/ws`;
   }
 
-  return 'ws://localhost:8000/ws';
+  return "ws://localhost:8000/ws";
 }
 
 function parseIncomingMessage(rawText) {
@@ -34,7 +34,7 @@ function parseIncomingMessage(rawText) {
 }
 
 function normalizeLocationPayload(payload) {
-  if (!payload || typeof payload !== 'object') return null;
+  if (!payload || typeof payload !== "object") return null;
 
   const latitude = Number(payload.latitude ?? payload.lat);
   const longitude = Number(payload.longitude ?? payload.lng);
@@ -48,23 +48,25 @@ function normalizeLocationPayload(payload) {
 }
 
 function extractLocationUpdate(payload) {
-  if (!payload || typeof payload !== 'object') return null;
+  if (!payload || typeof payload !== "object") return null;
 
   // Soporta formato por evento: { event: 'position_update', data: { ... } }
-  const eventName = String(payload.event || payload.type || payload.action || '').toLowerCase();
-  if (eventName === 'position_update' || eventName === 'tracking_update') {
+  const eventName = String(
+    payload.event || payload.type || payload.action || "",
+  ).toLowerCase();
+  if (eventName === "position_update" || eventName === "tracking_update") {
     const nested = payload.data || payload.payload || payload.position;
-    if (nested && typeof nested === 'object') {
+    if (nested && typeof nested === "object") {
       return nested;
     }
   }
 
   // Soporta payload plano: { latitude, longitude, ... }
   if (
-    payload.latitude != null
-    || payload.longitude != null
-    || payload.lat != null
-    || payload.lng != null
+    payload.latitude != null ||
+    payload.longitude != null ||
+    payload.lat != null ||
+    payload.lng != null
   ) {
     return normalizeLocationPayload(payload);
   }
@@ -89,11 +91,11 @@ export function connectTrackingWS(routeId, onMessage, handlers = {}) {
   let reconnectTimer = null;
 
   if (!Number.isFinite(Number(routeId))) {
-    throw new Error('connectTrackingWS requiere un routeId numerico');
+    throw new Error("connectTrackingWS requiere un routeId numerico");
   }
 
-  if (typeof WebSocket === 'undefined') {
-    throw new Error('WebSocket no esta disponible en este entorno');
+  if (typeof WebSocket === "undefined") {
+    throw new Error("WebSocket no esta disponible en este entorno");
   }
 
   const connect = () => {
@@ -145,7 +147,9 @@ export function connectTrackingWS(routeId, onMessage, handlers = {}) {
   return {
     send: (payload) => {
       if (!socket || socket.readyState !== WebSocket.OPEN) return false;
-      socket.send(typeof payload === 'string' ? payload : JSON.stringify(payload));
+      socket.send(
+        typeof payload === "string" ? payload : JSON.stringify(payload),
+      );
       return true;
     },
     getReadyState: () => socket?.readyState ?? WebSocket.CLOSED,

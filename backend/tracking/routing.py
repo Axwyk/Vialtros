@@ -9,6 +9,7 @@ application = ProtocolTypeRouter({
     "websocket": AuthMiddlewareStack(
         URLRouter([
             re_path(r"^ws/tracking/(?P<route_id>\d+)/$", consumers.TrackingConsumer.as_asgi()),
+            re_path(r"^ws/monitoring/$", consumers.AdminMonitoringConsumer.as_asgi()),
         ])
     ),
 })

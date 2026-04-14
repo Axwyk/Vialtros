@@ -10,7 +10,7 @@ from django.contrib.auth import get_user_model
 from .serializers import (
     UserSerializer, UserCreateSerializer,
     RouteSerializer, TrackingSerializer, TrackingIngestSerializer,
-    DriverSerializer, PassengerSerializer,
+    DriverSerializer, PassengerSerializer, build_route_intermediate_stops,
 )
 from .models import Route, Tracking, Driver, Passenger
 from .permissions import IsAdmin, IsDriver, IsPassenger
@@ -19,6 +19,9 @@ User = get_user_model()
 LOCAL_DEV_INGEST_TOKEN = 'local-dev-access'
 ADMIN_STALE_SIGNAL_MINUTES = 10
 ADMIN_IDLE_SPEED_KMH = 3
+WEEKLY_ACTIVITY_DAY_ORDER = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
+RECENT_ACTIVITY_LIMIT = 8
+RECENT_ACTIVITY_WINDOW_DAYS = 7
 
 
 def calculate_distance_km(start, end):
@@ -45,6 +48,147 @@ def estimate_speed_kmh(previous_tracking, latest_tracking):
         (latest_tracking.latitude, latest_tracking.longitude),
     )
     return max(0, round(distance_km / elapsed_hours))
+
+
+def build_weekly_activity(trackings_qs):
+    base = {day: 0 for day in WEEKLY_ACTIVITY_DAY_ORDER}
+    seven_days_ago = timezone.now() - timezone.timedelta(days=6)
+    seven_days_ago = seven_days_ago.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    for timestamp in trackings_qs.filter(timestamp__gte=seven_days_ago).values_list('timestamp', flat=True):
+        weekday = WEEKLY_ACTIVITY_DAY_ORDER[timestamp.weekday()]
+        base[weekday] += 1
+
+    return [
+        {'day': day, 'value': base[day]}
+        for day in WEEKLY_ACTIVITY_DAY_ORDER
+    ]
+
+
+def build_user_activity_item(user):
+    role_label = {
+        'admin': 'Administrador',
+        'driver': 'Conductor',
+        'user': 'Usuario',
+    }.get(user.role, 'Usuario')
+
+    return {
+        'id': f'user-{user.id}',
+        'icon': 'addUser',
+        'tone': 'blue',
+        'title': f'Nuevo {role_label.lower()} registrado',
+        'subtitle': user.username,
+        'timestamp': user.date_joined,
+    }
+
+
+def build_tracking_activity_item(tracking, viewer_role, viewer_passenger=None):
+    route_name = tracking.route.name or f'Ruta #{tracking.route_id}'
+    driver_name = None
+    if tracking.route.driver_id and getattr(tracking.route.driver, 'user', None):
+        driver_name = tracking.route.driver.user.username
+    passenger_name = None
+    if tracking.passenger_id and getattr(tracking.passenger, 'user', None):
+        passenger_name = tracking.passenger.user.username
+
+    if viewer_role == 'user' and viewer_passenger and tracking.passenger_id == viewer_passenger.id:
+        if tracking.status == 'picked':
+            return {
+                'id': f'tracking-{tracking.id}',
+                'icon': 'checkCircle',
+                'tone': 'emerald',
+                'title': 'Tu recogida fue confirmada',
+                'subtitle': route_name,
+                'timestamp': tracking.timestamp,
+            }
+
+        return {
+            'id': f'tracking-{tracking.id}',
+            'icon': 'activity',
+            'tone': 'blue',
+            'title': f'Seguimiento activo en {route_name}',
+            'subtitle': driver_name or 'Tu conductor esta en ruta',
+            'timestamp': tracking.timestamp,
+        }
+
+    if tracking.passenger_id and tracking.status == 'picked':
+        return {
+            'id': f'tracking-{tracking.id}',
+            'icon': 'checkCircle',
+            'tone': 'emerald',
+            'title': f'Pasajero recogido en {route_name}',
+            'subtitle': passenger_name or 'Estado actualizado',
+            'timestamp': tracking.timestamp,
+        }
+
+    if (tracking.speed_kmh or 0) > ADMIN_IDLE_SPEED_KMH:
+        return {
+            'id': f'tracking-{tracking.id}',
+            'icon': 'tracking',
+            'tone': 'blue',
+            'title': f'{route_name} en movimiento',
+            'subtitle': driver_name or 'Vehiculo monitoreado',
+            'timestamp': tracking.timestamp,
+        }
+
+    return {
+        'id': f'tracking-{tracking.id}',
+        'icon': 'activity',
+        'tone': 'orange',
+        'title': f'Actualizacion reciente en {route_name}',
+        'subtitle': passenger_name or driver_name or 'Monitoreo de ruta',
+        'timestamp': tracking.timestamp,
+    }
+
+
+def serialize_recent_activities(activities):
+    return [
+        {
+            **activity,
+            'timestamp': activity['timestamp'].isoformat(),
+        }
+        for activity in activities
+    ]
+
+
+def build_recent_activity_for_user(user):
+    since = timezone.now() - timezone.timedelta(days=RECENT_ACTIVITY_WINDOW_DAYS)
+    activities = []
+    viewer_passenger = None
+
+    if user.role == 'admin':
+        recent_users = User.objects.filter(date_joined__gte=since).order_by('-date_joined')[:RECENT_ACTIVITY_LIMIT]
+        activities.extend(build_user_activity_item(item) for item in recent_users)
+        recent_trackings = Tracking.objects.filter(timestamp__gte=since).select_related(
+            'route__driver__user',
+            'passenger__user',
+        ).order_by('-timestamp')[:RECENT_ACTIVITY_LIMIT]
+        activities.extend(build_tracking_activity_item(item, user.role) for item in recent_trackings)
+    elif user.role == 'driver':
+        try:
+            driver = Driver.objects.get(user=user)
+        except Driver.DoesNotExist:
+            return []
+
+        recent_trackings = Tracking.objects.filter(
+            route__in=Route.objects.filter(driver=driver),
+            timestamp__gte=since,
+        ).select_related('route__driver__user', 'passenger__user').order_by('-timestamp')[:RECENT_ACTIVITY_LIMIT]
+        activities.extend(build_tracking_activity_item(item, user.role) for item in recent_trackings)
+    elif user.role == 'user':
+        try:
+            viewer_passenger = Passenger.objects.get(user=user)
+        except Passenger.DoesNotExist:
+            return []
+
+        recent_trackings = Tracking.objects.filter(
+            route__in=Route.objects.filter(passengers=viewer_passenger),
+            timestamp__gte=since,
+        ).select_related('route__driver__user', 'passenger__user').order_by('-timestamp')[:RECENT_ACTIVITY_LIMIT]
+        activities.extend(build_tracking_activity_item(item, user.role, viewer_passenger) for item in recent_trackings)
+
+    ordered = sorted(activities, key=lambda item: item['timestamp'], reverse=True)
+    return serialize_recent_activities(ordered[:RECENT_ACTIVITY_LIMIT])
 
 
 def build_admin_monitoring_summary(routes):
@@ -146,6 +290,11 @@ def build_admin_monitoring_summary(routes):
             'name': route.name,
             'origin': route.origin,
             'destination': route.destination,
+            'origin_lat': route.origin_lat,
+            'origin_lng': route.origin_lng,
+            'destination_lat': route.destination_lat,
+            'destination_lng': route.destination_lng,
+            'intermediate_stops': build_route_intermediate_stops(route.passengers.all()),
             'driver_name': route.driver.user.username if route.driver_id else 'Sin asignar',
             'progress_percent': progress_percent,
             'state_label': state_label,
@@ -295,6 +444,40 @@ class UserViewSet(viewsets.ModelViewSet):
 
         return Response({'routes': 0, 'users': 0, 'trackings': 0})
 
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated], url_path='weekly-activity')
+    def weekly_activity(self, request):
+        user = request.user
+
+        if user.role == 'admin':
+            activity = build_weekly_activity(Tracking.objects.all())
+            return Response(activity)
+
+        if user.role == 'driver':
+            try:
+                driver = Driver.objects.get(user=user)
+            except Driver.DoesNotExist:
+                return Response(build_weekly_activity(Tracking.objects.none()))
+
+            routes_qs = Route.objects.filter(driver=driver)
+            activity = build_weekly_activity(Tracking.objects.filter(route__in=routes_qs))
+            return Response(activity)
+
+        if user.role == 'user':
+            try:
+                passenger = Passenger.objects.get(user=user)
+            except Passenger.DoesNotExist:
+                return Response(build_weekly_activity(Tracking.objects.none()))
+
+            routes_qs = Route.objects.filter(passengers=passenger)
+            activity = build_weekly_activity(Tracking.objects.filter(route__in=routes_qs))
+            return Response(activity)
+
+        return Response(build_weekly_activity(Tracking.objects.none()))
+
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated], url_path='recent-activity')
+    def recent_activity(self, request):
+        return Response(build_recent_activity_for_user(request.user))
+
     @action(detail=False, methods=['get'], permission_classes=[IsDriver])
     def assigned_users(self, request):
         try:
@@ -343,12 +526,12 @@ class PassengerViewSet(viewsets.ModelViewSet):
 
 
 class RouteViewSet(viewsets.ModelViewSet):
-    queryset = Route.objects.select_related('driver').prefetch_related('passengers').all().order_by('id')
+    queryset = Route.objects.select_related('driver__user').prefetch_related('passengers__user').all().order_by('id')
     serializer_class = RouteSerializer
     permission_classes = [IsAdmin]
 
     def get_queryset(self):
-        return Route.objects.select_related('driver__user').prefetch_related('passengers').all().order_by('id')
+        return Route.objects.select_related('driver__user').prefetch_related('passengers__user').all().order_by('id')
 
     @action(detail=False, methods=['get'], permission_classes=[IsAdmin], url_path='monitoring-summary')
     def monitoring_summary(self, request):
@@ -441,6 +624,21 @@ class TrackingViewSet(viewsets.ModelViewSet):
                 },
             },
         )
+        # También enviar copia para paneles administrativos que estén suscritos al grupo 'monitoring'
+        try:
+            async_to_sync(channel_layer.group_send)(
+                'monitoring',
+                {
+                    'type': 'monitoring_event',
+                    'payload': {
+                        'event': 'position_update',
+                        'data': payload,
+                    },
+                },
+            )
+        except Exception:
+            # no fatal si no hay layer soporte
+            pass
 
     def get_queryset(self):
         user = self.request.user

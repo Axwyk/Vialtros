@@ -2,6 +2,25 @@ from rest_framework import serializers
 from .models import User, Driver, Passenger, Route, Tracking, PickupStatus
 
 
+def build_route_intermediate_stops(passengers):
+    stops = []
+    for passenger in passengers:
+        if passenger.pickup_lat is None or passenger.pickup_lng is None:
+            continue
+
+        label = passenger.user.username if getattr(passenger, 'user', None) else f'Parada {passenger.id}'
+        stops.append({
+            'id': passenger.id,
+            'passenger_id': passenger.id,
+            'label': label,
+            'address': passenger.pickup_address or label,
+            'latitude': passenger.pickup_lat,
+            'longitude': passenger.pickup_lng,
+        })
+
+    return sorted(stops, key=lambda stop: (stop['label'].lower(), stop['passenger_id']))
+
+
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
@@ -52,23 +71,28 @@ class PassengerSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Passenger
-        fields = ('id', 'user', 'user_detail', 'phone')
+        fields = ('id', 'user', 'user_detail', 'phone', 'pickup_address', 'pickup_lat', 'pickup_lng')
 
 
 class RouteSerializer(serializers.ModelSerializer):
     driver_detail = DriverSerializer(source='driver', read_only=True)
     passenger_details = PassengerSerializer(source='passengers', many=True, read_only=True)
     passenger_count = serializers.SerializerMethodField()
+    intermediate_stops = serializers.SerializerMethodField()
 
     class Meta:
         model = Route
         fields = ('id', 'name', 'origin', 'destination',
                   'origin_lat', 'origin_lng', 'destination_lat', 'destination_lng',
                   'driver', 'driver_detail',
-                  'passengers', 'passenger_details', 'passenger_count')
+                  'passengers', 'passenger_details', 'passenger_count', 'intermediate_stops')
 
     def get_passenger_count(self, obj):
         return obj.passengers.count()
+
+    def get_intermediate_stops(self, obj):
+        passengers = obj.passengers.all()
+        return build_route_intermediate_stops(passengers)
 
 
 class TrackingSerializer(serializers.ModelSerializer):

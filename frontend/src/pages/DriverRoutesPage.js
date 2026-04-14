@@ -1,16 +1,23 @@
-import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import Sidebar from '../components/dashboard/Sidebar';
-import { getDriverAssignedRoutes, getDriverTrackings } from '../services/dashboard';
-import { updateTrackingStatus, updateTrackingStatusByPassenger } from '../services/tracking';
-import { icons } from '../components/dashboard/icons';
+import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import Sidebar from "../components/dashboard/Sidebar";
+import {
+  getDriverAssignedRoutes,
+  getDriverTrackings,
+} from "../services/dashboard";
+import {
+  updateTrackingStatus,
+  updateTrackingStatusByPassenger,
+} from "../services/tracking";
+import { icons } from "../components/dashboard/icons";
 
 export default function DriverRoutesPage({ onLogout }) {
   const [routes, setRoutes] = useState([]);
   const [routesLoading, setRoutesLoading] = useState(false);
   const [trackings, setTrackings] = useState([]);
-  const usernameRaw = localStorage.getItem('username') || 'Usuario';
-  const username = usernameRaw.charAt(0).toUpperCase() + usernameRaw.slice(1).toLowerCase();
+  const usernameRaw = localStorage.getItem("username") || "Usuario";
+  const username =
+    usernameRaw.charAt(0).toUpperCase() + usernameRaw.slice(1).toLowerCase();
 
   useEffect(() => {
     setRoutesLoading(true);
@@ -24,7 +31,12 @@ export default function DriverRoutesPage({ onLogout }) {
       .catch(() => setTrackings([]));
   }, []);
 
-  const handleUpdateStatus = async (trackingId, routeId, passengerId, newStatus) => {
+  const handleUpdateStatus = async (
+    trackingId,
+    routeId,
+    passengerId,
+    newStatus,
+  ) => {
     try {
       if (trackingId) {
         await updateTrackingStatus(trackingId, newStatus);
@@ -34,12 +46,13 @@ export default function DriverRoutesPage({ onLogout }) {
       const updatedTrackings = await getDriverTrackings();
       setTrackings(updatedTrackings);
     } catch (error) {
-      console.error('Error updating status:', error);
+      console.error("Error updating status:", error);
     }
   };
 
   const totalAssignedStudents = routes.reduce(
-    (total, route) => total + (route.passenger_count ?? route.passenger_details?.length ?? 0),
+    (total, route) =>
+      total + (route.passenger_count ?? route.passenger_details?.length ?? 0),
     0,
   );
 
@@ -54,7 +67,9 @@ export default function DriverRoutesPage({ onLogout }) {
             <h1 className="text-2xl font-bold text-gray-900">
               Mis rutas asignadas, {username}
             </h1>
-            <p className="text-sm text-gray-400 mt-0.5">Gestiona el estado de recogida de tus pasajeros</p>
+            <p className="text-sm text-gray-400 mt-0.5">
+              Gestiona el estado de recogida de tus pasajeros
+            </p>
           </div>
           <Link
             to="/dashboard"
@@ -68,16 +83,28 @@ export default function DriverRoutesPage({ onLogout }) {
         {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Rutas activas</p>
-            <p className="mt-2 text-2xl font-bold text-slate-900">{routes.length}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+              Rutas activas
+            </p>
+            <p className="mt-2 text-2xl font-bold text-slate-900">
+              {routes.length}
+            </p>
           </div>
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Estudiantes totales</p>
-            <p className="mt-2 text-2xl font-bold text-slate-900">{totalAssignedStudents}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+              Estudiantes totales
+            </p>
+            <p className="mt-2 text-2xl font-bold text-slate-900">
+              {totalAssignedStudents}
+            </p>
           </div>
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Trackings activos</p>
-            <p className="mt-2 text-2xl font-bold text-slate-900">{trackings.length}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+              Trackings activos
+            </p>
+            <p className="mt-2 text-2xl font-bold text-slate-900">
+              {trackings.length}
+            </p>
           </div>
         </div>
 
@@ -88,13 +115,20 @@ export default function DriverRoutesPage({ onLogout }) {
           </div>
         ) : routes.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-5 py-8 text-center">
-            <p className="text-sm font-semibold text-slate-700">No tienes rutas asignadas</p>
-            <p className="mt-1 text-xs text-slate-400">Cuando un administrador te asigne una ruta, aparecerá aquí.</p>
+            <p className="text-sm font-semibold text-slate-700">
+              No tienes rutas asignadas
+            </p>
+            <p className="mt-1 text-xs text-slate-400">
+              Cuando un administrador te asigne una ruta, aparecerá aquí.
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6">
-            {routes.map(route => (
-              <article key={route.id} className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+            {routes.map((route) => (
+              <article
+                key={route.id}
+                className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm"
+              >
                 <div className="flex items-start justify-between gap-4 mb-5">
                   <div>
                     <div className="flex items-center gap-2 mb-2">
@@ -102,30 +136,54 @@ export default function DriverRoutesPage({ onLogout }) {
                         {icons.routes({ size: 17, strokeWidth: 2.1 })}
                       </span>
                       <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Ruta asignada</p>
-                        <h3 className="text-lg font-bold text-slate-900">{route.name}</h3>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                          Ruta asignada
+                        </p>
+                        <h3 className="text-lg font-bold text-slate-900">
+                          {route.name}
+                        </h3>
                       </div>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="rounded-2xl border border-slate-100 bg-slate-50/90 px-4 py-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Origen</p>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                          Origen
+                        </p>
                         <div className="mt-2 flex items-start gap-2 text-slate-700">
-                          <span className="mt-0.5 text-blue-600">{icons.mapPin({ size: 15, strokeWidth: 2.2 })}</span>
-                          <span className="text-sm font-medium leading-5">{route.origin}</span>
+                          <span className="mt-0.5 text-blue-600">
+                            {icons.mapPin({ size: 15, strokeWidth: 2.2 })}
+                          </span>
+                          <span className="text-sm font-medium leading-5">
+                            {route.origin}
+                          </span>
                         </div>
                       </div>
                       <div className="rounded-2xl border border-slate-100 bg-slate-50/90 px-4 py-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Destino</p>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                          Destino
+                        </p>
                         <div className="mt-2 flex items-start gap-2 text-slate-700">
-                          <span className="mt-0.5 text-emerald-600">{icons.navigation({ size: 15, strokeWidth: 2.2 })}</span>
-                          <span className="text-sm font-medium leading-5">{route.destination}</span>
+                          <span className="mt-0.5 text-emerald-600">
+                            {icons.navigation({ size: 15, strokeWidth: 2.2 })}
+                          </span>
+                          <span className="text-sm font-medium leading-5">
+                            {route.destination}
+                          </span>
                         </div>
                       </div>
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <span className="rounded-full bg-gray-50 border border-gray-200 px-3 py-1 text-[11px] font-semibold text-gray-700 shadow-sm">
-                      {route.passenger_count ?? route.passenger_details?.length ?? 0} estudiante{(route.passenger_count ?? route.passenger_details?.length ?? 0) !== 1 ? 's' : ''}
+                      {route.passenger_count ??
+                        route.passenger_details?.length ??
+                        0}{" "}
+                      estudiante
+                      {(route.passenger_count ??
+                        route.passenger_details?.length ??
+                        0) !== 1
+                        ? "s"
+                        : ""}
                     </span>
                     <Link
                       to={`/tracking/${route.id}`}
@@ -141,50 +199,82 @@ export default function DriverRoutesPage({ onLogout }) {
                   <div>
                     <div className="flex items-center justify-between mb-3">
                       <div>
-                        <p className="text-sm font-semibold text-slate-900">Estado de recogida</p>
-                        <p className="text-xs text-slate-400">Actualiza el estado de cada estudiante</p>
+                        <p className="text-sm font-semibold text-slate-900">
+                          Estado de recogida
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          Actualiza el estado de cada estudiante
+                        </p>
                       </div>
                     </div>
                     <div className="space-y-2.5">
                       {route.passenger_details.map((passenger) => {
-                        const tracking = trackings.find((t) => Number(t.route) === Number(route.id) && Number(t.passenger) === Number(passenger.id));
-                        const status = tracking?.status || 'not_picked';
+                        const tracking = trackings.find(
+                          (t) =>
+                            Number(t.route) === Number(route.id) &&
+                            Number(t.passenger) === Number(passenger.id),
+                        );
+                        const status = tracking?.status || "not_picked";
                         return (
-                          <div key={passenger.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white px-3.5 py-3">
+                          <div
+                            key={passenger.id}
+                            className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white px-3.5 py-3"
+                          >
                             <div className="flex items-center gap-3 min-w-0">
-                              <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 shadow-sm ${
-                                status === 'picked' ? 'bg-green-100 border-green-300 text-green-700' : 'bg-red-100 border-red-300 text-red-700'
-                              }`}>
-                                {status === 'picked' ? '✓' : '✗'}
+                              <div
+                                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 shadow-sm ${
+                                  status === "picked"
+                                    ? "bg-green-100 border-green-300 text-green-700"
+                                    : "bg-red-100 border-red-300 text-red-700"
+                                }`}
+                              >
+                                {status === "picked" ? "✓" : "✗"}
                               </div>
                               <div className="min-w-0">
                                 <p className="text-sm font-semibold text-slate-800 truncate">
-                                  {passenger.user_detail?.username || `Estudiante #${passenger.id}`}
+                                  {passenger.user_detail?.username ||
+                                    `Estudiante #${passenger.id}`}
                                 </p>
                                 <p className="text-xs text-slate-400">
-                                  {status === 'picked' ? 'Recogido' : 'No recogido'}
+                                  {status === "picked"
+                                    ? "Recogido"
+                                    : "No recogido"}
                                 </p>
                               </div>
                             </div>
                             <div className="flex gap-2 shrink-0">
                               <button
-                                onClick={() => handleUpdateStatus(tracking?.id, route.id, passenger.id, 'picked')}
-                                disabled={status === 'picked'}
+                                onClick={() =>
+                                  handleUpdateStatus(
+                                    tracking?.id,
+                                    route.id,
+                                    passenger.id,
+                                    "picked",
+                                  )
+                                }
+                                disabled={status === "picked"}
                                 className={`px-3 py-1 text-xs font-semibold rounded-full transition ${
-                                  status === 'picked'
-                                    ? 'bg-blue-100 text-blue-700 cursor-not-allowed'
-                                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                                  status === "picked"
+                                    ? "bg-blue-100 text-blue-700 cursor-not-allowed"
+                                    : "bg-blue-600 text-white hover:bg-blue-700"
                                 }`}
                               >
                                 Marcar recogido
                               </button>
                               <button
-                                onClick={() => handleUpdateStatus(tracking?.id, route.id, passenger.id, 'not_picked')}
-                                disabled={status === 'not_picked'}
+                                onClick={() =>
+                                  handleUpdateStatus(
+                                    tracking?.id,
+                                    route.id,
+                                    passenger.id,
+                                    "not_picked",
+                                  )
+                                }
+                                disabled={status === "not_picked"}
                                 className={`px-3 py-1 text-xs font-semibold rounded-full transition ${
-                                  status === 'not_picked'
-                                    ? 'bg-red-100 text-red-700 cursor-not-allowed'
-                                    : 'bg-red-600 text-white hover:bg-red-700'
+                                  status === "not_picked"
+                                    ? "bg-red-100 text-red-700 cursor-not-allowed"
+                                    : "bg-red-600 text-white hover:bg-red-700"
                                 }`}
                               >
                                 Marcar no recogido

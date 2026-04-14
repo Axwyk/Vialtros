@@ -14,7 +14,11 @@
 .tracking-layout {
   min-height: 100vh;
   background-image:
-    radial-gradient(1200px 360px at 12% -8%, rgba(37, 99, 235, 0.12), transparent),
+    radial-gradient(
+      1200px 360px at 12% -8%,
+      rgba(37, 99, 235, 0.12),
+      transparent
+    ),
     radial-gradient(1000px 320px at 95% 0%, rgba(79, 70, 229, 0.1), transparent);
 }
 
@@ -264,12 +268,18 @@
 }
 
 .kpi-card {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 251, 255, 0.96));
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.98),
+    rgba(248, 251, 255, 0.96)
+  );
   border: 1px solid var(--vt-border);
   border-radius: 16px;
   padding: 15px;
   box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .kpi-card:hover {
@@ -328,7 +338,10 @@
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    opacity 0.18s ease;
 }
 
 .route-action-button:hover:not(:disabled) {
@@ -450,12 +463,18 @@
   border: 1px solid #bbf7d0;
   font-weight: 800;
   box-shadow: 0 12px 30px rgba(6, 95, 70, 0.08);
-  animation: toast-pop 0.36s cubic-bezier(.2,1,.22,1);
+  animation: toast-pop 0.36s cubic-bezier(0.2, 1, 0.22, 1);
 }
 
 @keyframes toast-pop {
-  from { transform: translateY(-6px) scale(0.98); opacity: 0; }
-  to { transform: translateY(0) scale(1); opacity: 1; }
+  from {
+    transform: translateY(-6px) scale(0.98);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
 }
 
 .panel-error {
@@ -509,7 +528,10 @@
   font-weight: 800;
   cursor: pointer;
   margin-left: 10px;
-  transition: background 0.18s ease, border-color 0.18s ease, transform 0.12s ease;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.12s ease;
 }
 
 .mode-toggle:hover {
@@ -545,7 +567,7 @@
 .route-auth-badge.verified {
   background: linear-gradient(90deg, #f0fdf4, #dcfce7);
   color: #155e3b;
-  border: 1px solid rgba(34,197,94,0.18);
+  border: 1px solid rgba(34, 197, 94, 0.18);
   padding: 6px 12px;
   font-size: 11px;
   box-shadow: 0 8px 20px rgba(16, 185, 129, 0.06);
@@ -554,7 +576,7 @@
 .route-auth-badge.alternate {
   background: linear-gradient(90deg, #f7fffe, #ecfeff);
   color: #07585a;
-  border: 1px solid rgba(15,119,110,0.12);
+  border: 1px solid rgba(15, 119, 110, 0.12);
   padding: 6px 12px;
   font-size: 11px;
 }
@@ -562,7 +584,7 @@
 .route-auth-badge.pending {
   background: linear-gradient(90deg, #f8fbff, #eff6ff);
   color: #1d4ed8;
-  border: 1px solid rgba(59,130,246,0.12);
+  border: 1px solid rgba(59, 130, 246, 0.12);
   padding: 6px 12px;
   font-size: 11px;
 }
@@ -610,7 +632,12 @@
   height: 18px;
   margin: 0 auto;
   border-radius: 999px;
-  background: linear-gradient(180deg, rgba(37, 99, 235, 0.15), rgba(37, 99, 235, 0.55), rgba(37, 99, 235, 0.15));
+  background: linear-gradient(
+    180deg,
+    rgba(37, 99, 235, 0.15),
+    rgba(37, 99, 235, 0.55),
+    rgba(37, 99, 235, 0.15)
+  );
 }
 
 .route-metrics-grid {
@@ -731,7 +758,9 @@
   background: linear-gradient(180deg, #f8fbff, #f3f8ff);
   border-radius: 12px;
   padding: 12px;
-  transition: border-color 0.2s ease, transform 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease;
 }
 
 .vehicle-item:hover {
@@ -751,7 +780,9 @@
   font-weight: 800;
   letter-spacing: 0.02em;
   padding: 4px 10px 4px 8px;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .vehicle-chip-icon {
@@ -898,7 +929,7 @@
 }
 
 .demo-badge::before {
-  content: '';
+  content: "";
   width: 7px;
   height: 7px;
   border-radius: 50%;
@@ -969,7 +1000,6 @@
   font-weight: 800;
 }
 
-
 /* Contenedor del mapa con sombra mejorada */
 .map-container-wrapper {
   position: relative;
@@ -982,11 +1012,16 @@
 }
 
 .map-container-wrapper::before {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(160deg, rgba(37, 99, 235, 0.07), rgba(79, 70, 229, 0.04) 34%, transparent 70%);
+  background: linear-gradient(
+    160deg,
+    rgba(37, 99, 235, 0.07),
+    rgba(79, 70, 229, 0.04) 34%,
+    transparent 70%
+  );
   z-index: 2;
 }
 
@@ -995,7 +1030,7 @@
 }
 
 .map-live-transition::after {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   pointer-events: none;

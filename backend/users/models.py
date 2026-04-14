@@ -19,6 +19,9 @@ class Driver(models.Model):
 class Passenger(models.Model):
 	user = models.OneToOneField('User', on_delete=models.CASCADE)
 	phone = models.CharField(max_length=20)
+	pickup_address = models.CharField(max_length=255, blank=True, default='')
+	pickup_lat = models.FloatField(null=True, blank=True)
+	pickup_lng = models.FloatField(null=True, blank=True)
 
 class Route(models.Model):
 	name = models.CharField(max_length=100)

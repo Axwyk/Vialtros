@@ -1,24 +1,27 @@
-import { useEffect, useState } from 'react';
-import { getDriverAssignedRoutes, getUserAssignedRoute } from '../../services/dashboard';
-import { getRoutes } from '../../services/admin';
+import { useEffect, useState } from "react";
+import {
+  getDriverAssignedRoutes,
+  getUserAssignedRoute,
+} from "../../services/dashboard";
+import { getRoutes } from "../../services/admin";
 
 const DEFAULT_TRACKING_STATE = {
-  trackingLink: '/tracking/1',
+  trackingLink: "/tracking/1",
   trackingEnabled: false,
 };
 
 async function resolveTrackingRouteId(role) {
-  if (role === 'driver') {
+  if (role === "driver") {
     const routes = await getDriverAssignedRoutes();
     return routes?.[0]?.id ?? null;
   }
 
-  if (role === 'user') {
+  if (role === "user") {
     const payload = await getUserAssignedRoute();
     return payload?.route?.id ?? null;
   }
 
-  if (role === 'admin') {
+  if (role === "admin") {
     const routes = await getRoutes();
     return routes?.[0]?.id ?? null;
   }

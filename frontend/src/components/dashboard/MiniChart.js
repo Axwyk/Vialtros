@@ -16,7 +16,7 @@ export default function MiniChart({ data = DEFAULT_DATA }) {
   const todayLetter = DAY_MAP[new Date().getDay()];
   const max = Math.max(...data.map((d) => d.value), 1);
   const slotW = 40;
-  const barW  = 26;
+  const barW = 26;
   const chartH = 80;
   const labelH = 24;
   const vpW = data.length * slotW;
@@ -38,9 +38,23 @@ export default function MiniChart({ data = DEFAULT_DATA }) {
         return (
           <g key={i}>
             {/* Track background */}
-            <rect x={x} y={0} width={barW} height={chartH} rx={6} fill="#F1F5F9" />
+            <rect
+              x={x}
+              y={0}
+              width={barW}
+              height={chartH}
+              rx={6}
+              fill="#F1F5F9"
+            />
             {/* Value bar */}
-            <rect x={x} y={y} width={barW} height={barH} rx={6} fill={isToday ? "#2563EB" : "#BFDBFE"} />
+            <rect
+              x={x}
+              y={y}
+              width={barW}
+              height={barH}
+              rx={6}
+              fill={isToday ? "#2563EB" : "#BFDBFE"}
+            />
             {/* Day label */}
             <text
               x={x + barW / 2}

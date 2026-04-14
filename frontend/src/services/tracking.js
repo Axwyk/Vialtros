@@ -1,7 +1,7 @@
-import api from './api';
+import api from "./api";
 
 export async function getTrackings() {
-  const response = await api.get('/tracking/');
+  const response = await api.get("/tracking/");
   return Array.isArray(response.data) ? response.data : [];
 }
 
@@ -17,12 +17,18 @@ export async function getTrackingsByRoute(routeId) {
 }
 
 export async function updateTrackingStatus(trackingId, status) {
-  const response = await api.post(`/tracking/${trackingId}/update_status/`, { status });
+  const response = await api.post(`/tracking/${trackingId}/update_status/`, {
+    status,
+  });
   return response.data;
 }
 
-export async function updateTrackingStatusByPassenger(routeId, passengerId, status) {
-  const response = await api.post('/tracking/update_status_by_passenger/', {
+export async function updateTrackingStatusByPassenger(
+  routeId,
+  passengerId,
+  status,
+) {
+  const response = await api.post("/tracking/update_status_by_passenger/", {
     route_id: routeId,
     passenger_id: passengerId,
     status,

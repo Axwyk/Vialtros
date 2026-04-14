@@ -1,11 +1,11 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import './TrackingHero.css';
+import React from "react";
+import { Link } from "react-router-dom";
+import "./TrackingHero.css";
 
 export default function TrackingHero({
-  backTo = '/dashboard',
-  backAriaLabel = 'Volver al dashboard',
-  eyebrow = 'Sistema activo',
+  backTo = "/dashboard",
+  backAriaLabel = "Volver al dashboard",
+  eyebrow = "Sistema activo",
   title,
   description,
   subtitle,
@@ -13,8 +13,14 @@ export default function TrackingHero({
 }) {
   return (
     <section className="tracking-hero-shell">
-      <div className="tracking-hero-orb tracking-hero-orb-primary" aria-hidden="true" />
-      <div className="tracking-hero-orb tracking-hero-orb-secondary" aria-hidden="true" />
+      <div
+        className="tracking-hero-orb tracking-hero-orb-primary"
+        aria-hidden="true"
+      />
+      <div
+        className="tracking-hero-orb tracking-hero-orb-secondary"
+        aria-hidden="true"
+      />
 
       <div className="tracking-hero-content">
         <div className="tracking-hero-topbar">
@@ -24,7 +30,14 @@ export default function TrackingHero({
               className="tracking-hero-back"
               aria-label={backAriaLabel}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+              >
                 <line x1="19" y1="12" x2="5" y2="12" />
                 <polyline points="12 19 5 12 12 5" />
               </svg>
@@ -44,8 +57,12 @@ export default function TrackingHero({
 
         <div className="tracking-hero-copy">
           <h1 className="tracking-hero-title">{title}</h1>
-          {description ? <p className="tracking-hero-description">{description}</p> : null}
-          {subtitle ? <p className="tracking-hero-subtitle">{subtitle}</p> : null}
+          {description ? (
+            <p className="tracking-hero-description">{description}</p>
+          ) : null}
+          {subtitle ? (
+            <p className="tracking-hero-subtitle">{subtitle}</p>
+          ) : null}
         </div>
       </div>
     </section>
