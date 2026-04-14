@@ -2,13 +2,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useReducer, useState } 
 import { useNavigate, useParams } from 'react-router-dom';
 import MapView from '../components/MapView';
 import { connectTrackingWS } from '../services/ws';
+import { connectAdminMonitoring } from '../services/adminWs';
 import { getTrackingsByRoute } from '../services/tracking';
 import { getRoute, getRouteMonitoringSummary } from '../services/admin';
 import { getDriverAssignedRoutes, getUserAssignedRoute } from '../services/dashboard';
 import { sendDriverLocation } from '../services/driverLocation';
 import {
   geocodeAddress,
-  getStreetRoute,
+  getStreetRouteThroughPoints,
   getETAMinutes,
   getTrackedStreetRoute,
   isWithinBuenaventuraZone,
@@ -42,6 +43,11 @@ function dedupeConsecutivePoints(points) {
   }, []);
 }
 
+function toNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 function sampleGuidedRoute(points, maxPoints = GUIDED_ROUTE_MAX_POINTS) {
   if (!Array.isArray(points) || points.length <= maxPoints) return Array.isArray(points) ? points : [];
 
@@ -59,9 +65,42 @@ function sampleGuidedRoute(points, maxPoints = GUIDED_ROUTE_MAX_POINTS) {
   return sampled;
 }
 
-function toNumber(value) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
+function normalizeIntermediateStops(stops) {
+  return (Array.isArray(stops) ? stops : [])
+    .map((stop, index) => {
+      const latitude = Number(stop?.latitude);
+      const longitude = Number(stop?.longitude);
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+
+      return {
+        id: stop?.id ?? `${index}-${latitude}-${longitude}`,
+        label: String(stop?.label || `Parada ${index + 1}`),
+        address: String(stop?.address || stop?.label || `Parada ${index + 1}`),
+        coords: [latitude, longitude],
+      };
+    })
+    .filter(Boolean);
+}
+
+function buildRouteWaypointCoordinates(from, to, intermediateStops = []) {
+  return dedupeConsecutivePoints([
+    from,
+    ...normalizeIntermediateStops(intermediateStops).map((stop) => stop.coords),
+    to,
+  ].filter((point) => Array.isArray(point) && point.length === 2));
+}
+
+function buildRouteSignature(route) {
+  const intermediateStops = normalizeIntermediateStops(route?.intermediate_stops);
+  return [
+    route?.origin,
+    route?.destination,
+    route?.origin_lat,
+    route?.origin_lng,
+    route?.destination_lat,
+    route?.destination_lng,
+    JSON.stringify(intermediateStops.map((stop) => [stop.id, stop.address, stop.coords[0], stop.coords[1]])),
+  ].join('|');
 }
 
 function distanceKm(lat1, lng1, lat2, lng2) {
@@ -307,10 +346,17 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const selectedRouteId = rawRouteId != null ? Number(rawRouteId) : Number.NaN;
   const currentRole = localStorage.getItem('role') || 'user';
   const isAdminView = currentRole === 'admin';
+  const [driverRoutes, setDriverRoutes] = useState([]);
+  const [loadingRoutes, setLoadingRoutes] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const sharingWatchIdRef = useRef(null);
+  const [mode, setMode] = useState('manual'); // 'manual' | 'automatic'
 
   // Auto-resolución dinámica: si no hay routeId, redirigir a la ruta asignada según el rol
   useEffect(() => {
     if (Number.isFinite(selectedRouteId)) return;
+    // For admin view, do not auto-redirect to a single route — admin monitors all routes
+    if (currentRole === 'admin') return undefined;
 
     let cancelled = false;
 
@@ -324,10 +370,6 @@ export default function TrackingPage({ routeId: routeIdProp }) {
         } else if (currentRole === 'user') {
           const payload = await getUserAssignedRoute().catch(() => null);
           resolvedId = payload?.route?.id ?? null;
-        } else if (currentRole === 'admin') {
-          const { getRoutes } = await import('../services/admin');
-          const routes = await getRoutes().catch(() => []);
-          resolvedId = (Array.isArray(routes) ? routes : [])[0]?.id ?? null;
         }
 
         if (cancelled) return;
@@ -363,6 +405,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const [forceBuenaventuraDemo, setForceBuenaventuraDemo] = useState(false);
   const [showLiveTransition, setShowLiveTransition] = useState(false);
   const [showLiveToast, setShowLiveToast] = useState(false);
+  const [showRouteFinishedToast, setShowRouteFinishedToast] = useState(false);
   const [guidedRouteLoading, setGuidedRouteLoading] = useState(false);
   const [guidedRouteRunning, setGuidedRouteRunning] = useState(false);
   const [guidedRouteError, setGuidedRouteError] = useState('');
@@ -401,6 +444,8 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const guidedRoutePointsRef = useRef([]);
   const guidedRouteIndexRef = useRef(0);
   const guidedRouteFullPathRef = useRef([]);
+  const routeEndNotifiedRef = useRef(false);
+  const routeFinishedTimerRef = useRef(null);
 
   useEffect(() => {
     trackingsCountRef.current = trackings.length;
@@ -443,6 +488,27 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     });
 
     return () => navigator.geolocation?.clearWatch(watchId);
+  }, []);
+
+  // Cargar rutas asignadas al conductor para selección rápida
+  useEffect(() => {
+    if (currentRole !== 'driver') return undefined;
+    let cancelled = false;
+    setLoadingRoutes(true);
+    getDriverAssignedRoutes()
+      .then((routes) => { if (!cancelled) setDriverRoutes(Array.isArray(routes) ? routes : []); })
+      .catch(() => { if (!cancelled) setDriverRoutes([]); })
+      .finally(() => { if (!cancelled) setLoadingRoutes(false); });
+
+    return () => { cancelled = true; };
+  }, [currentRole]);
+
+  // Cleanup global: detener watch de geolocalizacion al desmontar
+  useEffect(() => () => {
+    if (sharingWatchIdRef.current) {
+      try { navigator.geolocation.clearWatch(sharingWatchIdRef.current); } catch (e) { /* ignore */ }
+      sharingWatchIdRef.current = null;
+    }
   }, []);
 
   useEffect(() => {
@@ -488,6 +554,55 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     };
   }, [isAdminView]);
 
+  // For admin: reflect monitoring updates as live connection when there are active vehicles or live routes
+  useEffect(() => {
+    if (!isAdminView) return undefined;
+
+    const client = connectAdminMonitoring((msg) => {
+      try {
+        const event = String(msg.event || '').toLowerCase();
+        const data = msg.data || msg.payload || msg;
+        if (event === 'position_update' && data) {
+          // upsert active vehicle by route+vehicle or driver
+          setAdminActiveVehicles((prev) => {
+            const copy = Array.isArray(prev) ? [...prev] : [];
+            const key = `${data.route}:${data.driver || data.vehicle || data.id || ''}`;
+            const idx = copy.findIndex((v) => `${v.route}:${v.driver || v.vehicle || v.id || ''}` === key);
+            const entry = {
+              route: data.route,
+              latitude: data.latitude,
+              longitude: data.longitude,
+              timestamp: data.timestamp,
+              raw: data,
+            };
+            if (idx >= 0) { copy[idx] = { ...copy[idx], ...entry }; }
+            else { copy.push(entry); }
+            return copy.slice(0, 200);
+          });
+        }
+        if (event === 'route_state' && data) {
+          // update summaries if payload includes route summary info
+          setAdminRouteSummaries((prev) => {
+            const copy = Array.isArray(prev) ? [...prev] : [];
+            const idx = copy.findIndex((r) => Number(r.id) === Number(data.id));
+            if (idx >= 0) { copy[idx] = { ...copy[idx], ...data }; }
+            else if (data.id) { copy.push(data); }
+            return copy.slice(0, 500);
+          });
+        }
+      } catch (e) {
+        // ignore parse errors
+      }
+    }, {
+      onOpen: () => { setWsStatus('live'); setIsPollingFallback(false); },
+      onClose: () => { setWsStatus('offline'); },
+      onError: () => { setWsStatus('offline'); },
+    });
+
+    // Cleanup
+    return () => { try { client.close(); } catch (e) { /* ignore */ } };
+  }, [isAdminView, adminActiveVehicles, adminRouteSummaries]);
+
   useEffect(() => {
     if (!isAdminView || adminRouteSummaries.length === 0) {
       setAdminRouteOverlays([]);
@@ -517,12 +632,13 @@ export default function TrackingPage({ routeId: routeIdProp }) {
               return { id: route.id, polyline: [] };
             }
 
-            const streetRoute = await getStreetRoute(from, to);
+            const waypointCoords = buildRouteWaypointCoordinates(from, to, route.intermediate_stops);
+            const streetRoute = await getStreetRouteThroughPoints(waypointCoords);
             if (streetRoute?.coordinates?.length > 1) {
               return { id: route.id, polyline: streetRoute.coordinates };
             }
 
-            return { id: route.id, polyline: [from, to] };
+            return { id: route.id, polyline: waypointCoords.length > 1 ? waypointCoords : [from, to] };
           } catch {
             return { id: route.id, polyline: [] };
           }
@@ -609,7 +725,8 @@ export default function TrackingPage({ routeId: routeIdProp }) {
             setRouteGeometryMode('pending');
 
             // getStreetRoute includes retry+cache; fallback to straight line only as last resort
-            const streetRoute = await getStreetRoute(from, to);
+            const waypointCoords = buildRouteWaypointCoordinates(from, to, route.intermediate_stops);
+            const streetRoute = await getStreetRouteThroughPoints(waypointCoords);
             if (!mounted) return;
             if (streetRoute && streetRoute.coordinates?.length > 1) {
               setRoutePolyline(streetRoute.coordinates);
@@ -657,11 +774,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
         const freshRoute = await resolveRouteInfo(selectedRouteId);
         if (!freshRoute) return;
 
-        const key = [
-          freshRoute.origin, freshRoute.destination,
-          freshRoute.origin_lat, freshRoute.origin_lng,
-          freshRoute.destination_lat, freshRoute.destination_lng,
-        ].join('|');
+        const key = buildRouteSignature(freshRoute);
 
         if (lastRouteVersionRef.current && lastRouteVersionRef.current !== key) {
           // Route changed — update state and re-resolve polyline
@@ -687,7 +800,8 @@ export default function TrackingPage({ routeId: routeIdProp }) {
             setDestinationCoords(to);
             setForceBuenaventuraDemo(false);
             setRouteGeometryMode('pending');
-            const streetRoute = await getStreetRoute(from, to);
+            const waypointCoords = buildRouteWaypointCoordinates(from, to, freshRoute.intermediate_stops);
+            const streetRoute = await getStreetRouteThroughPoints(waypointCoords);
             if (streetRoute && streetRoute.coordinates?.length > 1) {
               setRoutePolyline(streetRoute.coordinates);
               if (!streetRoute.isStraightLine) {
@@ -712,11 +826,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
 
     // Initialize version key from current routeInfo
     if (routeInfo) {
-      lastRouteVersionRef.current = [
-        routeInfo.origin, routeInfo.destination,
-        routeInfo.origin_lat, routeInfo.origin_lng,
-        routeInfo.destination_lat, routeInfo.destination_lng,
-      ].join('|');
+      lastRouteVersionRef.current = buildRouteSignature(routeInfo);
     }
 
     const intervalId = setInterval(checkRouteUpdate, ROUTE_REFRESH_INTERVAL_MS);
@@ -803,13 +913,12 @@ export default function TrackingPage({ routeId: routeIdProp }) {
 
   useEffect(() => {
     if (!Number.isFinite(selectedRouteId)) return undefined;
-    if (wsStatus === 'live') return undefined;
 
     let cancelled = false;
 
     const fetchLatest = async () => {
       try {
-        const latest = await getTrackingsByRoute(selectedRouteId);
+        const latest = await getTrackingsByRoute(selectedRouteId).catch(() => []);
         if (cancelled || !Array.isArray(latest) || latest.length === 0) return;
 
         const normalized = latest
@@ -836,14 +945,19 @@ export default function TrackingPage({ routeId: routeIdProp }) {
             [],
           ),
         });
-        setIsPollingFallback(true);
+
+        // mark that polling provided recent data only when websocket isn't the primary source
+        if (wsStatus !== 'live') setIsPollingFallback(true);
       } catch {
-        // En fallback, ignoramos errores intermitentes de red.
+        // ignore transient network errors
       }
     };
 
+    // Poll faster when websocket is not live; otherwise poll less frequently as backup
+    const intervalMs = wsStatus === 'live' ? 10000 : 5000;
+
     fetchLatest();
-    const id = setInterval(fetchLatest, 5000);
+    const id = setInterval(fetchLatest, intervalMs);
 
     return () => {
       cancelled = true;
@@ -997,19 +1111,18 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const hasPlannedRoute = Array.isArray(routePolyline) && routePolyline.length > 1;
   const hasResolvedStops = Array.isArray(originCoords) && Array.isArray(destinationCoords);
   const showRouteContext = !forceBuenaventuraDemo && (hasResolvedStops || hasPlannedRoute);
-  const canStartGuidedRoute = hasPlannedRoute || Boolean(routeInfo?.origin && routeInfo?.destination);
-  const routeBadge = useMemo(() => {
-    if (routeGeometryMode === 'verified') {
-      return { className: 'verified', label: 'Trazado verificado', statusLabel: 'Trazada' };
-    }
-    if (routeGeometryMode === 'alternate') {
-      return { className: 'alternate', label: 'Modo alterno', statusLabel: 'Alterna' };
-    }
-    return { className: 'pending', label: 'Pendiente de ubicar', statusLabel: 'Buscando' };
-  }, [routeGeometryMode]);
+  const canManageGuidedRoute = currentRole === 'driver';
+  const routeIsLive = guidedRouteRunning || hasLiveData;
+  const canStartGuidedRoute = canManageGuidedRoute
+    && (hasPlannedRoute || Boolean(routeInfo?.origin && routeInfo?.destination));
+  
 
   const displayOriginCoords = showRouteContext ? originCoords : null;
   const displayDestinationCoords = showRouteContext ? destinationCoords : null;
+  const displayIntermediateStops = useMemo(
+    () => (showRouteContext ? normalizeIntermediateStops(routeInfo?.intermediate_stops) : []),
+    [showRouteContext, routeInfo],
+  );
   const displayPlannedRoutePolyline = showRouteContext && Array.isArray(routePolyline) && routePolyline.length > 1
     ? routePolyline
     : null;
@@ -1175,6 +1288,40 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       status: speedKmh > 3 ? 'En ruta' : 'Detenido',
     };
   }, [displayTrackings, vehicleLabel]);
+
+  // Derivar estado legible de la ruta: 'en_curso' | 'finalizada' | 'detenida'
+  const routeState = useMemo(() => {
+    if (routeIsLive) {
+      if (Number.isFinite(remainingDistanceKm) && remainingDistanceKm <= 0.03) return 'finalizada';
+      return 'en_curso';
+    }
+    if (vehicleSummary?.status === 'Detenido') return 'detenida';
+    return 'detenida';
+  }, [routeIsLive, remainingDistanceKm, vehicleSummary]);
+
+  const routeBadge = useMemo(() => {
+    if (routeState === 'finalizada') {
+      return { className: 'verified', label: 'Recorrido finalizado', statusLabel: 'Finalizada' };
+    }
+
+    if (routeIsLive) {
+      if (routeGeometryMode === 'verified') {
+        return { className: 'verified', label: 'Trazado verificado', statusLabel: 'En ruta' };
+      }
+      if (routeGeometryMode === 'alternate') {
+        return { className: 'alternate', label: 'Modo alterno', statusLabel: 'En ruta' };
+      }
+      return { className: 'pending', label: 'Monitoreo activo', statusLabel: 'En ruta' };
+    }
+
+    if (routeGeometryMode === 'verified') {
+      return { className: 'verified', label: 'Trazado verificado', statusLabel: 'Trazada' };
+    }
+    if (routeGeometryMode === 'alternate') {
+      return { className: 'alternate', label: 'Modo alterno', statusLabel: 'Alterna' };
+    }
+    return { className: 'pending', label: 'Pendiente de ubicar', statusLabel: 'Buscando' };
+  }, [routeGeometryMode, routeIsLive, routeState]);
 
   const activeVehicles = useMemo(() => {
     if (!hasLiveData) return [];
@@ -1393,6 +1540,10 @@ export default function TrackingPage({ routeId: routeIdProp }) {
 
   const startGuidedRoute = async () => {
     if (guidedRouteLoading || guidedRouteRunning || !Number.isFinite(selectedRouteId)) return;
+    if (!canManageGuidedRoute) {
+      setGuidedRouteError('Solo el conductor puede iniciar la ruta. El seguimiento del usuario se activara cuando el conductor empiece el recorrido.');
+      return;
+    }
 
     setGuidedRouteError('');
     setGuidedRouteLoading(true);
@@ -1404,18 +1555,19 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           geocodeAddress(routeInfo.origin, { fallbackCoords: userCoords }),
           geocodeAddress(routeInfo.destination, { fallbackCoords: userCoords }),
         ]);
-        const streetRoute = from && to ? await getStreetRoute(from, to) : null;
+        const waypointCoords = buildRouteWaypointCoordinates(from, to, routeInfo?.intermediate_stops);
+        const streetRoute = waypointCoords.length > 1 ? await getStreetRouteThroughPoints(waypointCoords) : null;
         let routeCoordinates = streetRoute && !streetRoute.isStraightLine ? streetRoute.coordinates : null;
 
         // If OSRM route failed, build road path between endpoints as last resort
-        if (!routeCoordinates && Array.isArray(from) && Array.isArray(to)) {
+        if (!routeCoordinates && waypointCoords.length > 1) {
           try {
-            const roadPath = await buildRoadPathBetweenPoints([from, to]);
+            const roadPath = await buildRoadPathBetweenPoints(waypointCoords);
             if (roadPath?.length > 2) routeCoordinates = roadPath;
           } catch { /* use straight line as last resort */ }
         }
 
-        playbackRoute = routeCoordinates || (Array.isArray(from) && Array.isArray(to) ? [from, to] : null);
+        playbackRoute = routeCoordinates || (waypointCoords.length > 1 ? waypointCoords : null);
         if (routeCoordinates?.length > 1) {
           setRoutePolyline(playbackRoute);
           setOriginCoords(from);
@@ -1433,6 +1585,25 @@ export default function TrackingPage({ routeId: routeIdProp }) {
         throw new Error('guided-route-unavailable');
       }
 
+      // notify start immediately so backend/admin views mark route as live
+      try {
+        const startPoint = (exactRoute && exactRoute.length > 0 && exactRoute[0])
+          || (Number.isFinite(vehiclePosition?.latitude) && Number.isFinite(vehiclePosition?.longitude) && [Number(vehiclePosition.latitude), Number(vehiclePosition.longitude)])
+          || (Array.isArray(originCoords) && originCoords);
+        if (startPoint && Number.isFinite(startPoint[0]) && Number.isFinite(startPoint[1])) {
+          await sendDriverLocation({
+            route: selectedRouteId,
+            latitude: startPoint[0],
+            longitude: startPoint[1],
+            speed_kmh: 0,
+            timestamp: new Date().toISOString(),
+            source: 'route-start',
+          }).catch(() => {});
+        }
+      } catch {
+        // ignore send errors
+      }
+
       stopGuidedRoute();
       guidedRouteFullPathRef.current = exactRoute;
       guidedRoutePointsRef.current = sampledRoute;
@@ -1440,12 +1611,106 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       setGuidedRouteDisplayPath([exactRoute[0]]);
       setGuidedRouteRunning(true);
       setGuidedRouteLoading(false);
+      routeEndNotifiedRef.current = false;
       void runGuidedRouteStep();
     } catch {
       stopGuidedRoute();
       setGuidedRouteError('No fue posible preparar la ruta guiada para esta ruta.');
     } finally {
       setGuidedRouteLoading(false);
+    }
+  };
+
+  // Notificar fin de ruta cuando el estado derive a 'finalizada'
+  useEffect(() => {
+    if (routeState !== 'finalizada') return undefined;
+    if (routeEndNotifiedRef.current) {
+      // Show toast for users even if already notified to backend
+      if (currentRole !== 'driver') {
+        setShowRouteFinishedToast(true);
+        if (routeFinishedTimerRef.current) clearTimeout(routeFinishedTimerRef.current);
+        routeFinishedTimerRef.current = setTimeout(() => setShowRouteFinishedToast(false), 3600);
+      }
+      return undefined;
+    }
+
+    routeEndNotifiedRef.current = true;
+
+    // Mostrar toast para usuarios
+    if (currentRole !== 'driver') {
+      setShowRouteFinishedToast(true);
+      if (routeFinishedTimerRef.current) clearTimeout(routeFinishedTimerRef.current);
+      routeFinishedTimerRef.current = setTimeout(() => setShowRouteFinishedToast(false), 3600);
+    }
+
+    // Si somos conductor, enviar notificación final al backend
+    if (currentRole === 'driver' && Number.isFinite(selectedRouteId)) {
+      (async () => {
+        try {
+          const endPoint = (Number.isFinite(vehiclePosition?.latitude) && Number.isFinite(vehiclePosition?.longitude))
+            ? [Number(vehiclePosition.latitude), Number(vehiclePosition.longitude)]
+            : (Array.isArray(destinationCoords) ? destinationCoords : null);
+          if (endPoint) {
+            await sendDriverLocation({
+              route: selectedRouteId,
+              latitude: endPoint[0],
+              longitude: endPoint[1],
+              speed_kmh: 0,
+              timestamp: new Date().toISOString(),
+              source: 'route-end',
+            }).catch(() => {});
+          }
+        } catch {
+          // ignore
+        }
+      })();
+    }
+
+    // Stop any guided playback
+    if (guidedRouteRunning) stopGuidedRoute();
+
+    return () => {
+      if (routeFinishedTimerRef.current) {
+        clearTimeout(routeFinishedTimerRef.current);
+        routeFinishedTimerRef.current = null;
+      }
+    };
+
+    
+  }, [routeState, currentRole, selectedRouteId, vehiclePosition, destinationCoords, guidedRouteRunning]);
+
+  // Transmisión en vivo (conductor) se controla con `sharingWatchIdRef` y `stopSharing`.
+
+  const stopSharing = async () => {
+    if (sharingWatchIdRef.current) {
+      try { navigator.geolocation.clearWatch(sharingWatchIdRef.current); } catch (e) { /* ignore */ }
+      sharingWatchIdRef.current = null;
+    }
+    setSharing(false);
+
+    try {
+      const pos = displayVehiclePosition;
+      if (Number.isFinite(selectedRouteId) && pos && Number.isFinite(pos.latitude) && Number.isFinite(pos.longitude)) {
+        await sendDriverLocation({ route: selectedRouteId, latitude: pos.latitude, longitude: pos.longitude, speed_kmh: 0, timestamp: new Date().toISOString(), source: 'transmission-stop' }).catch(() => {});
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  
+
+  const handleStopAll = async () => {
+    // Stop guided playback and live transmission
+    try {
+      stopGuidedRoute();
+    } catch (e) {
+      // ignore
+    }
+    try {
+      await stopSharing();
+    } catch (e) {
+      // ignore
     }
   };
 
@@ -1458,7 +1723,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           eyebrow="Sistema activo"
           title="Tracking en tiempo real"
           description="Monitorea rutas activas, localiza conductores y sigue cada recorrido en tiempo real."
-          subtitle={routeInfo?.name || `Ruta #${selectedRouteId}`}
+          subtitle={isAdminView ? '' : (routeInfo?.name || (Number.isFinite(selectedRouteId) ? `Ruta #${selectedRouteId}` : ''))}
           meta={(
             <>
               <span className={`status-badge ${statusBadge.color}`}>
@@ -1469,6 +1734,11 @@ export default function TrackingPage({ routeId: routeIdProp }) {
             </>
           )}
         />
+        {showRouteFinishedToast && (
+          <div className="route-finished-toast" role="status" aria-live="polite">
+            Recorrido finalizado
+          </div>
+        )}
       </div>
 
       <div className="tracking-dashboard px-4 md:px-8 py-5 max-w-[1400px] mx-auto">
@@ -1579,11 +1849,39 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           ) : (
             <>
               <section className="kpi-card">
+                {currentRole === 'driver' && (
+                  <div className="route-select-row">
+                    <label className="kpi-label">Ruta activa</label>
+                    <select
+                      value={Number.isFinite(selectedRouteId) ? selectedRouteId : ''}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        if (Number.isFinite(val)) navigate(`/tracking/${val}`);
+                      }}
+                      disabled={loadingRoutes}
+                      className="route-select"
+                    >
+                      <option value="">Selecciona una ruta</option>
+                      {driverRoutes.map((r) => (
+                        <option key={r.id} value={r.id}>{r.name || `Ruta ${r.id}`}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div className="route-summary-topbar">
                   <p className="kpi-label mb-0">Ruta real</p>
                   <span className={`route-auth-badge ${routeBadge.className}`}>
                     {routeBadge.label}
                   </span>
+                  {currentRole === 'driver' && (
+                    <button
+                      type="button"
+                      onClick={() => setMode((m) => (m === 'manual' ? 'automatic' : 'manual'))}
+                      className={`mode-toggle ${mode === 'manual' ? 'manual' : 'automatic'}`}
+                    >
+                      Modo {mode === 'manual' ? 'Manual' : 'Auto'}
+                    </button>
+                  )}
                 </div>
                 <div className="route-stop-stack">
                   <div className="route-stop-card start">
@@ -1620,42 +1918,90 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                     <strong className="route-metric-value">{remainingDistanceKm !== null ? `${remainingDistanceKm.toFixed(1)} km` : 'Sin trazo'}</strong>
                   </div>
                 </div>
-                <div className="route-progress-block">
-                  <div className="route-progress-row">
-                    <span className="route-progress-label">Progreso del recorrido</span>
-                    <strong className="route-progress-value">{routeProgressPercent}%</strong>
+                {(canManageGuidedRoute || isAdminView) && (
+                  <div className="route-progress-block">
+                    <div className="route-progress-row">
+                      <span className="route-progress-label">Progreso del recorrido</span>
+                      <strong className="route-progress-value">{routeProgressPercent}%</strong>
+                    </div>
+                    <div className="route-progress-bar" aria-hidden="true">
+                      <span style={{ width: `${routeProgressPercent}%` }} />
+                    </div>
                   </div>
-                  <div className="route-progress-bar" aria-hidden="true">
-                    <span style={{ width: `${routeProgressPercent}%` }} />
-                  </div>
-                </div>
-                <div className="kpi-eta-row">
-                  <span className="kpi-label">Estado de ruta</span>
-                  <strong className="kpi-eta-value">{routeBadge.statusLabel}</strong>
-                </div>
-                {etaUpdated && (
-                  <p className="kpi-updated">
-                    Actualizado: {etaUpdated.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
-                  </p>
                 )}
-                <div className="route-actions">
-                  <button
-                    type="button"
-                    onClick={() => { void startGuidedRoute(); }}
-                    disabled={loading || guidedRouteLoading || guidedRouteRunning || !canStartGuidedRoute}
-                    className="route-action-button primary"
-                  >
-                    {guidedRouteLoading ? 'Preparando ruta...' : (guidedRouteRunning ? 'Ruta en curso' : 'Iniciar ruta')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={stopGuidedRoute}
-                    disabled={!guidedRouteRunning && !guidedRouteLoading}
-                    className="route-action-button secondary"
-                  >
-                    Detener
-                  </button>
-                </div>
+                {(canManageGuidedRoute || isAdminView) && (
+                  <>
+                    <div className="kpi-eta-row">
+                      <span className="kpi-label">Estado de ruta</span>
+                      <strong className="kpi-eta-value">{routeBadge.statusLabel}</strong>
+                    </div>
+                    {etaUpdated && (
+                      <p className="kpi-updated">
+                        Actualizado: {etaUpdated.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    )}
+                  </>
+                )}
+                {canManageGuidedRoute ? (
+                  <div className="route-actions">
+                    {/** Primary route button: label and enabled state reflect routeState and playback */}
+                    <button
+                      type="button"
+                      onClick={() => { setGuidedRouteError(''); void startGuidedRoute(); }}
+                      disabled={loading || guidedRouteLoading || guidedRouteRunning}
+                      className={`route-action-button primary ${guidedRouteRunning || routeState === 'en_curso' ? 'active' : ''}`}
+                    >
+                      {guidedRouteLoading ? 'Preparando ruta...' : (
+                        (guidedRouteRunning || sharing) ? 'Ruta en curso' : (routeState === 'finalizada' ? 'Finalizada' : 'Iniciar Ruta')
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { void handleStopAll(); }}
+                      disabled={(!sharing && !guidedRouteRunning && !guidedRouteLoading) || routeState === 'finalizada'}
+                      className="route-action-button secondary"
+                    >
+                      Detener
+                    </button>
+                    
+                  </div>
+                ) : (
+                  <div className="route-status-user">
+                    <div className="route-status-row" style={{alignItems: 'center'}}>
+                      <div style={{flex: 1}}>
+                        <span className="kpi-label">Estado de ruta</span>
+                        <div className={`route-status-badge ${routeBadge.className}`}>{routeBadge.statusLabel}</div>
+                      </div>
+                      <div style={{textAlign: 'right'}}>
+                        <div className="eta-small">{etaLabel}</div>
+                      </div>
+                    </div>
+
+                    {routeState === 'finalizada' ? (
+                      <div className="panel-empty-state">
+                        <p className="panel-muted">El recorrido ha finalizado. Gracias por usar el servicio.</p>
+                        <button
+                          type="button"
+                          onClick={() => { navigate('/dashboard'); }}
+                          className="route-action-button primary compact"
+                        >
+                          Ver historial
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="panel-muted">Esperando inicio por parte del conductor.</p>
+                        <div className="route-progress-compact">
+                          <div className="route-progress-bar small" aria-hidden="true">
+                            <span style={{ width: `${routeProgressPercent}%` }} />
+                          </div>
+                          <strong className="route-progress-percent">{routeProgressPercent}%</strong>
+                        </div>
+                        
+                      </>
+                    )}
+                  </div>
+                )}
                 {guidedRouteError && <p className="panel-error">{guidedRouteError}</p>}
               </section>
 
@@ -1670,14 +2016,18 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                 ) : displayActiveVehicles.length === 0 ? (
                   <div className="panel-empty-state">
                     <p className="panel-muted">Aun no hay posicion activa para esta ruta.</p>
-                    <button
-                      type="button"
-                      onClick={() => { void startGuidedRoute(); }}
-                      disabled={guidedRouteLoading || guidedRouteRunning || !canStartGuidedRoute}
-                      className="route-action-button primary compact"
-                    >
-                      {guidedRouteLoading ? 'Preparando...' : 'Iniciar recorrido'}
-                    </button>
+                    {canManageGuidedRoute ? (
+                      <button
+                        type="button"
+                        onClick={() => { void startGuidedRoute(); }}
+                        disabled={guidedRouteLoading || guidedRouteRunning || !canStartGuidedRoute}
+                        className="route-action-button primary compact"
+                      >
+                        {guidedRouteLoading ? 'Preparando...' : 'Iniciar recorrido'}
+                      </button>
+                    ) : (
+                      <p className="panel-muted">Esperando a que el conductor active el recorrido.</p>
+                    )}
                   </div>
                 ) : (
                   <div className="vehicle-list">
@@ -1731,6 +2081,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
             destinationCoords={displayDestinationCoords}
             originName={routeInfo?.origin || 'Centro'}
             destinationName={routeInfo?.destination || 'Seminario San Buenaventura'}
+            intermediateStops={displayIntermediateStops}
             activeVehicles={displayActiveVehicles}
             vehiclePosition={showEmptyCityCanvas ? null : displayVehiclePosition}
             userCoords={userCoords}
