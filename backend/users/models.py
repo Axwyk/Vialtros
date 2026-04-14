@@ -37,4 +37,5 @@ class Tracking(models.Model):
 	status = models.CharField(max_length=20, choices=PickupStatus.choices, default=PickupStatus.NOT_PICKED)
 	latitude = models.FloatField()
 	longitude = models.FloatField()
+	speed_kmh = models.FloatField(null=True, blank=True)
 	timestamp = models.DateTimeField(default=timezone.now)

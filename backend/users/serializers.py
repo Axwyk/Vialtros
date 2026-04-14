@@ -103,9 +103,8 @@ class TrackingIngestSerializer(serializers.Serializer):
     def create(self, validated_data):
         speed_kmh = validated_data.pop('speed_kmh', None)
         source = validated_data.pop('source', '')
-        tracking = Tracking.objects.create(**validated_data)
+        tracking = Tracking.objects.create(speed_kmh=speed_kmh, **validated_data)
         tracking._ingest_meta = {
-            'speed_kmh': speed_kmh,
             'source': source,
         }
         return tracking

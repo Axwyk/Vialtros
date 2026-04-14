@@ -1,6 +1,7 @@
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.conf import settings
+from django.utils import timezone
 from rest_framework import viewsets, permissions, status
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework.response import Response
@@ -16,6 +17,222 @@ from .permissions import IsAdmin, IsDriver, IsPassenger
 
 User = get_user_model()
 LOCAL_DEV_INGEST_TOKEN = 'local-dev-access'
+ADMIN_STALE_SIGNAL_MINUTES = 10
+ADMIN_IDLE_SPEED_KMH = 3
+
+
+def calculate_distance_km(start, end):
+    if not start or not end:
+        return 0
+
+    delta_lat = end[0] - start[0]
+    delta_lng = end[1] - start[1]
+    return ((delta_lat * delta_lat) + (delta_lng * delta_lng)) ** 0.5 * 111
+
+
+def estimate_speed_kmh(previous_tracking, latest_tracking):
+    if not previous_tracking or not latest_tracking:
+        return 0
+
+    previous_time = previous_tracking.timestamp.timestamp()
+    latest_time = latest_tracking.timestamp.timestamp()
+    elapsed_hours = (latest_time - previous_time) / 3600
+    if elapsed_hours <= 0:
+        return 0
+
+    distance_km = calculate_distance_km(
+        (previous_tracking.latitude, previous_tracking.longitude),
+        (latest_tracking.latitude, latest_tracking.longitude),
+    )
+    return max(0, round(distance_km / elapsed_hours))
+
+
+def build_admin_monitoring_summary(routes):
+    now = timezone.now()
+    route_ids = [route.id for route in routes]
+    trackings = list(
+        Tracking.objects.filter(route_id__in=route_ids)
+        .select_related('passenger')
+        .order_by('route_id', 'passenger_id', 'timestamp', 'id')
+    )
+
+    route_trackings = {}
+    latest_by_route = {}
+    previous_by_route = {}
+    latest_by_route_passenger = {}
+
+    for tracking in trackings:
+        route_id = tracking.route_id
+        route_trackings.setdefault(route_id, []).append(tracking)
+
+        if tracking.passenger_id is None:
+            continue
+
+        route_passenger_map = latest_by_route_passenger.setdefault(route_id, {})
+        route_passenger_map[tracking.passenger_id] = tracking
+
+    for route_id, route_entries in route_trackings.items():
+        ordered_entries = sorted(route_entries, key=lambda item: (item.timestamp, item.id))
+        latest_tracking = ordered_entries[-1]
+        latest_by_route[route_id] = latest_tracking
+
+        previous_tracking = next(
+            (
+                entry for entry in reversed(ordered_entries[:-1])
+                if entry.timestamp < latest_tracking.timestamp
+            ),
+            None,
+        )
+        if previous_tracking is not None:
+            previous_by_route[route_id] = previous_tracking
+
+    route_summaries = []
+    active_vehicles = []
+    alerts = []
+    routes_without_driver = 0
+    routes_without_driver_ids = []
+    stale_signal_routes = 0
+    stale_signal_route_ids = []
+    stopped_vehicle_routes = 0
+    stopped_vehicle_route_ids = []
+    delayed_pickup_routes = 0
+    delayed_pickup_route_ids = []
+    total_students = 0
+    no_signal_route_ids = []
+
+    for route in routes:
+        total_passengers = route.passengers.count()
+        total_students += total_passengers
+
+        latest_tracking = latest_by_route.get(route.id)
+        previous_tracking = previous_by_route.get(route.id)
+        passenger_trackings = latest_by_route_passenger.get(route.id, {})
+        picked_count = sum(1 for tracking in passenger_trackings.values() if tracking.status == 'picked')
+        progress_percent = round((picked_count / total_passengers) * 100) if total_passengers > 0 else 0
+
+        signal_age_minutes = None
+        is_live = False
+        speed_kmh = 0
+        if latest_tracking is not None:
+            signal_age_minutes = max(0, round((now - latest_tracking.timestamp).total_seconds() / 60))
+            is_live = signal_age_minutes <= ADMIN_STALE_SIGNAL_MINUTES
+            if latest_tracking.speed_kmh is not None:
+                speed_kmh = max(0, round(latest_tracking.speed_kmh))
+            else:
+                speed_kmh = estimate_speed_kmh(previous_tracking, latest_tracking)
+
+        has_stale_signal = signal_age_minutes is not None and signal_age_minutes > ADMIN_STALE_SIGNAL_MINUTES
+
+        if route.driver_id is None:
+            state_label = 'Sin conductor'
+            routes_without_driver += 1
+            routes_without_driver_ids.append(route.id)
+        elif not latest_tracking:
+            state_label = 'Sin señal'
+            no_signal_route_ids.append(route.id)
+        elif has_stale_signal:
+            state_label = 'Señal desactualizada'
+            stale_signal_routes += 1
+            stale_signal_route_ids.append(route.id)
+        elif speed_kmh <= ADMIN_IDLE_SPEED_KMH:
+            state_label = 'Detenido'
+            stopped_vehicle_routes += 1
+            stopped_vehicle_route_ids.append(route.id)
+        else:
+            state_label = 'En seguimiento'
+
+        route_summary = {
+            'id': route.id,
+            'name': route.name,
+            'origin': route.origin,
+            'destination': route.destination,
+            'driver_name': route.driver.user.username if route.driver_id else 'Sin asignar',
+            'progress_percent': progress_percent,
+            'state_label': state_label,
+            'is_live': is_live,
+            'students_total': total_passengers,
+            'students_picked': picked_count,
+            'signal_age_minutes': signal_age_minutes,
+        }
+        route_summaries.append(route_summary)
+
+        if latest_tracking and is_live:
+            active_vehicles.append({
+                'route_id': route.id,
+                'route_name': route.name,
+                'label': route.driver.license_number if route.driver_id else route.name,
+                'latitude': latest_tracking.latitude,
+                'longitude': latest_tracking.longitude,
+                'speed_kmh': speed_kmh,
+                'students_onboard': picked_count,
+                'progress_percent': progress_percent,
+                'status': 'En ruta' if speed_kmh > ADMIN_IDLE_SPEED_KMH else 'Detenido',
+                'signal_age_minutes': signal_age_minutes,
+            })
+
+        if total_passengers > 0 and progress_percent <= 50 and is_live:
+            delayed_pickup_routes += 1
+            delayed_pickup_route_ids.append(route.id)
+
+    if not active_vehicles:
+        alerts.append({
+            'id': 'without-active-vehicles',
+            'tone': 'critical',
+            'title': 'Sin vehiculos activos',
+            'detail': 'No hay reportes de posicion vigentes en las rutas monitoreadas.',
+            'route_ids': no_signal_route_ids or [route.id for route in routes],
+        })
+
+    if routes_without_driver:
+        alerts.append({
+            'id': 'routes-without-driver',
+            'tone': 'warning',
+            'title': 'Rutas sin conductor',
+            'detail': f'{routes_without_driver} ruta(s) no tienen conductor asignado.',
+            'route_ids': routes_without_driver_ids,
+        })
+
+    if stale_signal_routes:
+        alerts.append({
+            'id': 'stale-signal-routes',
+            'tone': 'warning',
+            'title': 'Señal desactualizada',
+            'detail': f'{stale_signal_routes} ruta(s) superan {ADMIN_STALE_SIGNAL_MINUTES} minutos sin telemetria reciente.',
+            'route_ids': stale_signal_route_ids,
+        })
+
+    if stopped_vehicle_routes:
+        alerts.append({
+            'id': 'stopped-vehicles',
+            'tone': 'info',
+            'title': 'Vehiculos detenidos',
+            'detail': f'{stopped_vehicle_routes} vehiculo(s) activos aparecen con velocidad operativa baja.',
+            'route_ids': stopped_vehicle_route_ids,
+        })
+
+    if delayed_pickup_routes:
+        alerts.append({
+            'id': 'low-pickup-progress',
+            'tone': 'info',
+            'title': 'Recogida al 50% o menos',
+            'detail': f'{delayed_pickup_routes} ruta(s) activas presentan avance bajo frente a sus estudiantes asignados.',
+            'route_ids': delayed_pickup_route_ids,
+        })
+
+    route_summaries.sort(key=lambda item: (not item['is_live'], -item['progress_percent'], item['name']))
+    active_vehicles.sort(key=lambda item: (item['status'] != 'En ruta', -item['speed_kmh'], item['route_name']))
+
+    return {
+        'stats': {
+            'routes_total': len(routes),
+            'vehicles_registered': sum(1 for route in routes if route.driver_id),
+            'vehicles_active': len(active_vehicles),
+            'students_total': total_students,
+        },
+        'routes': route_summaries,
+        'active_vehicles': active_vehicles,
+        'alerts': alerts[:5],
+    }
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -39,6 +256,7 @@ class UserViewSet(viewsets.ModelViewSet):
         if user.role == 'admin':
             return Response({
                 'routes': Route.objects.count(),
+                'vehicles': Driver.objects.count(),
                 'users': User.objects.count(),
                 'trackings': Tracking.objects.count(),
             })
@@ -47,7 +265,7 @@ class UserViewSet(viewsets.ModelViewSet):
             try:
                 driver = Driver.objects.get(user=user)
             except Driver.DoesNotExist:
-                return Response({'routes': 0, 'users': 0, 'trackings': 0})
+                return Response({'routes': 0, 'vehicles': 0, 'users': 0, 'trackings': 0})
 
             routes_qs = Route.objects.filter(driver=driver)
             passenger_count = Passenger.objects.filter(route__in=routes_qs).distinct().count()
@@ -128,6 +346,14 @@ class RouteViewSet(viewsets.ModelViewSet):
     queryset = Route.objects.select_related('driver').prefetch_related('passengers').all().order_by('id')
     serializer_class = RouteSerializer
     permission_classes = [IsAdmin]
+
+    def get_queryset(self):
+        return Route.objects.select_related('driver__user').prefetch_related('passengers').all().order_by('id')
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAdmin], url_path='monitoring-summary')
+    def monitoring_summary(self, request):
+        routes = list(self.get_queryset())
+        return Response(build_admin_monitoring_summary(routes))
 
     @action(detail=True, methods=['post'])
     def assign_driver(self, request, pk=None):
@@ -303,8 +529,6 @@ class TrackingViewSet(viewsets.ModelViewSet):
         response_payload = TrackingSerializer(tracking).data
         ingest_meta = getattr(tracking, '_ingest_meta', {})
 
-        if ingest_meta.get('speed_kmh') is not None:
-            response_payload['speed_kmh'] = ingest_meta['speed_kmh']
         if ingest_meta.get('source'):
             response_payload['source'] = ingest_meta['source']
 
