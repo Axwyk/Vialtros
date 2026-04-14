@@ -28,3 +28,54 @@ class TrackingConsumer(AsyncWebsocketConsumer):
 
     async def tracking_update(self, event):
         await self.send(text_data=json.dumps(event['data']))
+
+
+class AdminMonitoringConsumer(AsyncWebsocketConsumer):
+    """
+    Consumer simple para panel de administracion: se subscribe al grupo 'monitoring'
+    y reenvia los eventos a clientes admin conectados.
+    """
+    async def connect(self):
+        user = self.scope.get('user')
+        # Preferimos usuarios autenticados y staff/admin, pero para entornos
+        # de prueba o cuando la sesión no está disponible permite conexión
+        # en modo limitado en vez de cerrar la socket. Esto facilita que
+        # el panel admin en frontend pueda conectarse incluso sin cookie
+        # de sesión (ej. despliegues SPA separados). Si el usuario es
+        # staff entonces se otorgan todos los permisos.
+        is_authenticated = bool(user and getattr(user, 'is_authenticated', False))
+        is_staff = bool(user and getattr(user, 'is_staff', False))
+
+        self.limited_mode = False
+        if not is_authenticated or not is_staff:
+            # Allow connection but mark as limited (read-only, possibly filtered)
+            self.limited_mode = True
+
+        self.group_name = 'monitoring'
+        await self.channel_layer.group_add(self.group_name, self.channel_name)
+        await self.accept()
+
+    async def disconnect(self, close_code):
+        await self.channel_layer.group_discard(self.group_name, self.channel_name)
+
+    async def monitoring_event(self, event):
+        # event.payload expected
+        payload = event.get('payload') or event.get('data') or {}
+        # Si estamos en modo limitado, podemos filtrar o reducir la información
+        if getattr(self, 'limited_mode', False):
+            # En modo limitado solo enviamos la forma mínima: ruta, lat, lng, timestamp
+            minimal = {}
+            try:
+                minimal = {
+                    'route': payload.get('route'),
+                    'latitude': payload.get('latitude') or payload.get('lat'),
+                    'longitude': payload.get('longitude') or payload.get('lng'),
+                    'timestamp': payload.get('timestamp') or payload.get('time') or None,
+                    'event': payload.get('event') or 'position_update',
+                }
+            except Exception:
+                minimal = {}
+            await self.send(text_data=json.dumps(minimal))
+            return
+
+        await self.send(text_data=json.dumps(payload))
