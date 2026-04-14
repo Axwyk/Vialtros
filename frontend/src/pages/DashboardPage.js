@@ -38,17 +38,17 @@ function getPassengerStatusConfig(status) {
   const statusMap = {
     picked: {
       label: 'Recogido',
-      className: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+      className: 'bg-blue-600 text-white border border-blue-600',
     },
     not_picked: {
       label: 'Pendiente',
-      className: 'bg-amber-50 text-amber-700 border border-amber-200',
+      className: 'bg-blue-50 text-blue-700 border border-blue-200',
     },
   };
 
   return statusMap[status] || {
     label: 'Sin estado',
-    className: 'bg-slate-100 text-slate-600 border border-slate-200',
+    className: 'bg-white text-slate-600 border border-blue-100',
   };
 }
 
@@ -245,7 +245,7 @@ export default function DashboardPage({ role, onLogout }) {
           <div className="flex flex-col gap-5">
             <HeroCard role={role} />
 
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+            <div className="bg-white rounded-xl border border-blue-100 shadow-sm p-5">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-sm font-semibold text-gray-900">Rutas por día</h3>
@@ -442,8 +442,8 @@ export default function DashboardPage({ role, onLogout }) {
                                     <div
                                       className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 shadow-sm ${
                                         status === 'picked'
-                                          ? 'bg-green-100 border-green-300 text-green-700'
-                                          : 'bg-red-100 border-red-300 text-red-700'
+                                          ? 'bg-blue-600 border-blue-700 text-white'
+                                          : 'bg-blue-50 border-blue-200 text-blue-700'
                                       }`}
                                     >
                                       {status === 'picked' ? '✓' : '✗'}
@@ -479,8 +479,8 @@ export default function DashboardPage({ role, onLogout }) {
                                       disabled={status === 'not_picked'}
                                       className={`px-3 py-1 text-xs font-semibold rounded-full transition ${
                                         status === 'not_picked'
-                                          ? 'bg-red-100 text-red-700 cursor-not-allowed'
-                                          : 'bg-red-600 text-white hover:bg-red-700'
+                                          ? 'bg-blue-50 text-blue-700 border border-blue-200 cursor-not-allowed'
+                                          : 'bg-white text-blue-700 border border-blue-200 hover:bg-blue-50'
                                       }`}
                                     >
                                       Marcar no recogido
@@ -501,7 +501,7 @@ export default function DashboardPage({ role, onLogout }) {
         )}
 
         {role === 'user' && (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 flex items-center justify-between gap-4">
+          <div className="bg-white rounded-xl border border-blue-100 shadow-sm p-5 flex items-center justify-between gap-4">
             <div>
               <h3 className="text-sm font-semibold text-gray-900 mb-0.5">Tu ruta asignada</h3>
               <p className="text-xs text-gray-400">Consulta tu conductor y el recorrido en tiempo real</p>
