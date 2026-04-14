@@ -11,6 +11,10 @@ const BVA_VIEWBOX = '-77.18,3.72,-76.85,4.02';
 const BVA_CITY_SUFFIX = ', Buenaventura, Colombia';
 const geocodeCache = new Map();
 const routeCache = new Map();
+const TRACK_MATCH_RADIUS_METERS = 35;
+const TRACK_MATCH_GAP_SECONDS = 8;
+const TRACK_MAX_POINT_JUMP_KM = 1.4;
+const TRACK_MAX_BEARING_RANGE = 90;
 export const BUENAVENTURA_CENTER = [3.89243, -77.02824];
 export const BUENAVENTURA_URBAN_BOUNDS = {
   minLat: 3.84,
@@ -179,23 +183,50 @@ function sanitizeBuenaventuraCoords(coords, fallbackCoords = null) {
   return null;
 }
 
-function normalizePathPoints(points) {
+function normalizeTrackMatchPoints(points) {
   return (Array.isArray(points) ? points : [])
-    .filter((point) => Array.isArray(point) && point.length === 2)
-    .map(([lat, lng]) => [Number(lat), Number(lng)])
-    .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
+    .map((point) => {
+      if (Array.isArray(point) && point.length === 2) {
+        const lat = Number(point[0]);
+        const lng = Number(point[1]);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+        return {
+          coords: [lat, lng],
+          speedKmh: null,
+          timestampMs: null,
+        };
+      }
+
+      if (!point || typeof point !== 'object') return null;
+
+      const lat = Number(point.latitude ?? point.lat ?? point.coords?.[0]);
+      const lng = Number(point.longitude ?? point.lng ?? point.coords?.[1]);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+      const speedRaw = Number(point.speed ?? point.speed_kmh ?? point.velocity);
+      const timestampMs = point.timestamp ? new Date(point.timestamp).getTime() : Number.NaN;
+
+      return {
+        coords: [lat, lng],
+        speedKmh: Number.isFinite(speedRaw) ? speedRaw : null,
+        timestampMs: Number.isFinite(timestampMs) ? timestampMs : null,
+      };
+    })
+    .filter(Boolean);
 }
 
-function dedupeConsecutivePoints(points) {
-  return points.reduce((acc, point) => {
+function dedupeConsecutiveTrackMatchPoints(points) {
+  return (Array.isArray(points) ? points : []).reduce((acc, point) => {
     const last = acc[acc.length - 1];
-    if (last && last[0] === point[0] && last[1] === point[1]) return acc;
+    if (last && last.coords[0] === point.coords[0] && last.coords[1] === point.coords[1]) {
+      return acc;
+    }
     acc.push(point);
     return acc;
   }, []);
 }
 
-function samplePathPoints(points, maxPoints = 12) {
+function sampleTrackMatchPoints(points, maxPoints = 12) {
   if (points.length <= maxPoints) return points;
 
   const sampled = [];
@@ -205,7 +236,63 @@ function samplePathPoints(points, maxPoints = 12) {
     sampled.push(points[pointIndex]);
   }
 
-  return dedupeConsecutivePoints(sampled);
+  return dedupeConsecutiveTrackMatchPoints(sampled);
+}
+
+function filterAbruptPathJumps(points, maxJumpKm = TRACK_MAX_POINT_JUMP_KM) {
+  return (Array.isArray(points) ? points : []).reduce((acc, point) => {
+    const last = acc[acc.length - 1];
+    if (!last) {
+      acc.push(point);
+      return acc;
+    }
+
+    if (haversineKm(last.coords, point.coords) <= maxJumpKm) {
+      acc.push(point);
+    }
+
+    return acc;
+  }, []);
+}
+
+function buildMatchParams(points) {
+  const radiuses = points.map(() => String(TRACK_MATCH_RADIUS_METERS)).join(';');
+  const firstTimestampMs = points.find((point) => Number.isFinite(point.timestampMs))?.timestampMs ?? null;
+  const timestamps = points.map((point, index) => {
+    if (Number.isFinite(firstTimestampMs) && Number.isFinite(point.timestampMs)) {
+      return String(Math.max(1, Math.round(point.timestampMs / 1000)));
+    }
+
+    return String(1700000000 + (index * TRACK_MATCH_GAP_SECONDS));
+  }).join(';');
+  const bearings = points.map((point, index) => {
+    const previous = points[index - 1]?.coords;
+    const next = points[index + 1]?.coords;
+    const from = previous || point.coords;
+    const to = next || previous;
+
+    if (!Array.isArray(from) || !Array.isArray(to) || (from[0] === to[0] && from[1] === to[1])) {
+      return '';
+    }
+
+    const deltaLng = to[1] - from[1];
+    const deltaLat = to[0] - from[0];
+    const bearing = (Math.atan2(deltaLng, deltaLat) * (180 / Math.PI) + 360) % 360;
+    const speed = point.speedKmh ?? 0;
+    const range = speed >= 45
+      ? 20
+      : speed >= 30
+        ? 28
+        : speed >= 18
+          ? 38
+          : speed >= 8
+            ? 55
+            : TRACK_MAX_BEARING_RANGE;
+
+    return `${Math.round(bearing)},${range}`;
+  }).join(';');
+
+  return { radiuses, timestamps, bearings };
 }
 
 function buildOsrmCoordinates(points) {
@@ -244,6 +331,55 @@ function toLatLngPolyline(route) {
   };
 }
 
+function trimAccessRoadLoops(coordinates, from, to) {
+  const routePoints = (Array.isArray(coordinates) ? coordinates : [])
+    .filter((point) => Array.isArray(point) && point.length === 2);
+
+  if (routePoints.length < 4 || !Array.isArray(from) || !Array.isArray(to)) {
+    return routePoints;
+  }
+
+  const accessThresholdKm = 0.45;
+  const scanLimit = Math.min(routePoints.length - 2, 18);
+
+  let startIndex = 0;
+  let bestStartScore = Number.POSITIVE_INFINITY;
+  for (let index = 0; index <= scanLimit; index += 1) {
+    const point = routePoints[index];
+    const distanceFromOrigin = haversineKm(from, point);
+    if (distanceFromOrigin > accessThresholdKm) break;
+
+    const distanceToDestination = haversineKm(point, to);
+    const score = (distanceToDestination * 0.82) + (distanceFromOrigin * 0.18);
+    if (score < bestStartScore) {
+      bestStartScore = score;
+      startIndex = index;
+    }
+  }
+
+  let endIndex = routePoints.length - 1;
+  let bestEndScore = Number.POSITIVE_INFINITY;
+  for (let offset = 0; offset <= scanLimit; offset += 1) {
+    const index = routePoints.length - 1 - offset;
+    const point = routePoints[index];
+    const distanceToDestination = haversineKm(point, to);
+    if (distanceToDestination > accessThresholdKm) break;
+
+    const distanceFromOrigin = haversineKm(point, from);
+    const score = (distanceFromOrigin * 0.82) + (distanceToDestination * 0.18);
+    if (score < bestEndScore) {
+      bestEndScore = score;
+      endIndex = index;
+    }
+  }
+
+  if (endIndex - startIndex < 2) {
+    return routePoints;
+  }
+
+  return routePoints.slice(startIndex, endIndex + 1);
+}
+
 async function snapToNearestRoad(coords) {
   if (!Array.isArray(coords) || coords.length !== 2) return null;
 
@@ -256,6 +392,63 @@ async function snapToNearestRoad(coords) {
   } catch {
     return null;
   }
+}
+
+async function getNearestRoadCandidates(coords, number = 3) {
+  if (!Array.isArray(coords) || coords.length !== 2) return [];
+
+  const [lat, lng] = coords;
+  try {
+    const data = await fetchJson(`${OSRM_NEAREST_BASE}/${lng},${lat}?number=${number}`);
+    const candidates = (Array.isArray(data?.waypoints) ? data.waypoints : [])
+      .map((waypoint) => waypoint?.location)
+      .filter((location) => Array.isArray(location) && location.length === 2)
+      .map(([candidateLng, candidateLat]) => sanitizeBuenaventuraCoords([candidateLat, candidateLng], coords))
+      .filter(Boolean);
+
+    return dedupeConsecutiveTrackMatchPoints(
+      normalizeTrackMatchPoints([
+        { coords },
+        ...candidates.map((candidate) => ({ coords: candidate })),
+      ]),
+    ).map((point) => point.coords);
+  } catch {
+    return [coords];
+  }
+}
+
+async function requestBestStreetRoute(fromCandidates, toCandidates, maxDistance = 60000) {
+  const safeFromCandidates = (Array.isArray(fromCandidates) ? fromCandidates : []).filter(Array.isArray);
+  const safeToCandidates = (Array.isArray(toCandidates) ? toCandidates : []).filter(Array.isArray);
+
+  let bestRoute = null;
+
+  for (const from of safeFromCandidates) {
+    for (const to of safeToCandidates) {
+      const route = await requestStreetRoute([from, to], maxDistance);
+      if (!route) continue;
+
+      if (!bestRoute || route.distance < bestRoute.distance) {
+        bestRoute = route;
+      }
+    }
+  }
+
+  return bestRoute;
+}
+
+async function snapPathToRoad(points) {
+  const snapped = await Promise.all(
+    (Array.isArray(points) ? points : []).map(async (point) => {
+      const snappedCoords = await snapToNearestRoad(point.coords);
+      return {
+        ...point,
+        coords: snappedCoords || point.coords,
+      };
+    }),
+  );
+
+  return dedupeConsecutiveTrackMatchPoints(normalizeTrackMatchPoints(snapped));
 }
 
 async function requestStreetRoute(points, maxDistance = 60000) {
@@ -378,16 +571,20 @@ export async function getStreetRoute(from, to) {
   const safeTo = sanitizeBuenaventuraCoords(to, safeFrom) || to;
 
   try {
-    const [snappedFrom, snappedTo] = await Promise.all([
-      snapToNearestRoad(safeFrom),
-      snapToNearestRoad(safeTo),
+    const [fromCandidates, toCandidates] = await Promise.all([
+      getNearestRoadCandidates(safeFrom),
+      getNearestRoadCandidates(safeTo),
     ]);
 
-    const adjustedFrom = snappedFrom || safeFrom;
-    const adjustedTo = snappedTo || safeTo;
-    const snappedRoute = await requestStreetRoute([adjustedFrom, adjustedTo]);
+    const snappedRoute = await requestBestStreetRoute(
+      fromCandidates.length > 0 ? fromCandidates : [safeFrom],
+      toCandidates.length > 0 ? toCandidates : [safeTo],
+    );
     if (snappedRoute) {
-      return snappedRoute;
+      return {
+        ...snappedRoute,
+        coordinates: trimAccessRoadLoops(snappedRoute.coordinates, safeFrom, safeTo),
+      };
     }
   } catch {
     // Si falla el ajuste a la vía, probamos con las coordenadas saneadas.
@@ -396,7 +593,10 @@ export async function getStreetRoute(from, to) {
   try {
     const directRoute = await requestStreetRoute([safeFrom, safeTo]);
     if (directRoute) {
-      return directRoute;
+      return {
+        ...directRoute,
+        coordinates: trimAccessRoadLoops(directRoute.coordinates, safeFrom, safeTo),
+      };
     }
   } catch {
     // Último recurso: línea recta.
@@ -412,14 +612,19 @@ export async function getStreetRoute(from, to) {
  * @returns {Promise<{ coordinates: [number, number][], duration: number, distance: number, isStraightLine?: boolean } | null>}
  */
 export async function getTrackedStreetRoute(points) {
-  const normalized = dedupeConsecutivePoints(normalizePathPoints(points));
+  const normalized = filterAbruptPathJumps(
+    dedupeConsecutiveTrackMatchPoints(normalizeTrackMatchPoints(points)),
+  );
   if (normalized.length < 2) return null;
 
-  const sampled = samplePathPoints(normalized, 12);
-  const sampledCoordinates = buildOsrmCoordinates(sampled);
+  const sampled = sampleTrackMatchPoints(normalized, 14);
+  const snappedSampled = await snapPathToRoad(sampled);
+  const roadAnchoredPoints = snappedSampled.length > 1 ? snappedSampled : sampled;
+  const sampledCoordinates = buildOsrmCoordinates(roadAnchoredPoints.map((point) => point.coords));
+  const { radiuses, timestamps, bearings } = buildMatchParams(roadAnchoredPoints);
 
   try {
-    const matchUrl = `${OSRM_MATCH_BASE}/${sampledCoordinates}?geometries=geojson&overview=full&tidy=true&gaps=ignore&annotations=false`;
+    const matchUrl = `${OSRM_MATCH_BASE}/${sampledCoordinates}?geometries=geojson&overview=full&tidy=true&gaps=split&annotations=false&radiuses=${radiuses}&timestamps=${timestamps}&bearings=${bearings}`;
     const data = await fetchJson(matchUrl);
     if (data?.code === 'Ok' && Array.isArray(data.matchings) && data.matchings.length > 0) {
       const coordinates = mergePolylineSegments(
@@ -438,7 +643,7 @@ export async function getTrackedStreetRoute(points) {
   }
 
   try {
-    const routeUrl = `${OSRM_BASE}/${sampledCoordinates}?overview=full&geometries=geojson&continue_straight=false`;
+    const routeUrl = `${OSRM_BASE}/${sampledCoordinates}?overview=full&geometries=geojson&continue_straight=false&steps=true`;
     const data = await fetchJson(routeUrl);
     if (data?.code === 'Ok' && Array.isArray(data.routes) && data.routes.length > 0) {
       const route = data.routes[0];
@@ -455,7 +660,16 @@ export async function getTrackedStreetRoute(points) {
   }
 
   const segmentRoutes = await Promise.all(
-    sampled.slice(1).map((to, index) => getStreetRoute(sampled[index], to)),
+    roadAnchoredPoints.slice(1).map(async (to, index) => {
+      const from = roadAnchoredPoints[index]?.coords;
+      const toCoords = to?.coords;
+      const directSegment = await requestStreetRoute([from, toCoords], 30000);
+      if (directSegment) {
+        return directSegment;
+      }
+
+      return getStreetRoute(from, toCoords);
+    }),
   );
   const coordinates = mergePolylineSegments(segmentRoutes.map((segment) => segment?.coordinates || []));
   if (coordinates.length > 1) {
@@ -464,6 +678,15 @@ export async function getTrackedStreetRoute(points) {
       duration: segmentRoutes.reduce((sum, segment) => sum + (segment?.duration || 0), 0),
       distance: segmentRoutes.reduce((sum, segment) => sum + (segment?.distance || 0), 0),
       isStraightLine: segmentRoutes.every((segment) => segment?.isStraightLine),
+    };
+  }
+
+  if (roadAnchoredPoints.length > 1) {
+    return {
+      coordinates: roadAnchoredPoints.map((point) => point.coords),
+      duration: 0,
+      distance: 0,
+      isStraightLine: false,
     };
   }
 

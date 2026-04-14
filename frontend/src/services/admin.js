@@ -17,6 +17,7 @@ export const deleteDriver = (id)    => api.delete(`/drivers/${id}/`);
 // ── Rutas ─────────────────────────────────────────────────
 export const getRoutes    = ()      => api.get('/routes/').then(r => r.data);
 export const getRoute     = (id)    => api.get(`/routes/${id}/`).then(r => r.data);
+export const getRouteMonitoringSummary = () => api.get('/routes/monitoring-summary/').then(r => r.data);
 export const createRoute  = (data)  => api.post('/routes/', data).then(r => r.data);
 export const updateRoute  = (id, d) => api.patch(`/routes/${id}/`, d).then(r => r.data);
 export const deleteRoute  = (id)    => api.delete(`/routes/${id}/`);

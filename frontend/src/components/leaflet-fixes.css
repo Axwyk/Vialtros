@@ -82,12 +82,17 @@
 }
 
 .vt-planned-route-line-shadow,
+.vt-remaining-route-line-shadow,
 .vt-traveled-route-line-shadow {
   filter: blur(0.2px);
 }
 
 .vt-planned-route-line-main {
   animation: vt-route-dash-move 7s linear infinite;
+}
+
+.vt-remaining-route-line-main {
+  animation: vt-route-dash-move 5.5s linear infinite;
 }
 
 .vt-traveled-route-line-main {
@@ -197,6 +202,14 @@
   color: #ffffff;
 }
 
+.vt-current-point-ring {
+  animation: vt-current-point-pulse 1.8s ease-out infinite;
+}
+
+.vt-current-point-core {
+  filter: drop-shadow(0 0 8px rgba(37, 99, 235, 0.35));
+}
+
 .vt-vehicle-icon {
   width: 18px;
   height: 18px;
@@ -251,12 +264,23 @@
   }
 }
 
+@keyframes vt-current-point-pulse {
+  0% {
+    stroke-opacity: 0.28;
+  }
+  100% {
+    stroke-opacity: 0.04;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .vt-route-chip,
   .vt-vehicle-chip,
   .vt-vehicle-icon,
   .vt-planned-route-line-main,
-  .vt-traveled-route-line-main {
+  .vt-remaining-route-line-main,
+  .vt-traveled-route-line-main,
+  .vt-current-point-ring {
     animation: none !important;
   }
 }
@@ -309,6 +333,11 @@
   background: #2563eb;
 }
 
+.legend-marker.current-dot {
+  background: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
 .legend-marker.origin-dot {
   background: #0ea5e9;
 }
@@ -327,6 +356,11 @@
 .legend-line.planned {
   background: repeating-linear-gradient(90deg, #475569 0 6px, transparent 6px 10px);
   border: 1px solid rgba(71, 85, 105, 0.2);
+}
+
+.legend-line.remaining {
+  background: repeating-linear-gradient(90deg, #0891b2 0 8px, transparent 8px 13px);
+  border: 1px solid rgba(8, 145, 178, 0.28);
 }
 
 .legend-line.traveled {

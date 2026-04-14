@@ -1,7 +1,8 @@
 // Mapa en tiempo real con estilo limpio tipo navegacion
 import { useEffect, useMemo, useRef, useState } from 'react';
+import React from 'react';
 import L from 'leaflet';
-import { MapContainer, TileLayer, Marker, Polyline, useMap } from 'react-leaflet';
+import { CircleMarker, MapContainer, Marker, Polyline, TileLayer, useMap } from 'react-leaflet';
 import './leaflet-fixes.css';
 
 delete L.Icon.Default.prototype._getIconUrl;
@@ -274,6 +275,7 @@ export default function MapView({
   trackings = [],
   routePolyline = null,
   plannedRoutePolyline = null,
+  remainingRoutePolyline = null,
   traveledRoutePolyline = null,
   originCoords = null,
   destinationCoords = null,
@@ -283,6 +285,9 @@ export default function MapView({
   vehiclePosition = null,
   userCoords = null,
   mapHeight = '560px',
+  focusAllVehicles = false,
+  routeOverlays = [],
+  highlightedRouteIds = [],
 }) {
   const [animatedVehiclePoint, setAnimatedVehiclePoint] = useState(null);
   const animationFrameRef = useRef(null);
@@ -290,12 +295,22 @@ export default function MapView({
   const previousAnimatedPointRef = useRef(null);
   const previousTraveledLineLengthRef = useRef(0);
 
-  const validPoints = trackings
-    .map((t) => [Number(t.latitude), Number(t.longitude)])
-    .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
-
-  const latestPoint = validPoints.length > 0 ? validPoints[validPoints.length - 1] : null;
-  const center = latestPoint || originCoords || destinationCoords || userCoords || BUENAVENTURA_CENTER;
+  const validPoints = useMemo(
+    () => trackings
+      .map((t) => [Number(t.latitude), Number(t.longitude)])
+      .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng)),
+    [trackings],
+  );
+  const latestPoint = useMemo(
+    () => (validPoints.length > 0 ? validPoints[validPoints.length - 1] : null),
+    [validPoints],
+  );
+  const center = useMemo(
+    () => (focusAllVehicles
+      ? BUENAVENTURA_CENTER
+      : (latestPoint || originCoords || destinationCoords || userCoords || BUENAVENTURA_CENTER)),
+    [focusAllVehicles, latestPoint, originCoords, destinationCoords, userCoords],
+  );
   const startLabelIcon = useMemo(
     () => createRouteLabelIcon(originName || 'Origen', 'start'),
     [originName],
@@ -308,35 +323,88 @@ export default function MapView({
   const plannedLine = plannedRoutePolyline?.length > 1
     ? plannedRoutePolyline
     : (routePolyline?.length > 1 ? routePolyline : null);
+  const remainingLine = remainingRoutePolyline?.length > 1 ? remainingRoutePolyline : null;
   const traveledLine = traveledRoutePolyline?.length > 1 ? traveledRoutePolyline : null;
+  const normalizedRouteOverlays = useMemo(
+    () => (Array.isArray(routeOverlays) ? routeOverlays : [])
+      .map((overlay) => ({
+        ...overlay,
+        polyline: Array.isArray(overlay?.polyline) ? overlay.polyline.filter(
+          (point) => Array.isArray(point) && Number.isFinite(point[0]) && Number.isFinite(point[1]),
+        ) : [],
+      }))
+      .filter((overlay) => overlay.polyline.length > 1),
+    [routeOverlays],
+  );
+  const highlightedRouteIdSet = useMemo(
+    () => new Set((Array.isArray(highlightedRouteIds) ? highlightedRouteIds : []).map((routeId) => Number(routeId)).filter(Number.isFinite)),
+    [highlightedRouteIds],
+  );
+  const activeVehicleCoords = useMemo(
+    () => activeVehicles
+      .filter((vehicle) => Number.isFinite(vehicle.latitude) && Number.isFinite(vehicle.longitude))
+      .map((vehicle) => [Number(vehicle.latitude), Number(vehicle.longitude)]),
+    [activeVehicles],
+  );
+  const routeOverlayCoords = normalizedRouteOverlays.flatMap((overlay) => overlay.polyline);
 
-  const fitCoords = plannedLine?.length > 1
-    ? plannedLine
-    : (traveledLine?.length > 1
-      ? traveledLine
-    : [
-      ...[originCoords, destinationCoords].filter(Boolean),
-      ...[userCoords].filter(Boolean),
-      ...activeVehicles
-        .filter((v) => Number.isFinite(v.latitude) && Number.isFinite(v.longitude))
-        .map((v) => [v.latitude, v.longitude]),
-    ]);
+  const fitCoords = useMemo(
+    () => (focusAllVehicles
+      ? [
+        ...activeVehicleCoords,
+        ...routeOverlayCoords,
+        BUENAVENTURA_MAX_BOUNDS[0],
+        BUENAVENTURA_MAX_BOUNDS[1],
+      ]
+      : (plannedLine?.length > 1
+        ? plannedLine
+        : (traveledLine?.length > 1
+          ? traveledLine
+          : [
+            ...[originCoords, destinationCoords].filter(Boolean),
+            ...[userCoords].filter(Boolean),
+            ...activeVehicleCoords,
+          ]))),
+    [
+      focusAllVehicles,
+      activeVehicleCoords,
+      routeOverlayCoords,
+      plannedLine,
+      traveledLine,
+      originCoords,
+      destinationCoords,
+      userCoords,
+    ],
+  );
 
-  const vehiclePoint = Number.isFinite(vehiclePosition?.latitude) && Number.isFinite(vehiclePosition?.longitude)
-    ? [Number(vehiclePosition.latitude), Number(vehiclePosition.longitude)]
-    : latestPoint;
-  const effectiveVehiclePoint = animatedVehiclePoint || vehiclePoint;
-  const primaryVehicle = vehiclePoint
-    ? {
-      label: activeVehicles[0]?.label || 'Vehiculo',
-      status: activeVehicles[0]?.status || 'En ruta',
-      latitude: effectiveVehiclePoint?.[0] ?? vehiclePoint[0],
-      longitude: effectiveVehiclePoint?.[1] ?? vehiclePoint[1],
+  const vehiclePoint = useMemo(() => {
+    if (Number.isFinite(vehiclePosition?.latitude) && Number.isFinite(vehiclePosition?.longitude)) {
+      return [Number(vehiclePosition.latitude), Number(vehiclePosition.longitude)];
     }
-    : null;
-  const secondaryVehicles = primaryVehicle
-    ? activeVehicles.filter((vehicle, index) => index > 0)
-    : activeVehicles;
+
+    return latestPoint;
+  }, [latestPoint, vehiclePosition?.latitude, vehiclePosition?.longitude]);
+  const effectiveVehiclePoint = useMemo(
+    () => animatedVehiclePoint || vehiclePoint,
+    [animatedVehiclePoint, vehiclePoint],
+  );
+  const primaryVehicle = useMemo(
+    () => (vehiclePoint
+      ? {
+        label: activeVehicles[0]?.label || 'Vehiculo',
+        status: activeVehicles[0]?.status || 'En ruta',
+        latitude: effectiveVehiclePoint?.[0] ?? vehiclePoint[0],
+        longitude: effectiveVehiclePoint?.[1] ?? vehiclePoint[1],
+      }
+      : null),
+    [activeVehicles, effectiveVehiclePoint, vehiclePoint],
+  );
+  const secondaryVehicles = useMemo(
+    () => (primaryVehicle
+      ? activeVehicles.filter((vehicle, index) => index > 0)
+      : activeVehicles),
+    [activeVehicles, primaryVehicle],
+  );
   const vehicleDirectionLine = traveledLine?.length > 1
     ? traveledLine
     : (plannedLine?.length > 1 ? plannedLine : validPoints);
@@ -426,7 +494,7 @@ export default function MapView({
       </svg>
       <MapContainer
         center={center}
-        zoom={14}
+        zoom={focusAllVehicles ? 12 : 14}
         maxBounds={BUENAVENTURA_MAX_BOUNDS}
         maxBoundsViscosity={1}
         style={{ height: '100%', width: '100%' }}
@@ -440,7 +508,36 @@ export default function MapView({
           maxZoom={20}
         />
 
-        {plannedLine?.length > 1 && (
+        {normalizedRouteOverlays.map((overlay) => {
+          const isHighlighted = highlightedRouteIdSet.has(Number(overlay.id));
+          const isDimmed = highlightedRouteIdSet.size > 0 && !isHighlighted;
+          const shadowColor = isHighlighted ? '#60a5fa' : '#94a3b8';
+          const lineColor = isHighlighted ? '#1d4ed8' : '#64748b';
+
+          return (
+            <React.Fragment key={`route-overlay-${overlay.id}`}>
+              <Polyline
+                positions={overlay.polyline}
+                color={shadowColor}
+                weight={isHighlighted ? 10 : 7}
+                opacity={isDimmed ? 0.08 : (isHighlighted ? 0.28 : 0.16)}
+                smoothFactor={1.2}
+              />
+              <Polyline
+                positions={overlay.polyline}
+                color={lineColor}
+                weight={isHighlighted ? 5 : 3}
+                opacity={isDimmed ? 0.2 : (isHighlighted ? 0.96 : 0.48)}
+                dashArray={isHighlighted ? null : '10 10'}
+                lineCap="round"
+                lineJoin="round"
+                smoothFactor={1.2}
+              />
+            </React.Fragment>
+          );
+        })}
+
+        {plannedLine?.length > 1 && !remainingLine && (
           <>
             <Polyline
               positions={plannedLine}
@@ -459,6 +556,29 @@ export default function MapView({
               lineJoin="round"
               smoothFactor={1.2}
               className="vt-planned-route-line-main"
+            />
+          </>
+        )}
+
+        {remainingLine?.length > 1 && (
+          <>
+            <Polyline
+              positions={remainingLine}
+              color="#67e8f9"
+              weight={10}
+              opacity={0.22}
+              className="vt-remaining-route-line-shadow"
+            />
+            <Polyline
+              positions={remainingLine}
+              color="#0891b2"
+              weight={5}
+              opacity={0.95}
+              dashArray="14 10"
+              lineCap="round"
+              lineJoin="round"
+              smoothFactor={1.2}
+              className="vt-remaining-route-line-main"
             />
           </>
         )}
@@ -489,11 +609,37 @@ export default function MapView({
         {destinationCoords && <Marker position={destinationCoords} icon={destinationIcon} interactive={false} />}
 
         {primaryVehicle && (
-          <Marker
-            position={[primaryVehicle.latitude, primaryVehicle.longitude]}
-            icon={createVehicleIcon(primaryVehicle.label, primaryVehicle.status, primaryVehicleRotation)}
-            interactive={false}
-          />
+          <>
+            <CircleMarker
+              center={[primaryVehicle.latitude, primaryVehicle.longitude]}
+              radius={14}
+              pathOptions={{
+                color: '#2563eb',
+                weight: 6,
+                opacity: 0.18,
+                fillOpacity: 0,
+              }}
+              className="vt-current-point-ring"
+              interactive={false}
+            />
+            <CircleMarker
+              center={[primaryVehicle.latitude, primaryVehicle.longitude]}
+              radius={6}
+              pathOptions={{
+                color: '#ffffff',
+                weight: 3,
+                fillColor: '#2563eb',
+                fillOpacity: 1,
+              }}
+              className="vt-current-point-core"
+              interactive={false}
+            />
+            <Marker
+              position={[primaryVehicle.latitude, primaryVehicle.longitude]}
+              icon={createVehicleIcon(primaryVehicle.label, primaryVehicle.status, primaryVehicleRotation)}
+              interactive={false}
+            />
+          </>
         )}
 
         {secondaryVehicles.map((vehicle) => {
@@ -513,8 +659,8 @@ export default function MapView({
         {originCoords && <Marker position={originCoords} icon={startLabelIcon} interactive={false} />}
         {destinationCoords && <Marker position={destinationCoords} icon={endLabelIcon} interactive={false} />}
 
-        <FitBounds coordinates={fitCoords} freezeAfterFirstFit={hasLiveTrackings} />
-        <AutoFollowVehicle vehiclePoint={effectiveVehiclePoint || vehiclePoint} enabled={hasLiveTrackings} />
+        <FitBounds coordinates={fitCoords} freezeAfterFirstFit={focusAllVehicles ? false : hasLiveTrackings} />
+        <AutoFollowVehicle vehiclePoint={effectiveVehiclePoint || vehiclePoint} enabled={!focusAllVehicles && hasLiveTrackings} />
       </MapContainer>
 
       {/* Leyenda del mapa */}
@@ -522,8 +668,8 @@ export default function MapView({
         <div className="legend-title">Leyenda</div>
         {primaryVehicle && (
           <div className="legend-item">
-            <div className="legend-marker vehicle-dot"></div>
-            <span>Vehiculo</span>
+            <div className="legend-marker current-dot"></div>
+            <span>Punto actual</span>
           </div>
         )}
         {originCoords && (
@@ -538,7 +684,12 @@ export default function MapView({
             <span>Destino</span>
           </div>
         )}
-        {plannedLine?.length > 1 && (
+        {remainingLine?.length > 1 ? (
+          <div className="legend-item">
+            <div className="legend-line remaining"></div>
+            <span>Tramo restante</span>
+          </div>
+        ) : plannedLine?.length > 1 && (
           <div className="legend-item">
             <div className="legend-line planned"></div>
             <span>Ruta planificada</span>
@@ -547,7 +698,19 @@ export default function MapView({
         {traveledLine?.length > 1 && (
           <div className="legend-item">
             <div className="legend-line traveled"></div>
-            <span>Ruta recorrida</span>
+            <span>Tramo recorrido</span>
+          </div>
+        )}
+        {focusAllVehicles && normalizedRouteOverlays.length > 0 && (
+          <div className="legend-item">
+            <div className="legend-line planned"></div>
+            <span>Rutas monitoreadas</span>
+          </div>
+        )}
+        {focusAllVehicles && highlightedRouteIdSet.size > 0 && (
+          <div className="legend-item">
+            <div className="legend-line traveled"></div>
+            <span>Rutas resaltadas</span>
           </div>
         )}
       </div>

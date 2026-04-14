@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useRef, useReducer, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useRef, useReducer, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import MapView from '../components/MapView';
 import { connectTrackingWS } from '../services/ws';
 import { getTrackingsByRoute } from '../services/tracking';
-import { getRoute } from '../services/admin';
+import { getRoute, getRouteMonitoringSummary } from '../services/admin';
+import { getDriverAssignedRoutes, getUserAssignedRoute } from '../services/dashboard';
 import { sendDriverLocation } from '../services/driverLocation';
 import {
   geocodeAddress,
@@ -135,6 +136,58 @@ function remainingRouteDistanceKm(routeCoordinates, vehiclePoint) {
   return totalKm;
 }
 
+function splitRouteByVehiclePoint(routeCoordinates, vehiclePoint) {
+  if (!Array.isArray(routeCoordinates) || routeCoordinates.length < 2 || !Array.isArray(vehiclePoint)) {
+    return {
+      traveled: [],
+      remaining: Array.isArray(routeCoordinates) ? routeCoordinates : [],
+      projectedPoint: Array.isArray(vehiclePoint) ? vehiclePoint : null,
+    };
+  }
+
+  let closestSegmentIndex = 0;
+  let closestProjection = { t: 0, distanceSquared: Number.POSITIVE_INFINITY };
+
+  for (let index = 0; index < routeCoordinates.length - 1; index += 1) {
+    const start = routeCoordinates[index];
+    const end = routeCoordinates[index + 1];
+    if (!start || !end) continue;
+
+    const projection = projectPointOnSegment(vehiclePoint, start, end);
+    if (projection.distanceSquared < closestProjection.distanceSquared) {
+      closestProjection = projection;
+      closestSegmentIndex = index;
+    }
+  }
+
+  const start = routeCoordinates[closestSegmentIndex];
+  const end = routeCoordinates[closestSegmentIndex + 1];
+  const projectedPoint = [
+    start[0] + ((end[0] - start[0]) * closestProjection.t),
+    start[1] + ((end[1] - start[1]) * closestProjection.t),
+  ];
+
+  const traveled = [
+    ...routeCoordinates.slice(0, closestSegmentIndex + 1),
+    projectedPoint,
+  ];
+  const remaining = [
+    projectedPoint,
+    ...routeCoordinates.slice(closestSegmentIndex + 1),
+  ];
+
+  return {
+    traveled: dedupeConsecutivePoints(traveled),
+    remaining: dedupeConsecutivePoints(remaining),
+    projectedPoint,
+  };
+}
+
+function clampPercent(value) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
 function polylineDistanceKm(coordinates) {
   if (!Array.isArray(coordinates) || coordinates.length < 2) return 0;
 
@@ -247,7 +300,10 @@ function isWithinBuenaventura(lat, lng) {
 
 export default function TrackingPage({ routeId: routeIdProp }) {
   const params = useParams();
+  const navigate = useNavigate();
   const selectedRouteId = Number(routeIdProp ?? params.routeId);
+  const currentRole = localStorage.getItem('role') || 'user';
+  const isAdminView = currentRole === 'admin';
 
   const [trackingState, dispatch] = useReducer(trackingReducer, initialTrackingState);
   const { trackings, vehiclePosition, liveRouteHistory } = trackingState;
@@ -260,7 +316,6 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const [eta, setEta] = useState(null);
   const [etaUpdated, setEtaUpdated] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [routeContextLoading, setRouteContextLoading] = useState(false);
   const [wsStatus, setWsStatus] = useState('connecting');
   const [isPollingFallback, setIsPollingFallback] = useState(false);
   const [forceBuenaventuraDemo, setForceBuenaventuraDemo] = useState(false);
@@ -270,6 +325,30 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const [guidedRouteRunning, setGuidedRouteRunning] = useState(false);
   const [guidedRouteError, setGuidedRouteError] = useState('');
   const [guidedRouteDisplayPath, setGuidedRouteDisplayPath] = useState([]);
+  const [adminStats, setAdminStats] = useState(null);
+  const [adminRouteSummaries, setAdminRouteSummaries] = useState([]);
+  const [adminActiveVehicles, setAdminActiveVehicles] = useState([]);
+  const [adminAlerts, setAdminAlerts] = useState([]);
+  const [adminRouteFilterIds, setAdminRouteFilterIds] = useState([]);
+  const [adminRouteOverlays, setAdminRouteOverlays] = useState([]);
+
+  const resolveRouteInfo = useCallback(async (routeId) => {
+    const adminRoute = await getRoute(routeId).catch(() => null);
+    if (adminRoute) return adminRoute;
+
+    if (currentRole === 'driver') {
+      const assignedRoutes = await getDriverAssignedRoutes().catch(() => []);
+      return (Array.isArray(assignedRoutes) ? assignedRoutes : []).find((route) => Number(route.id) === routeId) || null;
+    }
+
+    if (currentRole === 'user') {
+      const assignedRouteData = await getUserAssignedRoute().catch(() => null);
+      const assignedRoute = assignedRouteData?.route || null;
+      return Number(assignedRoute?.id) === routeId ? assignedRoute : null;
+    }
+
+    return null;
+  }, [currentRole]);
 
   const trackingsCountRef = useRef(0);
   const liveTransitionTimerRef = useRef(null);
@@ -325,6 +404,98 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   }, []);
 
   useEffect(() => {
+    if (!isAdminView) {
+      setAdminStats(null);
+      setAdminRouteSummaries([]);
+      setAdminActiveVehicles([]);
+      setAdminAlerts([]);
+      setAdminRouteFilterIds([]);
+      setAdminRouteOverlays([]);
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    const loadAdminData = async () => {
+      try {
+        const summary = await getRouteMonitoringSummary().catch(() => null);
+        if (cancelled) return;
+
+        setAdminStats(summary?.stats || null);
+        setAdminRouteSummaries(Array.isArray(summary?.routes) ? summary.routes : []);
+        setAdminActiveVehicles(Array.isArray(summary?.active_vehicles) ? summary.active_vehicles : []);
+        setAdminAlerts(Array.isArray(summary?.alerts) ? summary.alerts : []);
+      } catch {
+        if (!cancelled) {
+          setAdminStats(null);
+          setAdminRouteSummaries([]);
+          setAdminActiveVehicles([]);
+          setAdminAlerts([]);
+        }
+      }
+    };
+
+    loadAdminData();
+    const intervalId = setInterval(() => {
+      void loadAdminData();
+    }, 5000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [isAdminView]);
+
+  useEffect(() => {
+    if (!isAdminView || adminRouteSummaries.length === 0) {
+      setAdminRouteOverlays([]);
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    const buildAdminRouteOverlays = async () => {
+      const overlays = await Promise.all(
+        adminRouteSummaries.map(async (route) => {
+          if (!route.origin || !route.destination) {
+            return { id: route.id, polyline: [] };
+          }
+
+          try {
+            const [from, to] = await Promise.all([
+              geocodeAddress(route.origin),
+              geocodeAddress(route.destination),
+            ]);
+
+            if (!Array.isArray(from) || !Array.isArray(to)) {
+              return { id: route.id, polyline: [] };
+            }
+
+            const streetRoute = await getStreetRoute(from, to);
+            if (streetRoute?.coordinates?.length > 1) {
+              return { id: route.id, polyline: streetRoute.coordinates };
+            }
+
+            return { id: route.id, polyline: [from, to] };
+          } catch {
+            return { id: route.id, polyline: [] };
+          }
+        }),
+      );
+
+      if (!cancelled) {
+        setAdminRouteOverlays(overlays.filter((overlay) => overlay.polyline.length > 1));
+      }
+    };
+
+    void buildAdminRouteOverlays();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [adminRouteSummaries, isAdminView]);
+
+  useEffect(() => {
     let mounted = true;
 
     async function loadData() {
@@ -335,7 +506,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
 
       try {
         const [route, initialTrackings] = await Promise.all([
-          getRoute(selectedRouteId).catch(() => null),
+          resolveRouteInfo(selectedRouteId),
           getTrackingsByRoute(selectedRouteId).catch(() => []),
         ]);
 
@@ -365,6 +536,42 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           dispatch({ type: 'SET_VEHICLE_POSITION', payload: null });
           dispatch({ type: 'SET_ROUTE_HISTORY', payload: [] });
         }
+
+        if (route?.origin && route?.destination) {
+          const [from, to] = await Promise.all([
+            geocodeAddress(route.origin, { fallbackCoords: userCoords }),
+            geocodeAddress(route.destination, { fallbackCoords: userCoords }),
+          ]);
+
+          if (!mounted) return;
+
+          // Confiamos en el geocoder con contexto de ciudad;
+          // solo forzamos demo si no se pudo geocodificar ninguno de los dos extremos.
+          if (Array.isArray(from) && Array.isArray(to)) {
+            setOriginCoords(from);
+            setDestinationCoords(to);
+            setForceBuenaventuraDemo(false);
+
+            // getStreetRoute incluye fallback a línea recta (islas / rutas sin asfalto)
+            const streetRoute = await getStreetRoute(from, to);
+            if (!mounted) return;
+            if (streetRoute && !streetRoute.isStraightLine) {
+              setRoutePolyline(streetRoute.coordinates);
+              setEta(Math.ceil(streetRoute.duration / 60));
+              setEtaUpdated(new Date());
+            } else {
+              setRoutePolyline(null);
+            }
+          } else {
+            // Geocoding devolvió null → usar demo
+            setOriginCoords(null);
+            setDestinationCoords(null);
+            setRoutePolyline(null);
+            setForceBuenaventuraDemo(true);
+          }
+        } else {
+          setForceBuenaventuraDemo(true);
+        }
       } finally {
         if (mounted) setLoading(false);
       }
@@ -372,61 +579,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
 
     loadData();
     return () => { mounted = false; };
-  }, [selectedRouteId]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadRouteContext() {
-      if (!routeInfo?.origin || !routeInfo?.destination) {
-        setOriginCoords(null);
-        setDestinationCoords(null);
-        setRoutePolyline(null);
-        setForceBuenaventuraDemo(true);
-        setRouteContextLoading(false);
-        return;
-      }
-
-      setRouteContextLoading(true);
-
-      try {
-        const [from, to] = await Promise.all([
-          geocodeAddress(routeInfo.origin, { fallbackCoords: userCoords }),
-          geocodeAddress(routeInfo.destination, { fallbackCoords: userCoords }),
-        ]);
-
-        if (cancelled) return;
-
-        if (Array.isArray(from) && Array.isArray(to)) {
-          setOriginCoords(from);
-          setDestinationCoords(to);
-          setForceBuenaventuraDemo(false);
-
-          const streetRoute = await getStreetRoute(from, to);
-          if (cancelled) return;
-
-          if (streetRoute?.coordinates?.length > 1) {
-            setRoutePolyline(streetRoute.coordinates);
-            setEta(Math.ceil(streetRoute.duration / 60));
-            setEtaUpdated(new Date());
-            return;
-          }
-        }
-
-        setOriginCoords(null);
-        setDestinationCoords(null);
-        setRoutePolyline(null);
-        setForceBuenaventuraDemo(true);
-      } finally {
-        if (!cancelled) setRouteContextLoading(false);
-      }
-    }
-
-    void loadRouteContext();
-    return () => {
-      cancelled = true;
-    };
-  }, [routeInfo, userCoords]);
+  }, [resolveRouteInfo, selectedRouteId, userCoords]);
 
   useEffect(() => {
     if (!Number.isFinite(selectedRouteId)) return undefined;
@@ -629,7 +782,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     let cancelled = false;
 
     const timerId = setTimeout(() => {
-      getTrackedStreetRoute(liveRouteHistory)
+      getTrackedStreetRoute(trackings)
         .then((matchedRoute) => {
           if (cancelled) return;
           lastMatchedRouteRef.current = {
@@ -657,7 +810,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       cancelled = true;
       clearTimeout(timerId);
     };
-  }, [guidedRouteDisplayPath, guidedRouteRunning, liveRouteHistory]);
+  }, [guidedRouteDisplayPath, guidedRouteRunning, liveRouteHistory, trackings]);
 
   const statusBadge = useMemo(() => {
     const badges = {
@@ -682,15 +835,64 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const displayPlannedRoutePolyline = showRouteContext && Array.isArray(routePolyline) && routePolyline.length > 1
     ? routePolyline
     : null;
-  const displayTraveledRoutePolyline = guidedRouteDisplayPath.length > 1
-    ? guidedRouteDisplayPath
-    : (hasLiveData && matchedLiveRouteHistory.length > 1
-      ? matchedLiveRouteHistory
-      : null);
   const displayTrackings = useMemo(
     () => (hasLiveData ? trackings : []),
     [hasLiveData, trackings],
   );
+  const rawVehicleRoutePoint = useMemo(() => {
+    if (guidedRouteDisplayPath.length > 0) {
+      return guidedRouteDisplayPath[guidedRouteDisplayPath.length - 1];
+    }
+
+    if (matchedLiveRouteHistory.length > 0) {
+      return matchedLiveRouteHistory[matchedLiveRouteHistory.length - 1];
+    }
+
+    if (Number.isFinite(vehiclePosition?.latitude) && Number.isFinite(vehiclePosition?.longitude)) {
+      return [Number(vehiclePosition.latitude), Number(vehiclePosition.longitude)];
+    }
+
+    return null;
+  }, [guidedRouteDisplayPath, matchedLiveRouteHistory, vehiclePosition?.latitude, vehiclePosition?.longitude]);
+  const plannedRouteProgress = useMemo(() => {
+    if (!Array.isArray(displayPlannedRoutePolyline) || displayPlannedRoutePolyline.length < 2) {
+      return { traveled: null, remaining: null, projectedPoint: null };
+    }
+
+    if (!Array.isArray(rawVehicleRoutePoint)) {
+      return {
+        traveled: null,
+        remaining: displayPlannedRoutePolyline,
+        projectedPoint: null,
+      };
+    }
+
+    const { traveled, remaining, projectedPoint } = splitRouteByVehiclePoint(
+      displayPlannedRoutePolyline,
+      rawVehicleRoutePoint,
+    );
+
+    return {
+      traveled: Array.isArray(traveled) && traveled.length > 1 ? traveled : null,
+      remaining: Array.isArray(remaining) && remaining.length > 1 ? remaining : null,
+      projectedPoint,
+    };
+  }, [displayPlannedRoutePolyline, rawVehicleRoutePoint]);
+  const displayTraveledRoutePolyline = guidedRouteDisplayPath.length > 1
+    ? guidedRouteDisplayPath
+    : (plannedRouteProgress.traveled?.length > 1
+      ? plannedRouteProgress.traveled
+      : (hasLiveData && matchedLiveRouteHistory.length > 1
+        ? matchedLiveRouteHistory
+        : null));
+  const snappedVehiclePoint = useMemo(() => {
+    if (Array.isArray(plannedRouteProgress.projectedPoint)) {
+      return plannedRouteProgress.projectedPoint;
+    }
+
+    if (!Array.isArray(displayTraveledRoutePolyline) || displayTraveledRoutePolyline.length === 0) return null;
+    return displayTraveledRoutePolyline[displayTraveledRoutePolyline.length - 1];
+  }, [displayTraveledRoutePolyline, plannedRouteProgress.projectedPoint]);
   const plannedDistanceKm = useMemo(
     () => polylineDistanceKm(displayPlannedRoutePolyline),
     [displayPlannedRoutePolyline],
@@ -699,10 +901,49 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     () => polylineDistanceKm(displayTraveledRoutePolyline),
     [displayTraveledRoutePolyline],
   );
-  const routeProgress = useMemo(() => {
-    if (!(plannedDistanceKm > 0) || !(traveledDistanceKm >= 0)) return 0;
-    return Math.min(100, Math.round((traveledDistanceKm / plannedDistanceKm) * 100));
-  }, [plannedDistanceKm, traveledDistanceKm]);
+  const remainingDistanceKm = useMemo(() => {
+    if (!Array.isArray(displayPlannedRoutePolyline) || displayPlannedRoutePolyline.length < 2) {
+      return null;
+    }
+
+    const routePoint = snappedVehiclePoint
+      || (Number.isFinite(vehiclePosition?.latitude) && Number.isFinite(vehiclePosition?.longitude)
+        ? [Number(vehiclePosition.latitude), Number(vehiclePosition.longitude)]
+        : null);
+
+    if (!Array.isArray(routePoint)) {
+      return plannedDistanceKm > 0 ? plannedDistanceKm : null;
+    }
+
+    const remainingKm = remainingRouteDistanceKm(displayPlannedRoutePolyline, routePoint);
+    if (!Number.isFinite(remainingKm)) {
+      return plannedDistanceKm > 0 ? plannedDistanceKm : null;
+    }
+
+    return Math.max(0, remainingKm);
+  }, [displayPlannedRoutePolyline, plannedDistanceKm, snappedVehiclePoint, vehiclePosition?.latitude, vehiclePosition?.longitude]);
+  const routeProgressSegments = useMemo(() => {
+    if (!Array.isArray(displayPlannedRoutePolyline) || displayPlannedRoutePolyline.length < 2) {
+      return { remaining: null };
+    }
+
+    if (Array.isArray(plannedRouteProgress.remaining)) {
+      return {
+        remaining: plannedRouteProgress.remaining,
+      };
+    }
+
+    return {
+      remaining: displayPlannedRoutePolyline,
+    };
+  }, [displayPlannedRoutePolyline, plannedRouteProgress.remaining]);
+  const routeProgressPercent = useMemo(() => {
+    if (!(plannedDistanceKm > 0) || remainingDistanceKm === null) {
+      return 0;
+    }
+
+    return clampPercent(((plannedDistanceKm - remainingDistanceKm) / plannedDistanceKm) * 100);
+  }, [plannedDistanceKm, remainingDistanceKm]);
 
   const vehicleSummary = useMemo(() => {
     if (displayTrackings.length === 0) {
@@ -791,11 +1032,6 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     return [vehicleSummary];
   }, [displayTrackings, hasLiveData, vehiclePosition, vehicleSummary]);
 
-  const snappedVehiclePoint = useMemo(() => {
-    if (!Array.isArray(displayTraveledRoutePolyline) || displayTraveledRoutePolyline.length === 0) return null;
-    return displayTraveledRoutePolyline[displayTraveledRoutePolyline.length - 1];
-  }, [displayTraveledRoutePolyline]);
-
   const displayVehiclePosition = useMemo(() => {
     if (!snappedVehiclePoint) return vehiclePosition;
     return {
@@ -805,7 +1041,26 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     };
   }, [snappedVehiclePoint, vehiclePosition]);
 
+  const normalizedAdminRouteFilterIds = useMemo(
+    () => adminRouteFilterIds.map((routeId) => Number(routeId)).filter(Number.isFinite),
+    [adminRouteFilterIds],
+  );
+
+  const hasAdminRouteFilter = isAdminView && normalizedAdminRouteFilterIds.length > 0;
+
+  const filteredAdminRouteSummaries = useMemo(() => {
+    if (!hasAdminRouteFilter) return adminRouteSummaries;
+    const routeIdSet = new Set(normalizedAdminRouteFilterIds);
+    return adminRouteSummaries.filter((route) => routeIdSet.has(Number(route.id)));
+  }, [adminRouteSummaries, hasAdminRouteFilter, normalizedAdminRouteFilterIds]);
+
+  const highlightedAdminRouteIds = useMemo(
+    () => (hasAdminRouteFilter ? normalizedAdminRouteFilterIds : []),
+    [hasAdminRouteFilter, normalizedAdminRouteFilterIds],
+  );
+
   const displayActiveVehicles = useMemo(() => {
+    if (isAdminView) return adminActiveVehicles;
     if (!snappedVehiclePoint || activeVehicles.length === 0) return activeVehicles;
 
     return activeVehicles.map((vehicle, index) => {
@@ -816,7 +1071,61 @@ export default function TrackingPage({ routeId: routeIdProp }) {
         longitude: snappedVehiclePoint[1],
       };
     });
-  }, [activeVehicles, snappedVehiclePoint]);
+  }, [activeVehicles, adminActiveVehicles, isAdminView, snappedVehiclePoint]);
+
+  const totalStudents = adminStats?.students_total ?? 0;
+  const contextualAdminAlerts = useMemo(() => {
+    if (!isAdminView) return [];
+
+    const selectedRouteSummary = adminRouteSummaries.find((route) => Number(route.id) === selectedRouteId);
+    if (!selectedRouteSummary || selectedRouteSummary.is_live) {
+      return adminAlerts;
+    }
+
+    return [
+      ...adminAlerts,
+      {
+        id: 'selected-route-without-live-monitoring',
+        tone: 'info',
+        title: 'Ruta abierta sin monitoreo vivo',
+        detail: `La ruta ${selectedRouteSummary.name} aparece como ${selectedRouteSummary.state_label.toLowerCase()}.`,
+        route_ids: [selectedRouteSummary.id],
+      },
+    ].slice(0, 5);
+  }, [adminAlerts, adminRouteSummaries, isAdminView, selectedRouteId]);
+
+  const handleAdminAlertAction = (alert) => {
+    const routeIds = Array.isArray(alert?.route_ids)
+      ? alert.route_ids.map((routeId) => Number(routeId)).filter(Number.isFinite)
+      : [];
+
+    if (routeIds.length === 1) {
+      setAdminRouteFilterIds([]);
+      navigate(`/tracking/${routeIds[0]}`);
+      return;
+    }
+
+    if (routeIds.length > 1) {
+      const isSameFilter = routeIds.length === normalizedAdminRouteFilterIds.length
+        && routeIds.every((routeId) => normalizedAdminRouteFilterIds.includes(routeId));
+      setAdminRouteFilterIds(isSameFilter ? [] : routeIds);
+      return;
+    }
+
+    setAdminRouteFilterIds([]);
+  };
+
+  const getAdminAlertActionLabel = (alert) => {
+    const routeIds = Array.isArray(alert?.route_ids) ? alert.route_ids : [];
+    if (routeIds.length === 1) return 'Abrir ruta';
+    if (routeIds.length > 1) {
+      const normalizedRouteIds = routeIds.map((routeId) => Number(routeId)).filter(Number.isFinite);
+      const isSameFilter = normalizedRouteIds.length === normalizedAdminRouteFilterIds.length
+        && normalizedRouteIds.every((routeId) => normalizedAdminRouteFilterIds.includes(routeId));
+      return isSameFilter ? 'Limpiar filtro' : 'Filtrar mapa';
+    }
+    return 'Ver impacto';
+  };
 
   const etaLabel = eta === null ? 'Sin ETA' : `${eta} min`;
 
@@ -910,8 +1219,9 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           geocodeAddress(routeInfo.destination, { fallbackCoords: userCoords }),
         ]);
         const streetRoute = from && to ? await getStreetRoute(from, to) : null;
-        playbackRoute = streetRoute?.coordinates || null;
-        if (playbackRoute?.length > 1) {
+        const exactStreetRoute = streetRoute && !streetRoute.isStraightLine ? streetRoute.coordinates : null;
+        playbackRoute = exactStreetRoute || (Array.isArray(from) && Array.isArray(to) ? [from, to] : null);
+        if (exactStreetRoute?.length > 1) {
           setRoutePolyline(playbackRoute);
           setOriginCoords(from);
           setDestinationCoords(to);
@@ -965,131 +1275,247 @@ export default function TrackingPage({ routeId: routeIdProp }) {
 
       <div className="tracking-dashboard px-4 md:px-8 py-5 max-w-[1400px] mx-auto">
         <aside className="tracking-analytics-panel">
-          <section className="kpi-card">
-            <div className="route-summary-topbar">
-              <p className="kpi-label mb-0">Ruta real</p>
-              <span className={`route-auth-badge ${showRouteContext ? 'verified' : 'pending'}`}>
-                {showRouteContext ? 'Puntos verificados' : 'Pendiente de ubicar'}
-              </span>
-            </div>
-            <div className="route-stop-stack">
-              <div className="route-stop-card start">
-                <span className="route-stop-dot" aria-hidden="true" />
-                <div>
-                  <p className="kpi-label">Origen</p>
-                  <p className="kpi-value">{routeInfo?.origin || 'Centro, Buenaventura'}</p>
+          {isAdminView ? (
+            <>
+              <section className="kpi-card">
+                <div className="panel-title-row admin-panel-title-row">
+                  <div>
+                    <p className="kpi-label">KPIs globales</p>
+                    <h2 className="panel-title">Vision general</h2>
+                  </div>
+                  <span className="panel-counter">{displayActiveVehicles.length}</span>
                 </div>
-              </div>
-              <div className="route-stop-divider" aria-hidden="true" />
-              <div className="route-stop-card end">
-                <span className="route-stop-dot" aria-hidden="true" />
-                <div>
-                  <p className="kpi-label">Destino</p>
-                  <p className="kpi-value">{routeInfo?.destination || 'Seminario San Buenaventura'}</p>
-                </div>
-              </div>
-            </div>
-            <div className="route-metrics-grid">
-              <div className="route-metric-tile">
-                <span className="route-metric-label">ETA</span>
-                <strong className="route-metric-value">{etaLabel}</strong>
-              </div>
-              <div className="route-metric-tile">
-                <span className="route-metric-label">Planificada</span>
-                <strong className="route-metric-value">{plannedDistanceKm > 0 ? `${plannedDistanceKm.toFixed(1)} km` : 'Sin trazo'}</strong>
-              </div>
-              <div className="route-metric-tile">
-                <span className="route-metric-label">Recorrida</span>
-                <strong className="route-metric-value">{traveledDistanceKm > 0 ? `${traveledDistanceKm.toFixed(1)} km` : '0.0 km'}</strong>
-              </div>
-              <div className="route-metric-tile">
-                <span className="route-metric-label">Avance</span>
-                <strong className="route-metric-value">{routeProgress}%</strong>
-              </div>
-            </div>
-            <div className="kpi-eta-row">
-              <span className="kpi-label">Estado de ruta</span>
-              <strong className="kpi-eta-value">{routeContextLoading ? 'Calculando' : (showRouteContext ? 'Trazada' : 'Buscando')}</strong>
-            </div>
-            {etaUpdated && (
-              <p className="kpi-updated">
-                Actualizado: {etaUpdated.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
-              </p>
-            )}
-            <div className="route-actions">
-              <button
-                type="button"
-                onClick={() => { void startGuidedRoute(); }}
-                disabled={loading || guidedRouteLoading || guidedRouteRunning || !canStartGuidedRoute}
-                className="route-action-button primary"
-              >
-                {guidedRouteLoading ? 'Preparando ruta...' : (guidedRouteRunning ? 'Ruta en curso' : 'Iniciar ruta')}
-              </button>
-              <button
-                type="button"
-                onClick={stopGuidedRoute}
-                disabled={!guidedRouteRunning && !guidedRouteLoading}
-                className="route-action-button secondary"
-              >
-                Detener
-              </button>
-            </div>
-            {guidedRouteError && <p className="panel-error">{guidedRouteError}</p>}
-          </section>
 
-          <section className="kpi-card">
-            <div className="panel-title-row">
-              <h2 className="panel-title">Vehiculos activos</h2>
-              <span className="panel-counter">{displayActiveVehicles.length}</span>
-            </div>
-
-            {loading ? (
-              <p className="panel-muted">Cargando datos...</p>
-            ) : displayActiveVehicles.length === 0 ? (
-              <div className="panel-empty-state">
-                <p className="panel-muted">Aun no hay posicion activa para esta ruta.</p>
-                <button
-                  type="button"
-                  onClick={() => { void startGuidedRoute(); }}
-                  disabled={guidedRouteLoading || guidedRouteRunning || !canStartGuidedRoute}
-                  className="route-action-button primary compact"
-                >
-                  {guidedRouteLoading ? 'Preparando...' : 'Iniciar recorrido'}
-                </button>
-              </div>
-            ) : (
-              <div className="vehicle-list">
-                {displayActiveVehicles.map((vehicle) => (
-                  <article key={vehicle.label} className="vehicle-item">
-                    <div className="vehicle-chip">
-                      <span className="vehicle-chip-icon" aria-hidden="true">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <rect x="1" y="4" width="16" height="12" rx="2" />
-                          <path d="M17 8h3l3 4v4h-6V8z" />
-                          <circle cx="5.5" cy="18.5" r="2.5" />
-                          <circle cx="18.5" cy="18.5" r="2.5" />
-                        </svg>
-                      </span>
-                      {vehicle.label}
-                    </div>
-                    <div className="vehicle-stats">
-                      <div>
-                        <p className="stat-label">Velocidad</p>
-                        <p className="stat-value">{vehicle.speedKmh} km/h</p>
-                      </div>
-                      <div>
-                        <p className="stat-label">A bordo</p>
-                        <p className="stat-value">{vehicle.studentsOnboard}</p>
-                      </div>
-                    </div>
-                    <span className={`vehicle-status ${vehicle.status === 'En ruta' ? 'moving' : 'idle'}`}>
-                      {vehicle.status}
-                    </span>
+                <div className="admin-kpi-grid">
+                  <article className="admin-kpi-tile">
+                    <span className="admin-kpi-name">Vehiculos activos</span>
+                    <strong className="admin-kpi-number">{displayActiveVehicles.length}</strong>
+                    <span className="admin-kpi-helper">de {adminStats?.vehicles_registered ?? 0} registrados</span>
                   </article>
-                ))}
-              </div>
-            )}
-          </section>
+                  <article className="admin-kpi-tile">
+                    <span className="admin-kpi-name">Estudiantes</span>
+                    <strong className="admin-kpi-number">{totalStudents}</strong>
+                    <span className="admin-kpi-helper">asignados a rutas</span>
+                  </article>
+                </div>
+              </section>
+
+              <section className="kpi-card">
+                <div className="panel-title-row admin-panel-title-row">
+                  <div>
+                    <p className="kpi-label">Rutas activas</p>
+                    <h2 className="panel-title">Operacion en ciudad</h2>
+                  </div>
+                  <span className="panel-counter">{filteredAdminRouteSummaries.length}</span>
+                </div>
+
+                {hasAdminRouteFilter && (
+                  <div className="admin-filter-banner">
+                    <span className="admin-filter-text">Filtro activo sobre {filteredAdminRouteSummaries.length} ruta(s).</span>
+                    <button type="button" className="admin-filter-clear" onClick={() => setAdminRouteFilterIds([])}>
+                      Limpiar
+                    </button>
+                  </div>
+                )}
+
+                {filteredAdminRouteSummaries.length === 0 ? (
+                  <p className="panel-muted">No hay rutas para mostrar.</p>
+                ) : (
+                  <div className="admin-route-list" role="list">
+                    {filteredAdminRouteSummaries.map((route) => (
+                      <article key={route.id} className="admin-route-item" role="listitem">
+                        <div className="admin-route-head">
+                          <div>
+                            <h3 className="admin-route-name">{route.name}</h3>
+                            <p className="admin-route-driver">{route.driver_name}</p>
+                          </div>
+                          <span className={`admin-route-state ${route.is_live ? 'live' : 'idle'}`}>{route.state_label}</span>
+                        </div>
+                        <div className="admin-route-progress-row">
+                          <span className="admin-route-progress-label">Avance</span>
+                          <strong className="admin-route-progress-value">{route.progress_percent}%</strong>
+                        </div>
+                        <div className="admin-route-progress-bar" aria-hidden="true">
+                          <span style={{ width: `${route.progress_percent}%` }} />
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              <section className="kpi-card">
+                <div className="panel-title-row admin-panel-title-row">
+                  <div>
+                    <p className="kpi-label">Alertas</p>
+                    <h2 className="panel-title">Monitoreo operativo</h2>
+                  </div>
+                  <span className="panel-counter">{contextualAdminAlerts.length}</span>
+                </div>
+
+                {contextualAdminAlerts.length === 0 ? (
+                  <p className="panel-muted">Sin alertas operativas por ahora.</p>
+                ) : (
+                  <div className="admin-alert-list">
+                    {contextualAdminAlerts.map((alert) => (
+                      <article key={alert.id || `${alert.title}-${alert.detail}`} className={`admin-alert-item ${alert.tone}`}>
+                        <div className="admin-alert-head">
+                          <div>
+                            <p className="admin-alert-title">{alert.title}</p>
+                            <p className="admin-alert-detail">{alert.detail}</p>
+                          </div>
+                          <button
+                            type="button"
+                            className="admin-alert-action"
+                            onClick={() => handleAdminAlertAction(alert)}
+                          >
+                            {getAdminAlertActionLabel(alert)}
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </>
+          ) : (
+            <>
+              <section className="kpi-card">
+                <div className="route-summary-topbar">
+                  <p className="kpi-label mb-0">Ruta real</p>
+                  <span className={`route-auth-badge ${showRouteContext ? 'verified' : 'pending'}`}>
+                    {showRouteContext ? 'Puntos verificados' : 'Pendiente de ubicar'}
+                  </span>
+                </div>
+                <div className="route-stop-stack">
+                  <div className="route-stop-card start">
+                    <span className="route-stop-dot" aria-hidden="true" />
+                    <div>
+                      <p className="kpi-label">Origen</p>
+                      <p className="kpi-value">{routeInfo?.origin || 'Centro, Buenaventura'}</p>
+                    </div>
+                  </div>
+                  <div className="route-stop-divider" aria-hidden="true" />
+                  <div className="route-stop-card end">
+                    <span className="route-stop-dot" aria-hidden="true" />
+                    <div>
+                      <p className="kpi-label">Destino</p>
+                      <p className="kpi-value">{routeInfo?.destination || 'Seminario San Buenaventura'}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="route-metrics-grid">
+                  <div className="route-metric-tile">
+                    <span className="route-metric-label">ETA</span>
+                    <strong className="route-metric-value">{etaLabel}</strong>
+                  </div>
+                  <div className="route-metric-tile">
+                    <span className="route-metric-label">Planificada</span>
+                    <strong className="route-metric-value">{plannedDistanceKm > 0 ? `${plannedDistanceKm.toFixed(1)} km` : 'Sin trazo'}</strong>
+                  </div>
+                  <div className="route-metric-tile">
+                    <span className="route-metric-label">Recorrida</span>
+                    <strong className="route-metric-value">{traveledDistanceKm > 0 ? `${traveledDistanceKm.toFixed(1)} km` : '0.0 km'}</strong>
+                  </div>
+                  <div className="route-metric-tile">
+                    <span className="route-metric-label">Pendiente</span>
+                    <strong className="route-metric-value">{remainingDistanceKm !== null ? `${remainingDistanceKm.toFixed(1)} km` : 'Sin trazo'}</strong>
+                  </div>
+                </div>
+                <div className="route-progress-block">
+                  <div className="route-progress-row">
+                    <span className="route-progress-label">Progreso del recorrido</span>
+                    <strong className="route-progress-value">{routeProgressPercent}%</strong>
+                  </div>
+                  <div className="route-progress-bar" aria-hidden="true">
+                    <span style={{ width: `${routeProgressPercent}%` }} />
+                  </div>
+                </div>
+                <div className="kpi-eta-row">
+                  <span className="kpi-label">Estado de ruta</span>
+                  <strong className="kpi-eta-value">{showRouteContext ? 'Trazada' : 'Buscando'}</strong>
+                </div>
+                {etaUpdated && (
+                  <p className="kpi-updated">
+                    Actualizado: {etaUpdated.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                )}
+                <div className="route-actions">
+                  <button
+                    type="button"
+                    onClick={() => { void startGuidedRoute(); }}
+                    disabled={loading || guidedRouteLoading || guidedRouteRunning || !canStartGuidedRoute}
+                    className="route-action-button primary"
+                  >
+                    {guidedRouteLoading ? 'Preparando ruta...' : (guidedRouteRunning ? 'Ruta en curso' : 'Iniciar ruta')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={stopGuidedRoute}
+                    disabled={!guidedRouteRunning && !guidedRouteLoading}
+                    className="route-action-button secondary"
+                  >
+                    Detener
+                  </button>
+                </div>
+                {guidedRouteError && <p className="panel-error">{guidedRouteError}</p>}
+              </section>
+
+              <section className="kpi-card">
+                <div className="panel-title-row">
+                  <h2 className="panel-title">Vehiculos activos</h2>
+                  <span className="panel-counter">{displayActiveVehicles.length}</span>
+                </div>
+
+                {loading ? (
+                  <p className="panel-muted">Cargando datos...</p>
+                ) : displayActiveVehicles.length === 0 ? (
+                  <div className="panel-empty-state">
+                    <p className="panel-muted">Aun no hay posicion activa para esta ruta.</p>
+                    <button
+                      type="button"
+                      onClick={() => { void startGuidedRoute(); }}
+                      disabled={guidedRouteLoading || guidedRouteRunning || !canStartGuidedRoute}
+                      className="route-action-button primary compact"
+                    >
+                      {guidedRouteLoading ? 'Preparando...' : 'Iniciar recorrido'}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="vehicle-list">
+                    {displayActiveVehicles.map((vehicle) => (
+                      <article key={vehicle.label} className="vehicle-item">
+                        <div className="vehicle-chip">
+                          <span className="vehicle-chip-icon" aria-hidden="true">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="1" y="4" width="16" height="12" rx="2" />
+                              <path d="M17 8h3l3 4v4h-6V8z" />
+                              <circle cx="5.5" cy="18.5" r="2.5" />
+                              <circle cx="18.5" cy="18.5" r="2.5" />
+                            </svg>
+                          </span>
+                          {vehicle.label}
+                        </div>
+                        <div className="vehicle-stats">
+                          <div>
+                            <p className="stat-label">Velocidad</p>
+                            <p className="stat-value">{vehicle.speedKmh} km/h</p>
+                          </div>
+                          <div>
+                            <p className="stat-label">A bordo</p>
+                            <p className="stat-value">{vehicle.studentsOnboard}</p>
+                          </div>
+                        </div>
+                        <span className={`vehicle-status ${vehicle.status === 'En ruta' ? 'moving' : 'idle'}`}>
+                          {vehicle.status}
+                        </span>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </>
+          )}
         </aside>
 
         <main className={`map-container-wrapper h-[640px] ${showLiveTransition ? 'map-live-transition' : ''}`}>
@@ -1099,17 +1525,21 @@ export default function TrackingPage({ routeId: routeIdProp }) {
             </div>
           )}
           <MapView
-            trackings={displayTrackings}
-            plannedRoutePolyline={displayPlannedRoutePolyline}
-            traveledRoutePolyline={displayTraveledRoutePolyline}
-            originCoords={displayOriginCoords}
-            destinationCoords={displayDestinationCoords}
+            trackings={isAdminView ? [] : displayTrackings}
+            plannedRoutePolyline={isAdminView ? null : displayPlannedRoutePolyline}
+            remainingRoutePolyline={isAdminView ? null : routeProgressSegments.remaining}
+            traveledRoutePolyline={isAdminView ? null : displayTraveledRoutePolyline}
+            originCoords={isAdminView ? null : displayOriginCoords}
+            destinationCoords={isAdminView ? null : displayDestinationCoords}
             originName={routeInfo?.origin || 'Centro'}
             destinationName={routeInfo?.destination || 'Seminario San Buenaventura'}
             activeVehicles={displayActiveVehicles}
-            vehiclePosition={showEmptyCityCanvas ? null : displayVehiclePosition}
+            vehiclePosition={isAdminView || showEmptyCityCanvas ? null : displayVehiclePosition}
             userCoords={userCoords}
             mapHeight="640px"
+            focusAllVehicles={isAdminView}
+            routeOverlays={isAdminView ? adminRouteOverlays : []}
+            highlightedRouteIds={isAdminView ? highlightedAdminRouteIds : []}
           />
         </main>
       </div>

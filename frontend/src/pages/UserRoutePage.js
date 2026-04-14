@@ -5,8 +5,6 @@ import { icons } from '../components/dashboard/icons';
 import TrackingHero from '../components/tracking/TrackingHero';
 import { getUserAssignedRoute } from '../services/dashboard';
 import { getDriverTrackings } from '../services/dashboard';
-import { getTrackingsByRoute } from '../services/tracking';
-import { connectTrackingWS } from '../services/ws';
 import { geocodeAddress } from '../services/routing';
 
 const NEAR_DISTANCE_KM = 0.8;

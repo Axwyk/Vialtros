@@ -1,7 +1,12 @@
 import api from './api';
 
+export async function getTrackings() {
+  const response = await api.get('/tracking/');
+  return Array.isArray(response.data) ? response.data : [];
+}
+
 export async function getTrackingsByRoute(routeId) {
-  const data = await api.get('/tracking/').then((r) => r.data);
+  const data = await getTrackings();
 
   if (!Array.isArray(data)) {
     return [];
