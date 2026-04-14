@@ -107,7 +107,19 @@ export default function DashboardPage({ role, onLogout }) {
     0,
   );
 
+  let roleLabel = "Usuario";
+
+if (role === "driver") {
+  roleLabel = "Conductor";
+} else if (role === "admin") {
+  roleLabel = "Administrador";
+} else if (role === "user") {
+  roleLabel = "Usuario";
+} 
+
   return (
+
+    
     <div className="min-h-screen flex bg-gray-50 font-sans">
       <Sidebar role={role} onLogout={onLogout} />
 

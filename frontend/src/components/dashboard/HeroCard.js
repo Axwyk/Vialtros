@@ -5,6 +5,9 @@ import { getDriverAssignedRoutes, getUserAssignedRoute } from "../../services/da
 import { getRoutes } from "../../services/admin";
 
 function MapPreview() {
+
+  
+
   return (
     <div
       className="relative w-48 h-36 rounded-xl overflow-hidden flex-shrink-0"
@@ -33,6 +36,10 @@ function MapPreview() {
 }
 
 export default function HeroCard({ role }) {
+
+
+
+
   const [trackingLink, setTrackingLink] = useState("/tracking/1");
   const [trackingEnabled, setTrackingEnabled] = useState(true);
 
