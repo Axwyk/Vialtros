@@ -195,7 +195,10 @@ export default function TrackingMap({
           <div className="legend-line"></div>
           <span>Ruta</span>
         </div>
-      </div>  className="tracking-map-label destination"
+      </div>
+      {normalizedRoute.length > 0 && normalizedRoute[normalizedRoute.length - 1] && (
+        <div
+          className="tracking-map-label destination"
           style={{
             left: `calc(50% + ${(normalizedRoute[normalizedRoute.length - 1][1] - viewState.longitude) * Math.pow(2, viewState.zoom) * 0.038}px)`,
             top: `calc(50% - ${(normalizedRoute[normalizedRoute.length - 1][0] - viewState.latitude) * Math.pow(2, viewState.zoom) * 0.038}px)`,
