@@ -218,6 +218,37 @@
   transform: scaleX(-1) translateY(-2px);
 }
 
+/* POI emoji marker */
+.vt-poi-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 6px 18px rgba(2, 6, 23, 0.12);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* Estilo para el botón de depuración en MapView (Leaflet) */
+.vt-poi-inject-btn {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  z-index: 900;
+  background: #ffffff;
+  border: 1px solid rgba(0,0,0,0.06);
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  color: #0a2b3d;
+  box-shadow: 0 6px 20px rgba(2,6,23,0.08);
+  cursor: pointer;
+}
+
 .vt-vehicle-chip {
   display: inline-flex;
   align-items: center;

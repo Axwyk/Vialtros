@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import Map, {
   Layer,
   Marker,
@@ -77,6 +77,22 @@ export default function TrackingMap({
   const [viewState, setViewState] = useState(DEFAULT_CENTER);
   const mapboxToken = resolveMapboxToken();
 
+  // POIs (puntos de interés) cercanos obtenidos desde Overpass (OpenStreetMap)
+  const [pois, setPois] = useState([]);
+  const poisTimerRef = useRef(null);
+
+  const samplePois = [
+    { id: "s1", lat: viewState.latitude + 0.002, lon: viewState.longitude + 0.002, tags: { name: "Universidad Demo", amenity: "university" } },
+    { id: "s2", lat: viewState.latitude - 0.0015, lon: viewState.longitude - 0.0015, tags: { name: "Hospital Demo", amenity: "hospital" } },
+    { id: "s3", lat: viewState.latitude + 0.0018, lon: viewState.longitude - 0.0018, tags: { name: "Parque Demo", leisure: "park" } },
+    { id: "s4", lat: viewState.latitude - 0.0022, lon: viewState.longitude + 0.0012, tags: { name: "Gasolinera Demo", amenity: "fuel" } },
+  ];
+
+  function injectSamplePois() {
+    setPois(samplePois);
+    console.debug("Injected sample POIs", samplePois);
+  }
+
   // Resuelve el estilo: Mapbox si hay token, sino usa OpenStreetMap gratuito
   const resolvedStyle =
     mapboxToken && mapStyle
@@ -114,6 +130,87 @@ export default function TrackingMap({
     }));
   }, [hasVehicle, vehicleLat, vehicleLng]);
 
+  // Convierte el zoom en un radio aproximado (metros) para la consulta POI
+  function zoomToRadius(zoom) {
+    // heurística simple: a menor zoom, mayor radio
+    const base = 2000; // metros en zoom ~13
+    return Math.max(600, Math.round(base * Math.pow(2, 13 - (zoom || 13)) / 4));
+  }
+
+  // Consulta Overpass API por amenidades relevantes alrededor de un punto
+  async function fetchPOIs(lat, lng, radiusMeters = 2000) {
+    try {
+      // Overpass QL: buscamos nodos con tags útiles
+      const q = `[out:json][timeout:25];(
+  node(around:${radiusMeters},${lat},${lng})[amenity=school];
+  node(around:${radiusMeters},${lat},${lng})[amenity=university];
+  node(around:${radiusMeters},${lat},${lng})[amenity=hospital];
+  node(around:${radiusMeters},${lat},${lng})[amenity=fuel];
+  node(around:${radiusMeters},${lat},${lng})[shop~"mall|supermarket|department_store|mall"];
+  node(around:${radiusMeters},${lat},${lng})[leisure=park];
+);
+out center;`;
+
+      const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(
+        q,
+      )}`;
+
+      const res = await fetch(url);
+      console.debug("Overpass request:", url);
+      if (!res.ok) {
+        console.warn("Overpass response not ok", res.status, res.statusText);
+        return;
+      }
+      const data = await res.json();
+
+      const parsed = (data.elements || []).map((el) => ({
+        id: el.id,
+        lat: el.lat ?? el.center?.lat,
+        lon: el.lon ?? el.center?.lon,
+        tags: el.tags || {},
+      }));
+
+      setPois(parsed);
+      console.debug("Fetched POIs:", parsed.length, parsed.slice(0, 6));
+    } catch (err) {
+      // Silencioso: no bloquear la experiencia por fallos en Overpass
+      console.warn("Error fetching POIs:", err);
+    }
+  }
+
+  // Debounce: recarga POIs cuando cambia la vista (centro/zoom)
+  useEffect(() => {
+    if (!viewState || !viewState.latitude || !viewState.longitude) return;
+    if (poisTimerRef.current) clearTimeout(poisTimerRef.current);
+
+    poisTimerRef.current = setTimeout(() => {
+      const radius = zoomToRadius(viewState.zoom);
+      fetchPOIs(viewState.latitude, viewState.longitude, radius);
+    }, 600);
+
+    return () => {
+      if (poisTimerRef.current) clearTimeout(poisTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewState.latitude, viewState.longitude, viewState.zoom]);
+
+  // Elige un icono (emoji) según los tags del OSM element
+  function getPoiIcon(tags = {}) {
+    const amenity = (tags.amenity || "").toLowerCase();
+    const shop = (tags.shop || "").toLowerCase();
+    const leisure = (tags.leisure || "").toLowerCase();
+
+    if (amenity === "university") return "🎓";
+    if (amenity === "school") return "🏫";
+    if (amenity === "hospital") return "🏥";
+    if (amenity === "fuel") return "⛽";
+    if (leisure === "park") return "🌳";
+    if (shop && /mall|supermarket|department_store/.test(shop)) return "🛍️";
+
+    // fallback: pin genérico
+    return "📍";
+  }
+
   if (!mapboxToken) {
     // Fallback a Leaflet cuando no hay token Mapbox disponible
     const trackingsData = vehiclePosition
@@ -130,6 +227,7 @@ export default function TrackingMap({
         trackings={trackingsData}
         routePolyline={routeCoordinates}
         mapHeight={height}
+        pois={pois}
       />
     );
   }
@@ -222,6 +320,27 @@ export default function TrackingMap({
               </div>
             </Marker>
           )}
+
+        {/* Marcadores POI (Overpass / OSM) */}
+        {pois.map((p) =>
+          p.lat && p.lon ? (
+            <Marker
+              key={`poi-${p.id}`}
+              longitude={Number(p.lon)}
+              latitude={Number(p.lat)}
+              anchor="center"
+            >
+              <div
+                className="poi-marker"
+                title={p.tags.name || p.tags.amenity || p.tags.shop || "POI"}
+                aria-label={p.tags.name || "POI"}
+                style={{ fontSize: 18, transform: "translateY(-6px)" }}
+              >
+                <span>{getPoiIcon(p.tags)}</span>
+              </div>
+            </Marker>
+          ) : null,
+        )}
       </Map>
       {/* Leyenda en esquina inferior izquierda */}
       <div className="map-legend">
@@ -242,7 +361,31 @@ export default function TrackingMap({
           <div className="legend-line"></div>
           <span>Ruta</span>
         </div>
+        <div className="legend-item">
+          <div className="legend-marker">🎓</div>
+          <span>Universidad</span>
+        </div>
+        <div className="legend-item">
+          <div className="legend-marker">🏥</div>
+          <span>Hospital</span>
+        </div>
+        <div className="legend-item">
+          <div className="legend-marker">⛽</div>
+          <span>Bomba de gasolina</span>
+        </div>
+        <div className="legend-item">
+          <div className="legend-marker">🌳</div>
+          <span>Parque</span>
+        </div>
+        <div className="legend-item">
+          <div className="legend-marker">🛍️</div>
+          <span>Centro comercial</span>
+        </div>
       </div>
+        {/* Botón de depuración: inyectar POIs de prueba */}
+        <button className="poi-debug-btn" onClick={injectSamplePois}>
+          Inyectar POIs de prueba
+        </button>
       {normalizedRoute.length > 0 &&
         normalizedRoute[normalizedRoute.length - 1] && (
           <div

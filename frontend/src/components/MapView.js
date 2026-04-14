@@ -221,6 +221,21 @@ function createVehicleIcon(label, status = "Detenido", rotation = 0) {
   });
 }
 
+function getPoiEmoji(tags = {}) {
+  const amenity = (tags.amenity || "").toLowerCase();
+  const shop = (tags.shop || "").toLowerCase();
+  const leisure = (tags.leisure || "").toLowerCase();
+
+  if (amenity === "university") return "🎓";
+  if (amenity === "school") return "🏫";
+  if (amenity === "hospital") return "🏥";
+  if (amenity === "fuel") return "⛽";
+  if (leisure === "park") return "🌳";
+  if (shop && /mall|supermarket|department_store/.test(shop)) return "🛍️";
+
+  return "📍";
+}
+
 function safeText(value) {
   return String(value || "")
     .replace(/&/g, "&amp;")
@@ -336,7 +351,13 @@ export default function MapView({
   focusAllVehicles = false,
   routeOverlays = [],
   highlightedRouteIds = [],
+  pois = [],
 }) {
+  const [displayPois, setDisplayPois] = useState(Array.isArray(pois) ? pois : []);
+
+  useEffect(() => {
+    setDisplayPois(Array.isArray(pois) ? pois : []);
+  }, [pois]);
   const [animatedVehiclePoint, setAnimatedVehiclePoint] = useState(null);
   const animationFrameRef = useRef(null);
   const animationStartRef = useRef(0);
@@ -371,6 +392,17 @@ export default function MapView({
       userCoords,
     ],
   );
+  const samplePois = [
+    { id: "s1", lat: center[0] + 0.002, lon: center[1] + 0.002, tags: { name: "Universidad Demo", amenity: "university" } },
+    { id: "s2", lat: center[0] - 0.0015, lon: center[1] - 0.0015, tags: { name: "Hospital Demo", amenity: "hospital" } },
+    { id: "s3", lat: center[0] + 0.0018, lon: center[1] - 0.0018, tags: { name: "Parque Demo", leisure: "park" } },
+    { id: "s4", lat: center[0] - 0.0022, lon: center[1] + 0.0012, tags: { name: "Gasolinera Demo", amenity: "fuel" } },
+  ];
+
+  function injectSamplePois() {
+    setDisplayPois(samplePois);
+    console.debug("MapView injected sample POIs", samplePois);
+  }
   const startLabelIcon = useMemo(
     () => createRouteLabelIcon(originName || "Origen", "start"),
     [originName],
@@ -836,6 +868,43 @@ export default function MapView({
             />
           );
         })}
+
+        {/* POIs desde Overpass/TrackingMap */}
+        {Array.isArray(displayPois) && (
+          <>
+            <button
+              onClick={injectSamplePois}
+              style={{ position: "absolute", top: 18, left: 18, zIndex: 800 }}
+            >
+              Inyectar POIs de prueba
+            </button>
+            {console.debug ? console.debug("MapView received POIs:", displayPois.length) : null}
+            {displayPois.map((p) => {
+            const lat = Number(p.lat);
+            const lon = Number(p.lon);
+            if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+
+            const tags = p.tags || {};
+            const emoji = getPoiEmoji(tags);
+
+            const poiIcon = L.divIcon({
+              className: "",
+              html: `<div class="vt-poi-marker">${emoji}</div>`,
+              iconSize: [28, 28],
+              iconAnchor: [14, 14],
+            });
+
+            return (
+              <Marker
+                key={`poi-${p.id}`}
+                position={[lat, lon]}
+                icon={poiIcon}
+                interactive={false}
+              />
+            );
+          })}
+          </>
+        )}
 
         {originCoords && (
           <Marker

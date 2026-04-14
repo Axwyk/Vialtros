@@ -260,3 +260,41 @@
 .mapboxgl-popup {
   display: none !important;
 }
+
+/* POI marker simple style (emoji-based) */
+.poi-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  font-size: 16px;
+}
+
+.poi-marker span {
+  line-height: 1;
+}
+
+/* Botón pequeño para inyectar POIs de prueba durante debugging */
+.poi-debug-btn {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  z-index: 800;
+  background: #ffffff;
+  border: 1px solid rgba(0,0,0,0.06);
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  color: #0a2b3d;
+  box-shadow: 0 6px 20px rgba(2,6,23,0.08);
+  cursor: pointer;
+}
+
+.poi-debug-btn:hover {
+  transform: translateY(-1px);
+}
