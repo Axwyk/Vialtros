@@ -85,6 +85,11 @@ function App() {
               <DashboardPage role={role} onLogout={handleLogout} />
             </PrivateRoute>
           } />
+          <Route path="/tracking" element={
+            <PrivateRoute>
+              <TrackingPage />
+            </PrivateRoute>
+          } />
           <Route path="/tracking/:routeId" element={
             <PrivateRoute>
               <TrackingPage />

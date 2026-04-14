@@ -301,9 +301,48 @@ function isWithinBuenaventura(lat, lng) {
 export default function TrackingPage({ routeId: routeIdProp }) {
   const params = useParams();
   const navigate = useNavigate();
-  const selectedRouteId = Number(routeIdProp ?? params.routeId);
+  const rawRouteId = routeIdProp ?? params.routeId;
+  const selectedRouteId = rawRouteId != null ? Number(rawRouteId) : Number.NaN;
   const currentRole = localStorage.getItem('role') || 'user';
   const isAdminView = currentRole === 'admin';
+
+  // Auto-resolución dinámica: si no hay routeId, redirigir a la ruta asignada según el rol
+  useEffect(() => {
+    if (Number.isFinite(selectedRouteId)) return;
+
+    let cancelled = false;
+
+    async function resolveDefaultRoute() {
+      try {
+        let resolvedId = null;
+
+        if (currentRole === 'driver') {
+          const routes = await getDriverAssignedRoutes().catch(() => []);
+          resolvedId = (Array.isArray(routes) ? routes : [])[0]?.id ?? null;
+        } else if (currentRole === 'user') {
+          const payload = await getUserAssignedRoute().catch(() => null);
+          resolvedId = payload?.route?.id ?? null;
+        } else if (currentRole === 'admin') {
+          const { getRoutes } = await import('../services/admin');
+          const routes = await getRoutes().catch(() => []);
+          resolvedId = (Array.isArray(routes) ? routes : [])[0]?.id ?? null;
+        }
+
+        if (cancelled) return;
+
+        if (resolvedId) {
+          navigate(`/tracking/${resolvedId}`, { replace: true });
+        } else {
+          navigate('/dashboard', { replace: true });
+        }
+      } catch {
+        if (!cancelled) navigate('/dashboard', { replace: true });
+      }
+    }
+
+    void resolveDefaultRoute();
+    return () => { cancelled = true; };
+  }, [currentRole, navigate, selectedRouteId]);
 
   const [trackingState, dispatch] = useReducer(trackingReducer, initialTrackingState);
   const { trackings, vehiclePosition, liveRouteHistory } = trackingState;
@@ -945,10 +984,18 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     return clampPercent(((plannedDistanceKm - remainingDistanceKm) / plannedDistanceKm) * 100);
   }, [plannedDistanceKm, remainingDistanceKm]);
 
+  const vehicleLabel = useMemo(() => {
+    const driverDetail = routeInfo?.driver_detail;
+    if (driverDetail?.license_number) return driverDetail.license_number;
+    if (driverDetail?.user_detail?.username) return driverDetail.user_detail.username;
+    if (routeInfo?.name) return routeInfo.name;
+    return 'Vehiculo';
+  }, [routeInfo]);
+
   const vehicleSummary = useMemo(() => {
     if (displayTrackings.length === 0) {
       return {
-        label: routeInfo?.driver_detail?.license_number || `B-${selectedRouteId || 0}`,
+        label: vehicleLabel,
         latitude: null,
         longitude: null,
         speedKmh: 0,
@@ -981,14 +1028,14 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       .length;
 
     return {
-      label: routeInfo?.driver_detail?.license_number || `B-${selectedRouteId || 101}`,
+      label: vehicleLabel,
       latitude: latest.latitude,
       longitude: latest.longitude,
       speedKmh,
       studentsOnboard,
       status: speedKmh > 3 ? 'En ruta' : 'Detenido',
     };
-  }, [displayTrackings, routeInfo, selectedRouteId]);
+  }, [displayTrackings, vehicleLabel]);
 
   const activeVehicles = useMemo(() => {
     if (!hasLiveData) return [];
@@ -1011,7 +1058,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       const groupedVehicles = Array.from(latestByPassenger.entries()).map(([passengerId, t], idx) => {
         const speed = toNumber(t.speed ?? t.speed_kmh ?? t.velocity) || 0;
         return {
-          label: `B-${String(passengerId).padStart(2, '0')}`,
+          label: `${vehicleLabel}-P${String(passengerId).padStart(2, '0')}`,
           latitude: t.latitude,
           longitude: t.longitude,
           speedKmh: speed,
@@ -1030,7 +1077,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       return [];
     }
     return [vehicleSummary];
-  }, [displayTrackings, hasLiveData, vehiclePosition, vehicleSummary]);
+  }, [displayTrackings, hasLiveData, vehicleLabel, vehiclePosition, vehicleSummary]);
 
   const displayVehiclePosition = useMemo(() => {
     if (!snappedVehiclePoint) return vehiclePosition;
