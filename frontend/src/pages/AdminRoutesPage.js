@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import Sidebar from '../components/dashboard/Sidebar';
 import Modal from '../components/Modal';
 import { icons } from '../components/dashboard/icons';
@@ -168,6 +169,7 @@ export default function AdminRoutesPage({ role, onLogout }) {
                     </td>
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-2 justify-end">
+                        <Link to={`/tracking/${r.id}`} className="text-xs text-blue-600 hover:text-blue-800 font-medium transition">Tracking</Link>
                         <button onClick={() => openEdit(r)} className="text-xs text-blue-600 hover:text-blue-800 font-medium transition">Editar</button>
                         <button onClick={() => setConfirmId(r.id)} className="text-xs text-red-500 hover:text-red-700 font-medium transition">Eliminar</button>
                       </div>

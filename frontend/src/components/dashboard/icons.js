@@ -137,6 +137,12 @@ export const icons = {
       <polyline points="12 5 19 12 12 19" />
     </Icon>
   ),
+  arrowLeft: (p) => (
+    <Icon {...p}>
+      <line x1="19" y1="12" x2="5" y2="12" />
+      <polyline points="12 5 5 12 12 19" />
+    </Icon>
+  ),
   alertTriangle: (p) => (
     <Icon {...p}>
       <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />

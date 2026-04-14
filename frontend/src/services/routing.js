@@ -3,11 +3,19 @@
 
 const OSRM_BASE = 'https://router.project-osrm.org/route/v1/driving';
 const OSRM_MATCH_BASE = 'https://router.project-osrm.org/match/v1/driving';
+const OSRM_NEAREST_BASE = 'https://router.project-osrm.org/nearest/v1/driving';
 const NOMINATIM_BASE = 'https://nominatim.openstreetmap.org';
 
 // Buenaventura viewbox: minLng,minLat,maxLng,maxLat
 const BVA_VIEWBOX = '-77.18,3.72,-76.85,4.02';
 const BVA_CITY_SUFFIX = ', Buenaventura, Colombia';
+export const BUENAVENTURA_CENTER = [3.89243, -77.02824];
+export const BUENAVENTURA_URBAN_BOUNDS = {
+  minLat: 3.84,
+  maxLat: 3.93,
+  minLng: -77.09,
+  maxLng: -76.99,
+};
 
 const REAL_BUENAVENTURA_PLACES = [
   {
@@ -85,6 +93,25 @@ function resolveKnownPlace(address) {
   return knownPlace?.coords || null;
 }
 
+export function isWithinBuenaventuraZone(coords) {
+  if (!Array.isArray(coords) || coords.length !== 2) return false;
+  const [lat, lng] = coords;
+  return (
+    Number.isFinite(lat)
+    && Number.isFinite(lng)
+    && lat >= BUENAVENTURA_URBAN_BOUNDS.minLat
+    && lat <= BUENAVENTURA_URBAN_BOUNDS.maxLat
+    && lng >= BUENAVENTURA_URBAN_BOUNDS.minLng
+    && lng <= BUENAVENTURA_URBAN_BOUNDS.maxLng
+  );
+}
+
+function sanitizeBuenaventuraCoords(coords, fallbackCoords = null) {
+  if (isWithinBuenaventuraZone(coords)) return coords;
+  if (isWithinBuenaventuraZone(fallbackCoords)) return fallbackCoords;
+  return BUENAVENTURA_CENTER;
+}
+
 function normalizePathPoints(points) {
   return (Array.isArray(points) ? points : [])
     .filter((point) => Array.isArray(point) && point.length === 2)
@@ -138,18 +165,57 @@ async function fetchJson(url) {
   return response.json();
 }
 
+function isUsableRoadRoute(route, maxDistance = 60000) {
+  return Boolean(route?.geometry?.coordinates?.length > 1 && route?.distance < maxDistance);
+}
+
+function toLatLngPolyline(route) {
+  return {
+    coordinates: route.geometry.coordinates.map(([lng, lat]) => [lat, lng]),
+    duration: route.duration,
+    distance: route.distance,
+  };
+}
+
+async function snapToNearestRoad(coords) {
+  if (!Array.isArray(coords) || coords.length !== 2) return null;
+
+  const [lat, lng] = coords;
+  try {
+    const data = await fetchJson(`${OSRM_NEAREST_BASE}/${lng},${lat}?number=1`);
+    const location = data?.waypoints?.[0]?.location;
+    if (!Array.isArray(location) || location.length !== 2) return null;
+    return sanitizeBuenaventuraCoords([location[1], location[0]], coords);
+  } catch {
+    return null;
+  }
+}
+
+async function requestStreetRoute(points, maxDistance = 60000) {
+  const coordinates = buildOsrmCoordinates(points);
+  const data = await fetchJson(`${OSRM_BASE}/${coordinates}?overview=full&geometries=geojson&continue_straight=false&steps=true`);
+  if (data?.code === 'Ok' && Array.isArray(data.routes) && data.routes.length > 0) {
+    const route = data.routes[0];
+    if (isUsableRoadRoute(route, maxDistance)) {
+      return toLatLngPolyline(route);
+    }
+  }
+  return null;
+}
+
 /**
  * Convierte una dirección de texto a coordenadas [lat, lng].
  * Prioriza resultados dentro del viewbox de Buenaventura.
  * @param {string} address
  * @returns {Promise<[number, number] | null>}
  */
-export async function geocodeAddress(address) {
+export async function geocodeAddress(address, options = {}) {
   if (!address?.trim()) return null;
   const clean = address.trim();
+  const { fallbackCoords = null } = options;
 
   const knownCoords = resolveKnownPlace(clean);
-  if (knownCoords) return knownCoords;
+  if (knownCoords) return sanitizeBuenaventuraCoords(knownCoords, fallbackCoords);
 
   const trySearch = async (query, bounded) => {
     const url = new URL(`${NOMINATIM_BASE}/search`);
@@ -165,7 +231,10 @@ export async function geocodeAddress(address) {
       if (!res.ok) return null;
       const data = await res.json();
       if (!Array.isArray(data) || data.length === 0) return null;
-      return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+      return sanitizeBuenaventuraCoords(
+        [parseFloat(data[0].lat), parseFloat(data[0].lon)],
+        fallbackCoords,
+      );
     } catch {
       return null;
     }
@@ -183,7 +252,7 @@ export async function geocodeAddress(address) {
   // 3. Fallback global (sin restricción geográfica)
   if (!result) result = await trySearch(clean, false);
 
-  return result;
+  return result || sanitizeBuenaventuraCoords(null, fallbackCoords);
 }
 
 /** Haversine: distancia en km entre dos puntos [lat, lng]. */
@@ -220,32 +289,35 @@ function straightLineRoute(from, to) {
 export async function getStreetRoute(from, to) {
   if (!from || !to) return null;
 
-  const coords = `${from[1]},${from[0]};${to[1]},${to[0]}`;
+  const safeFrom = sanitizeBuenaventuraCoords(from);
+  const safeTo = sanitizeBuenaventuraCoords(to, safeFrom);
 
   try {
-    const res = await fetch(
-      `${OSRM_BASE}/${coords}?overview=full&geometries=geojson`,
-      { signal: AbortSignal.timeout(8000) },
-    );
-    if (res.ok) {
-      const data = await res.json();
-      if (data.code === 'Ok' && data.routes?.length) {
-        const route = data.routes[0];
-        // Rechazar rutas > 60 km (desvíos marítimos absurdos de OSRM)
-        if (route.distance < 60000) {
-          return {
-            coordinates: route.geometry.coordinates.map(([lng, lat]) => [lat, lng]),
-            duration: route.duration,
-            distance: route.distance,
-          };
-        }
-      }
+    const [snappedFrom, snappedTo] = await Promise.all([
+      snapToNearestRoad(safeFrom),
+      snapToNearestRoad(safeTo),
+    ]);
+
+    const adjustedFrom = snappedFrom || safeFrom;
+    const adjustedTo = snappedTo || safeTo;
+    const snappedRoute = await requestStreetRoute([adjustedFrom, adjustedTo]);
+    if (snappedRoute) {
+      return snappedRoute;
     }
   } catch {
-    // OSRM timeout o no disponible → fallback
+    // Si falla el ajuste a la vía, probamos con las coordenadas saneadas.
   }
 
-  return straightLineRoute(from, to);
+  try {
+    const directRoute = await requestStreetRoute([safeFrom, safeTo]);
+    if (directRoute) {
+      return directRoute;
+    }
+  } catch {
+    // Último recurso: línea recta.
+  }
+
+  return straightLineRoute(safeFrom, safeTo);
 }
 
 /**

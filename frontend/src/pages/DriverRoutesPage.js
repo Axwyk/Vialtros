@@ -123,9 +123,17 @@ export default function DriverRoutesPage({ onLogout }) {
                       </div>
                     </div>
                   </div>
-                  <span className="rounded-full bg-gray-50 border border-gray-200 px-3 py-1 text-[11px] font-semibold text-gray-700 shadow-sm">
-                    {route.passenger_count ?? route.passenger_details?.length ?? 0} estudiante{(route.passenger_count ?? route.passenger_details?.length ?? 0) !== 1 ? 's' : ''}
-                  </span>
+                  <div className="flex flex-col items-end gap-2">
+                    <span className="rounded-full bg-gray-50 border border-gray-200 px-3 py-1 text-[11px] font-semibold text-gray-700 shadow-sm">
+                      {route.passenger_count ?? route.passenger_details?.length ?? 0} estudiante{(route.passenger_count ?? route.passenger_details?.length ?? 0) !== 1 ? 's' : ''}
+                    </span>
+                    <Link
+                      to={`/tracking/${route.id}`}
+                      className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2 text-xs font-bold uppercase tracking-[0.14em] text-blue-700 transition hover:border-blue-300 hover:bg-blue-100"
+                    >
+                      Ver tracking
+                    </Link>
+                  </div>
                 </div>
 
                 {/* Passengers and Status */}

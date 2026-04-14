@@ -1,5 +1,5 @@
 // Mapa en tiempo real con estilo limpio tipo navegacion
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import { MapContainer, TileLayer, Marker, Polyline, useMap } from 'react-leaflet';
 import './leaflet-fixes.css';
@@ -28,15 +28,140 @@ const destinationIcon = L.divIcon({
 });
 
 const BUENAVENTURA_CENTER = [3.89243, -77.02824];
+const BUENAVENTURA_MAX_BOUNDS = [
+  [3.84, -77.09],
+  [3.93, -76.99],
+];
 
-function createVehicleIcon(label, status = 'Detenido') {
+function projectPointOnSegment(point, start, end) {
+  const startX = start[1];
+  const startY = start[0];
+  const endX = end[1];
+  const endY = end[0];
+  const pointX = point[1];
+  const pointY = point[0];
+  const dx = endX - startX;
+  const dy = endY - startY;
+  const segmentLengthSquared = dx * dx + dy * dy;
+
+  if (segmentLengthSquared === 0) {
+    const distSquared = (pointX - startX) ** 2 + (pointY - startY) ** 2;
+    return { t: 0, distanceSquared: distSquared };
+  }
+
+  const t = Math.max(0, Math.min(1, (((pointX - startX) * dx) + ((pointY - startY) * dy)) / segmentLengthSquared));
+  const projectedX = startX + (dx * t);
+  const projectedY = startY + (dy * t);
+  const distanceSquared = (pointX - projectedX) ** 2 + (pointY - projectedY) ** 2;
+
+  return { t, distanceSquared };
+}
+
+function getSegmentRotation(start, end) {
+  const deltaLat = end[0] - start[0];
+  const deltaLng = end[1] - start[1];
+  if (!Number.isFinite(deltaLat) || !Number.isFinite(deltaLng) || (deltaLat === 0 && deltaLng === 0)) {
+    return 0;
+  }
+  return Math.atan2(-deltaLat, deltaLng) * (180 / Math.PI);
+}
+
+function getVehicleRotation(line, vehiclePoint) {
+  if (!Array.isArray(line) || line.length < 2) return 0;
+
+  if (!Array.isArray(vehiclePoint) || vehiclePoint.length !== 2) {
+    return getSegmentRotation(line[line.length - 2], line[line.length - 1]);
+  }
+
+  let closestSegmentIndex = 0;
+  let closestDistanceSquared = Number.POSITIVE_INFINITY;
+
+  for (let index = 0; index < line.length - 1; index += 1) {
+    const start = line[index];
+    const end = line[index + 1];
+    if (!start || !end) continue;
+
+    const { distanceSquared } = projectPointOnSegment(vehiclePoint, start, end);
+    if (distanceSquared < closestDistanceSquared) {
+      closestDistanceSquared = distanceSquared;
+      closestSegmentIndex = index;
+    }
+  }
+
+  return getSegmentRotation(line[closestSegmentIndex], line[closestSegmentIndex + 1]);
+}
+
+function distanceBetweenPoints(from, to) {
+  if (!Array.isArray(from) || !Array.isArray(to)) return 0;
+  const deltaLat = to[0] - from[0];
+  const deltaLng = to[1] - from[1];
+  return Math.sqrt((deltaLat * deltaLat) + (deltaLng * deltaLng));
+}
+
+function interpolatePoint(from, to, progress) {
+  return [
+    from[0] + ((to[0] - from[0]) * progress),
+    from[1] + ((to[1] - from[1]) * progress),
+  ];
+}
+
+function buildAnimationPath(targetPoint, traveledLine, previousPoint, previousLineLength) {
+  if (Array.isArray(traveledLine) && traveledLine.length > 1) {
+    const startIndex = previousLineLength > 1 ? Math.max(previousLineLength - 1, 0) : 0;
+    const nextPath = traveledLine.slice(startIndex);
+    if (Array.isArray(previousPoint) && nextPath.length > 0) {
+      if (distanceBetweenPoints(previousPoint, nextPath[0]) > 0.00001) {
+        return [previousPoint, ...nextPath];
+      }
+    }
+    return nextPath;
+  }
+
+  if (Array.isArray(previousPoint) && Array.isArray(targetPoint)) {
+    return [previousPoint, targetPoint];
+  }
+
+  return Array.isArray(targetPoint) ? [targetPoint] : [];
+}
+
+function totalPathDistance(path) {
+  let total = 0;
+  for (let index = 1; index < path.length; index += 1) {
+    total += distanceBetweenPoints(path[index - 1], path[index]);
+  }
+  return total;
+}
+
+function getPointAtDistance(path, distance) {
+  if (path.length === 0) return null;
+  if (path.length === 1 || distance <= 0) return path[0];
+
+  let traversed = 0;
+  for (let index = 1; index < path.length; index += 1) {
+    const start = path[index - 1];
+    const end = path[index];
+    const segmentDistance = distanceBetweenPoints(start, end);
+
+    if (traversed + segmentDistance >= distance) {
+      const localProgress = segmentDistance === 0 ? 1 : (distance - traversed) / segmentDistance;
+      return interpolatePoint(start, end, localProgress);
+    }
+
+    traversed += segmentDistance;
+  }
+
+  return path[path.length - 1];
+}
+
+function createVehicleIcon(label, status = 'Detenido', rotation = 0) {
   const safeLabel = safeText(label || 'Vehiculo');
   const normalizedStatus = status === 'En ruta' ? 'moving' : 'idle';
+  const safeRotation = Number.isFinite(rotation) ? rotation : 0;
   return L.divIcon({
     className: '',
     html: `
       <div class="vt-vehicle-chip vt-vehicle-chip-${normalizedStatus}">
-        <span class="vt-vehicle-icon" aria-hidden="true">
+        <span class="vt-vehicle-icon" aria-hidden="true" style="transform: rotate(${safeRotation}deg);">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
             <rect x="1" y="4" width="16" height="12" rx="2"></rect>
             <path d="M17 8h3l3 4v4h-6V8z"></path>
@@ -118,15 +243,19 @@ function AutoFollowVehicle({ vehiclePoint, enabled = true }) {
 
     if (firstFollowRef.current) {
       firstFollowRef.current = false;
-      map.setView([lat, lng], Math.max(map.getZoom(), 15), { animate: false });
+      map.setView([lat, lng], Math.max(map.getZoom(), 17), { animate: false });
       return;
     }
 
-    map.flyTo([lat, lng], Math.max(map.getZoom(), 15), {
+    map.panTo([lat, lng], {
       animate: true,
-      duration: 1.2,
-      easeLinearity: 0.25,
+      duration: 1.1,
+      easeLinearity: 0.22,
     });
+
+    if (map.getZoom() < 17) {
+      map.setZoom(17, { animate: true });
+    }
   }, [map, vehiclePoint, enabled]);
 
   return null;
@@ -152,14 +281,21 @@ export default function MapView({
   destinationName = null,
   activeVehicles = [],
   vehiclePosition = null,
+  userCoords = null,
   mapHeight = '560px',
 }) {
+  const [animatedVehiclePoint, setAnimatedVehiclePoint] = useState(null);
+  const animationFrameRef = useRef(null);
+  const animationStartRef = useRef(0);
+  const previousAnimatedPointRef = useRef(null);
+  const previousTraveledLineLengthRef = useRef(0);
+
   const validPoints = trackings
     .map((t) => [Number(t.latitude), Number(t.longitude)])
     .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
 
   const latestPoint = validPoints.length > 0 ? validPoints[validPoints.length - 1] : null;
-  const center = latestPoint || originCoords || destinationCoords || BUENAVENTURA_CENTER;
+  const center = latestPoint || originCoords || destinationCoords || userCoords || BUENAVENTURA_CENTER;
   const startLabelIcon = useMemo(
     () => createRouteLabelIcon(originName || 'Origen', 'start'),
     [originName],
@@ -180,6 +316,7 @@ export default function MapView({
       ? traveledLine
     : [
       ...[originCoords, destinationCoords].filter(Boolean),
+      ...[userCoords].filter(Boolean),
       ...activeVehicles
         .filter((v) => Number.isFinite(v.latitude) && Number.isFinite(v.longitude))
         .map((v) => [v.latitude, v.longitude]),
@@ -188,8 +325,91 @@ export default function MapView({
   const vehiclePoint = Number.isFinite(vehiclePosition?.latitude) && Number.isFinite(vehiclePosition?.longitude)
     ? [Number(vehiclePosition.latitude), Number(vehiclePosition.longitude)]
     : latestPoint;
+  const effectiveVehiclePoint = animatedVehiclePoint || vehiclePoint;
+  const primaryVehicle = vehiclePoint
+    ? {
+      label: activeVehicles[0]?.label || 'Vehiculo',
+      status: activeVehicles[0]?.status || 'En ruta',
+      latitude: effectiveVehiclePoint?.[0] ?? vehiclePoint[0],
+      longitude: effectiveVehiclePoint?.[1] ?? vehiclePoint[1],
+    }
+    : null;
+  const secondaryVehicles = primaryVehicle
+    ? activeVehicles.filter((vehicle, index) => index > 0)
+    : activeVehicles;
+  const vehicleDirectionLine = traveledLine?.length > 1
+    ? traveledLine
+    : (plannedLine?.length > 1 ? plannedLine : validPoints);
+  const primaryVehicleRotation = useMemo(
+    () => getVehicleRotation(vehicleDirectionLine, effectiveVehiclePoint || vehiclePoint),
+    [vehicleDirectionLine, effectiveVehiclePoint, vehiclePoint],
+  );
 
   const hasLiveTrackings = validPoints.length > 0;
+
+  useEffect(() => {
+    if (!Array.isArray(vehiclePoint)) return undefined;
+
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+
+    const animationPath = buildAnimationPath(
+      vehiclePoint,
+      traveledLine,
+      previousAnimatedPointRef.current,
+      previousTraveledLineLengthRef.current,
+    );
+    previousTraveledLineLengthRef.current = Array.isArray(traveledLine) ? traveledLine.length : 0;
+
+    if (animationPath.length <= 1) {
+      setAnimatedVehiclePoint(vehiclePoint);
+      previousAnimatedPointRef.current = vehiclePoint;
+      return undefined;
+    }
+
+    const pathDistance = totalPathDistance(animationPath);
+    const duration = Math.min(1800, Math.max(700, animationPath.length * 18));
+    animationStartRef.current = 0;
+
+    const animate = (timestamp) => {
+      if (!animationStartRef.current) {
+        animationStartRef.current = timestamp;
+      }
+
+      const elapsed = timestamp - animationStartRef.current;
+      const progress = Math.min(elapsed / duration, 1);
+      const easedProgress = 1 - ((1 - progress) * (1 - progress));
+      const nextPoint = getPointAtDistance(animationPath, pathDistance * easedProgress) || vehiclePoint;
+      setAnimatedVehiclePoint(nextPoint);
+      previousAnimatedPointRef.current = nextPoint;
+
+      if (progress < 1) {
+        animationFrameRef.current = requestAnimationFrame(animate);
+        return;
+      }
+
+      setAnimatedVehiclePoint(vehiclePoint);
+      previousAnimatedPointRef.current = vehiclePoint;
+      animationFrameRef.current = null;
+    };
+
+    animationFrameRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+    };
+  }, [traveledLine, vehiclePoint]);
+
+  useEffect(() => () => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+  }, []);
 
   return (
     <div style={{ position: 'relative', height: mapHeight }} className="tracking-map-container">
@@ -207,6 +427,8 @@ export default function MapView({
       <MapContainer
         center={center}
         zoom={14}
+        maxBounds={BUENAVENTURA_MAX_BOUNDS}
+        maxBoundsViscosity={1}
         style={{ height: '100%', width: '100%' }}
         className="vt-map-base"
         attributionControl={false}
@@ -266,7 +488,15 @@ export default function MapView({
         {originCoords && <Marker position={originCoords} icon={originIcon} interactive={false} />}
         {destinationCoords && <Marker position={destinationCoords} icon={destinationIcon} interactive={false} />}
 
-        {activeVehicles.map((vehicle) => {
+        {primaryVehicle && (
+          <Marker
+            position={[primaryVehicle.latitude, primaryVehicle.longitude]}
+            icon={createVehicleIcon(primaryVehicle.label, primaryVehicle.status, primaryVehicleRotation)}
+            interactive={false}
+          />
+        )}
+
+        {secondaryVehicles.map((vehicle) => {
           if (!Number.isFinite(vehicle.latitude) || !Number.isFinite(vehicle.longitude)) {
             return null;
           }
@@ -284,13 +514,13 @@ export default function MapView({
         {destinationCoords && <Marker position={destinationCoords} icon={endLabelIcon} interactive={false} />}
 
         <FitBounds coordinates={fitCoords} freezeAfterFirstFit={hasLiveTrackings} />
-        <AutoFollowVehicle vehiclePoint={vehiclePoint} enabled={hasLiveTrackings} />
+        <AutoFollowVehicle vehiclePoint={effectiveVehiclePoint || vehiclePoint} enabled={hasLiveTrackings} />
       </MapContainer>
 
       {/* Leyenda del mapa */}
       <div className="map-legend">
         <div className="legend-title">Leyenda</div>
-        {activeVehicles.length > 0 && (
+        {primaryVehicle && (
           <div className="legend-item">
             <div className="legend-marker vehicle-dot"></div>
             <span>Vehiculo</span>

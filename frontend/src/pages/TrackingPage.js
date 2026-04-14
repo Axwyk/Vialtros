@@ -4,17 +4,57 @@ import MapView from '../components/MapView';
 import { connectTrackingWS } from '../services/ws';
 import { getTrackingsByRoute } from '../services/tracking';
 import { getRoute } from '../services/admin';
-import { geocodeAddress, getStreetRoute, getETAMinutes, getTrackedStreetRoute } from '../services/routing';
+import { sendDriverLocation } from '../services/driverLocation';
+import {
+  geocodeAddress,
+  getStreetRoute,
+  getETAMinutes,
+  getTrackedStreetRoute,
+  isWithinBuenaventuraZone,
+} from '../services/routing';
 import TrackingHero from '../components/tracking/TrackingHero';
 import './TrackingPage.css';
 
 const LIVE_WINDOW_MINUTES = 20;
+const ETA_REFRESH_DISTANCE_KM = 0.08;
+const ROUTE_MATCH_MIN_NEW_POINTS = 4;
+const ROUTE_MATCH_REFRESH_DISTANCE_KM = 0.12;
+const GUIDED_ROUTE_SPEED_KMH = 24;
+const GUIDED_ROUTE_STEP_MS = 4500;
+const GUIDED_ROUTE_MAX_POINTS = 28;
 const BUENAVENTURA_BOUNDS = {
   minLat: 3.65,
   maxLat: 4.05,
   minLng: -77.25,
   maxLng: -76.75,
 };
+
+function dedupeConsecutivePoints(points) {
+  return (Array.isArray(points) ? points : []).reduce((acc, point) => {
+    if (!Array.isArray(point) || point.length !== 2) return acc;
+    const last = acc[acc.length - 1];
+    if (last && last[0] === point[0] && last[1] === point[1]) return acc;
+    acc.push(point);
+    return acc;
+  }, []);
+}
+
+function sampleGuidedRoute(points, maxPoints = GUIDED_ROUTE_MAX_POINTS) {
+  if (!Array.isArray(points) || points.length <= maxPoints) return Array.isArray(points) ? points : [];
+
+  const sampled = [];
+  const lastIndex = points.length - 1;
+  for (let index = 0; index < maxPoints; index += 1) {
+    const pointIndex = Math.round((index * lastIndex) / (maxPoints - 1));
+    const point = points[pointIndex];
+    const previous = sampled[sampled.length - 1];
+    if (point && (!previous || previous[0] !== point[0] || previous[1] !== point[1])) {
+      sampled.push(point);
+    }
+  }
+
+  return sampled;
+}
 
 function toNumber(value) {
   const n = Number(value);
@@ -32,6 +72,67 @@ function distanceKm(lat1, lng1, lat2, lng2) {
     Math.sin(dLng / 2) * Math.sin(dLng / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return earthKm * c;
+}
+
+function projectPointOnSegment(point, start, end) {
+  const startX = start[1];
+  const startY = start[0];
+  const endX = end[1];
+  const endY = end[0];
+  const pointX = point[1];
+  const pointY = point[0];
+  const dx = endX - startX;
+  const dy = endY - startY;
+  const segmentLengthSquared = dx * dx + dy * dy;
+
+  if (segmentLengthSquared === 0) {
+    const distanceSquared = ((pointX - startX) ** 2) + ((pointY - startY) ** 2);
+    return { t: 0, distanceSquared };
+  }
+
+  const t = Math.max(0, Math.min(1, (((pointX - startX) * dx) + ((pointY - startY) * dy)) / segmentLengthSquared));
+  const projectedX = startX + (dx * t);
+  const projectedY = startY + (dy * t);
+  const distanceSquared = ((pointX - projectedX) ** 2) + ((pointY - projectedY) ** 2);
+
+  return { t, distanceSquared };
+}
+
+function remainingRouteDistanceKm(routeCoordinates, vehiclePoint) {
+  if (!Array.isArray(routeCoordinates) || routeCoordinates.length < 2 || !Array.isArray(vehiclePoint)) {
+    return null;
+  }
+
+  let closestSegmentIndex = 0;
+  let closestProjection = { t: 0, distanceSquared: Number.POSITIVE_INFINITY };
+
+  for (let index = 0; index < routeCoordinates.length - 1; index += 1) {
+    const start = routeCoordinates[index];
+    const end = routeCoordinates[index + 1];
+    if (!start || !end) continue;
+
+    const projection = projectPointOnSegment(vehiclePoint, start, end);
+    if (projection.distanceSquared < closestProjection.distanceSquared) {
+      closestProjection = projection;
+      closestSegmentIndex = index;
+    }
+  }
+
+  const start = routeCoordinates[closestSegmentIndex];
+  const end = routeCoordinates[closestSegmentIndex + 1];
+  const projectedPoint = [
+    start[0] + ((end[0] - start[0]) * closestProjection.t),
+    start[1] + ((end[1] - start[1]) * closestProjection.t),
+  ];
+
+  let totalKm = distanceKm(projectedPoint[0], projectedPoint[1], end[0], end[1]);
+  for (let index = closestSegmentIndex + 2; index < routeCoordinates.length; index += 1) {
+    const previous = routeCoordinates[index - 1];
+    const current = routeCoordinates[index];
+    totalKm += distanceKm(previous[0], previous[1], current[0], current[1]);
+  }
+
+  return totalKm;
 }
 
 function polylineDistanceKm(coordinates) {
@@ -154,6 +255,8 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const [originCoords, setOriginCoords] = useState(null);
   const [destinationCoords, setDestinationCoords] = useState(null);
   const [routePolyline, setRoutePolyline] = useState(null);
+  const [matchedLiveRouteHistory, setMatchedLiveRouteHistory] = useState([]);
+  const [userCoords, setUserCoords] = useState(null);
   const [eta, setEta] = useState(null);
   const [etaUpdated, setEtaUpdated] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -162,15 +265,63 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const [forceBuenaventuraDemo, setForceBuenaventuraDemo] = useState(false);
   const [showLiveTransition, setShowLiveTransition] = useState(false);
   const [showLiveToast, setShowLiveToast] = useState(false);
-  const [matchedLiveRouteHistory, setMatchedLiveRouteHistory] = useState([]);
+  const [guidedRouteLoading, setGuidedRouteLoading] = useState(false);
+  const [guidedRouteRunning, setGuidedRouteRunning] = useState(false);
+  const [guidedRouteError, setGuidedRouteError] = useState('');
+  const [guidedRouteDisplayPath, setGuidedRouteDisplayPath] = useState([]);
 
   const trackingsCountRef = useRef(0);
   const liveTransitionTimerRef = useRef(null);
   const liveToastTimerRef = useRef(null);
+  const lastEtaRequestRef = useRef({ point: null, destinationKey: '' });
+  const lastMatchedRouteRef = useRef({ historyLength: 0, lastPoint: null });
+  const guidedRouteTimerRef = useRef(null);
+  const guidedRoutePointsRef = useRef([]);
+  const guidedRouteIndexRef = useRef(0);
+  const guidedRouteFullPathRef = useRef([]);
 
   useEffect(() => {
     trackingsCountRef.current = trackings.length;
   }, [trackings]);
+
+  useEffect(() => {
+    setGuidedRouteDisplayPath([]);
+    guidedRouteFullPathRef.current = [];
+    guidedRoutePointsRef.current = [];
+    guidedRouteIndexRef.current = 0;
+    setGuidedRouteLoading(false);
+    setGuidedRouteRunning(false);
+    setGuidedRouteError('');
+  }, [selectedRouteId]);
+
+  useEffect(() => () => {
+    if (guidedRouteTimerRef.current) clearTimeout(guidedRouteTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (!navigator.geolocation) return undefined;
+
+    const success = (position) => {
+      const coords = [position.coords.latitude, position.coords.longitude];
+      if (isWithinBuenaventuraZone(coords)) {
+        setUserCoords(coords);
+      }
+    };
+
+    navigator.geolocation.getCurrentPosition(success, () => {}, {
+      enableHighAccuracy: true,
+      maximumAge: 60000,
+      timeout: 10000,
+    });
+
+    const watchId = navigator.geolocation.watchPosition(success, () => {}, {
+      enableHighAccuracy: true,
+      maximumAge: 15000,
+      timeout: 12000,
+    });
+
+    return () => navigator.geolocation?.clearWatch(watchId);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -216,8 +367,8 @@ export default function TrackingPage({ routeId: routeIdProp }) {
 
         if (route?.origin && route?.destination) {
           const [from, to] = await Promise.all([
-            geocodeAddress(route.origin),
-            geocodeAddress(route.destination),
+            geocodeAddress(route.origin, { fallbackCoords: userCoords }),
+            geocodeAddress(route.destination, { fallbackCoords: userCoords }),
           ]);
 
           if (!mounted) return;
@@ -254,7 +405,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
 
     loadData();
     return () => { mounted = false; };
-  }, [selectedRouteId]);
+  }, [selectedRouteId, userCoords]);
 
   useEffect(() => {
     if (!Number.isFinite(selectedRouteId)) return undefined;
@@ -375,18 +526,82 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   useEffect(() => {
     if (!destinationCoords || trackings.length === 0) return;
     const latest = trackings[trackings.length - 1];
+    const latestPoint = [latest.latitude, latest.longitude];
+    const fallbackSpeedKmh = toNumber(latest.speed ?? latest.speed_kmh ?? latest.velocity) || GUIDED_ROUTE_SPEED_KMH;
+
+    if (Array.isArray(routePolyline) && routePolyline.length > 1) {
+      const remainingKm = remainingRouteDistanceKm(routePolyline, latestPoint);
+      if (Number.isFinite(remainingKm)) {
+        const minutes = remainingKm <= 0.03
+          ? 0
+          : Math.max(1, Math.ceil((remainingKm / Math.max(fallbackSpeedKmh, 12)) * 60));
+        setEta(minutes);
+        setEtaUpdated(new Date());
+        lastEtaRequestRef.current = {
+          point: latestPoint,
+          destinationKey: destinationCoords.join(','),
+        };
+        return;
+      }
+    }
+
+    const destinationKey = destinationCoords.join(',');
+    const previousEtaRequest = lastEtaRequestRef.current;
+    if (
+      previousEtaRequest.destinationKey === destinationKey
+      && Array.isArray(previousEtaRequest.point)
+      && distanceKm(
+        previousEtaRequest.point[0],
+        previousEtaRequest.point[1],
+        latest.latitude,
+        latest.longitude,
+      ) < ETA_REFRESH_DISTANCE_KM
+    ) {
+      return;
+    }
+
     getETAMinutes([latest.latitude, latest.longitude], destinationCoords)
       .then((minutes) => {
         if (minutes === null) return;
+        lastEtaRequestRef.current = {
+          point: [latest.latitude, latest.longitude],
+          destinationKey,
+        };
         setEta(minutes);
         setEtaUpdated(new Date());
       })
       .catch(() => {});
-  }, [trackings, destinationCoords]);
+  }, [trackings, destinationCoords, routePolyline]);
 
   useEffect(() => {
+    if (guidedRouteRunning && guidedRouteDisplayPath.length > 1) {
+      setMatchedLiveRouteHistory(guidedRouteDisplayPath);
+      return undefined;
+    }
+
     if (liveRouteHistory.length < 2) {
       setMatchedLiveRouteHistory([]);
+      lastMatchedRouteRef.current = { historyLength: 0, lastPoint: null };
+      return undefined;
+    }
+
+    const latestPoint = liveRouteHistory[liveRouteHistory.length - 1];
+    const lastMatchedRoute = lastMatchedRouteRef.current;
+    const newPointsSinceLastMatch = liveRouteHistory.length - lastMatchedRoute.historyLength;
+    const movedDistanceSinceLastMatch = Array.isArray(lastMatchedRoute.lastPoint)
+      ? distanceKm(
+        lastMatchedRoute.lastPoint[0],
+        lastMatchedRoute.lastPoint[1],
+        latestPoint[0],
+        latestPoint[1],
+      )
+      : Number.POSITIVE_INFINITY;
+
+    if (
+      lastMatchedRoute.historyLength > 0
+      && newPointsSinceLastMatch < ROUTE_MATCH_MIN_NEW_POINTS
+      && movedDistanceSinceLastMatch < ROUTE_MATCH_REFRESH_DISTANCE_KM
+    ) {
       return undefined;
     }
 
@@ -396,6 +611,10 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       getTrackedStreetRoute(liveRouteHistory)
         .then((matchedRoute) => {
           if (cancelled) return;
+          lastMatchedRouteRef.current = {
+            historyLength: liveRouteHistory.length,
+            lastPoint: latestPoint,
+          };
           if (matchedRoute?.coordinates?.length > 1) {
             setMatchedLiveRouteHistory(matchedRoute.coordinates);
             return;
@@ -403,15 +622,21 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           setMatchedLiveRouteHistory(liveRouteHistory);
         })
         .catch(() => {
-          if (!cancelled) setMatchedLiveRouteHistory(liveRouteHistory);
+          if (!cancelled) {
+            lastMatchedRouteRef.current = {
+              historyLength: liveRouteHistory.length,
+              lastPoint: latestPoint,
+            };
+            setMatchedLiveRouteHistory(liveRouteHistory);
+          }
         });
-    }, 250);
+    }, 900);
 
     return () => {
       cancelled = true;
       clearTimeout(timerId);
     };
-  }, [liveRouteHistory]);
+  }, [guidedRouteDisplayPath, guidedRouteRunning, liveRouteHistory]);
 
   const statusBadge = useMemo(() => {
     const badges = {
@@ -429,15 +654,18 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const hasPlannedRoute = Array.isArray(routePolyline) && routePolyline.length > 1;
   const hasResolvedStops = Array.isArray(originCoords) && Array.isArray(destinationCoords);
   const showRouteContext = !forceBuenaventuraDemo && (hasResolvedStops || hasPlannedRoute);
+  const canStartGuidedRoute = hasPlannedRoute || Boolean(routeInfo?.origin && routeInfo?.destination);
 
   const displayOriginCoords = showRouteContext ? originCoords : null;
   const displayDestinationCoords = showRouteContext ? destinationCoords : null;
   const displayPlannedRoutePolyline = showRouteContext && Array.isArray(routePolyline) && routePolyline.length > 1
     ? routePolyline
     : null;
-  const displayTraveledRoutePolyline = hasLiveData && matchedLiveRouteHistory.length > 1
-    ? matchedLiveRouteHistory
-    : null;
+  const displayTraveledRoutePolyline = guidedRouteDisplayPath.length > 1
+    ? guidedRouteDisplayPath
+    : (hasLiveData && matchedLiveRouteHistory.length > 1
+      ? matchedLiveRouteHistory
+      : null);
   const displayTrackings = useMemo(
     () => (hasLiveData ? trackings : []),
     [hasLiveData, trackings],
@@ -567,6 +795,127 @@ export default function TrackingPage({ routeId: routeIdProp }) {
 
   const etaLabel = eta === null ? 'Sin ETA' : `${eta} min`;
 
+  const stopGuidedRoute = () => {
+    if (guidedRouteTimerRef.current) {
+      clearTimeout(guidedRouteTimerRef.current);
+      guidedRouteTimerRef.current = null;
+    }
+    guidedRoutePointsRef.current = [];
+    guidedRouteIndexRef.current = 0;
+    setGuidedRouteLoading(false);
+    setGuidedRouteRunning(false);
+  };
+
+  const pushGuidedTrackingPoint = async (point) => {
+    const timestamp = new Date().toISOString();
+    const payload = {
+      route: selectedRouteId,
+      latitude: point[0],
+      longitude: point[1],
+      speed_kmh: GUIDED_ROUTE_SPEED_KMH,
+      timestamp,
+      source: 'tracking-guided-route',
+      status: 'picked',
+    };
+
+    const normalized = normalizeTracking(payload, timestamp);
+    if (normalized) {
+      dispatch({ type: 'MERGE_TRACKINGS', payload: [normalized] });
+      dispatch({
+        type: 'SET_VEHICLE_POSITION',
+        payload: {
+          latitude: normalized.latitude,
+          longitude: normalized.longitude,
+          timestamp: normalized.timestamp,
+        },
+      });
+      dispatch({ type: 'APPEND_ROUTE_POINT', payload: [normalized.latitude, normalized.longitude] });
+    }
+
+    await sendDriverLocation(payload);
+  };
+
+  const runGuidedRouteStep = async () => {
+    const currentStepIndex = guidedRouteIndexRef.current;
+    const point = guidedRoutePointsRef.current[currentStepIndex];
+    if (!point) {
+      stopGuidedRoute();
+      return;
+    }
+
+    try {
+      const fullPath = guidedRouteFullPathRef.current;
+      const sampledPath = guidedRoutePointsRef.current;
+      if (fullPath.length > 1 && sampledPath.length > 0) {
+        const exactIndex = sampledPath.length === 1
+          ? fullPath.length - 1
+          : Math.round((currentStepIndex / (sampledPath.length - 1)) * (fullPath.length - 1));
+        setGuidedRouteDisplayPath(fullPath.slice(0, exactIndex + 1));
+      }
+
+      await pushGuidedTrackingPoint(point);
+      guidedRouteIndexRef.current += 1;
+      if (guidedRouteIndexRef.current >= guidedRoutePointsRef.current.length) {
+        if (guidedRouteFullPathRef.current.length > 1) {
+          setGuidedRouteDisplayPath(guidedRouteFullPathRef.current);
+        }
+        stopGuidedRoute();
+        return;
+      }
+      guidedRouteTimerRef.current = setTimeout(() => {
+        void runGuidedRouteStep();
+      }, GUIDED_ROUTE_STEP_MS);
+    } catch {
+      stopGuidedRoute();
+      setGuidedRouteError('No se pudo iniciar o continuar la ruta guiada.');
+    }
+  };
+
+  const startGuidedRoute = async () => {
+    if (guidedRouteLoading || guidedRouteRunning || !Number.isFinite(selectedRouteId)) return;
+
+    setGuidedRouteError('');
+    setGuidedRouteLoading(true);
+
+    try {
+      let playbackRoute = Array.isArray(routePolyline) && routePolyline.length > 1 ? routePolyline : null;
+      if (!playbackRoute && routeInfo?.origin && routeInfo?.destination) {
+        const [from, to] = await Promise.all([
+          geocodeAddress(routeInfo.origin, { fallbackCoords: userCoords }),
+          geocodeAddress(routeInfo.destination, { fallbackCoords: userCoords }),
+        ]);
+        const streetRoute = from && to ? await getStreetRoute(from, to) : null;
+        playbackRoute = streetRoute?.coordinates || null;
+        if (playbackRoute?.length > 1) {
+          setRoutePolyline(playbackRoute);
+          setOriginCoords(from);
+          setDestinationCoords(to);
+          setForceBuenaventuraDemo(false);
+        }
+      }
+
+      const exactRoute = dedupeConsecutivePoints(playbackRoute);
+      const sampledRoute = sampleGuidedRoute(exactRoute);
+      if (!sampledRoute || sampledRoute.length < 2) {
+        throw new Error('guided-route-unavailable');
+      }
+
+      stopGuidedRoute();
+      guidedRouteFullPathRef.current = exactRoute;
+      guidedRoutePointsRef.current = sampledRoute;
+      guidedRouteIndexRef.current = 0;
+      setGuidedRouteDisplayPath([exactRoute[0]]);
+      setGuidedRouteRunning(true);
+      setGuidedRouteLoading(false);
+      void runGuidedRouteStep();
+    } catch {
+      stopGuidedRoute();
+      setGuidedRouteError('No fue posible preparar la ruta guiada para esta ruta.');
+    } finally {
+      setGuidedRouteLoading(false);
+    }
+  };
+
   return (
     <div className="tracking-layout min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 font-sans">
       <div className="tracking-page-header px-4 md:px-8 pt-4 md:pt-6 pb-0 max-w-[1400px] mx-auto">
@@ -638,6 +987,25 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                 Actualizado: {etaUpdated.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
               </p>
             )}
+            <div className="route-actions">
+              <button
+                type="button"
+                onClick={() => { void startGuidedRoute(); }}
+                disabled={loading || guidedRouteLoading || guidedRouteRunning || !canStartGuidedRoute}
+                className="route-action-button primary"
+              >
+                {guidedRouteLoading ? 'Preparando ruta...' : (guidedRouteRunning ? 'Ruta en curso' : 'Iniciar ruta')}
+              </button>
+              <button
+                type="button"
+                onClick={stopGuidedRoute}
+                disabled={!guidedRouteRunning && !guidedRouteLoading}
+                className="route-action-button secondary"
+              >
+                Detener
+              </button>
+            </div>
+            {guidedRouteError && <p className="panel-error">{guidedRouteError}</p>}
           </section>
 
           <section className="kpi-card">
@@ -649,7 +1017,17 @@ export default function TrackingPage({ routeId: routeIdProp }) {
             {loading ? (
               <p className="panel-muted">Cargando datos...</p>
             ) : displayActiveVehicles.length === 0 ? (
-              <p className="panel-muted">Aun no hay posicion activa para esta ruta.</p>
+              <div className="panel-empty-state">
+                <p className="panel-muted">Aun no hay posicion activa para esta ruta.</p>
+                <button
+                  type="button"
+                  onClick={() => { void startGuidedRoute(); }}
+                  disabled={guidedRouteLoading || guidedRouteRunning || !canStartGuidedRoute}
+                  className="route-action-button primary compact"
+                >
+                  {guidedRouteLoading ? 'Preparando...' : 'Iniciar recorrido'}
+                </button>
+              </div>
             ) : (
               <div className="vehicle-list">
                 {displayActiveVehicles.map((vehicle) => (
@@ -701,6 +1079,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
             destinationName={routeInfo?.destination || 'Seminario San Buenaventura'}
             activeVehicles={displayActiveVehicles}
             vehiclePosition={showEmptyCityCanvas ? null : displayVehiclePosition}
+            userCoords={userCoords}
             mapHeight="640px"
           />
         </main>

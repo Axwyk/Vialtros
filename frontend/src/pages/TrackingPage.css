@@ -82,6 +82,61 @@
   font-size: 12px;
 }
 
+.route-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.route-action-button {
+  border: 0;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+}
+
+.route-action-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.route-action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.route-action-button.primary {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #ffffff;
+  box-shadow: 0 10px 18px rgba(37, 99, 235, 0.22);
+}
+
+.route-action-button.secondary {
+  background: #ffffff;
+  color: #334155;
+  border: 1px solid #dbe4f2;
+}
+
+.route-action-button.compact {
+  margin-top: 10px;
+  width: 100%;
+}
+
+.panel-empty-state {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.panel-error {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #b91c1c;
+}
+
 .route-summary-topbar {
   display: flex;
   align-items: center;
@@ -525,6 +580,10 @@
 @media (max-width: 768px) {
   .tracking-dashboard {
     grid-template-columns: 1fr;
+  }
+
+  .route-actions {
+    flex-direction: column;
   }
 
   .tracking-page-header {

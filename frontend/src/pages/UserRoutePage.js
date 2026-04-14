@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import Sidebar from '../components/dashboard/Sidebar';
 import { icons } from '../components/dashboard/icons';
 import TrackingHero from '../components/tracking/TrackingHero';
@@ -195,6 +196,16 @@ useEffect(() => {
                     <p className="text-sm font-medium text-gray-700">{driver?.license_number || 'No disponible'}</p>
                   </div>
                 </div>
+                {route?.id && (
+                  <div className="mt-4 flex justify-end">
+                    <Link
+                      to={`/tracking/${route.id}`}
+                      className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100"
+                    >
+                      Ver tracking en vivo
+                    </Link>
+                  </div>
+                )}
               </div>
 
               <div className="rounded-xl border border-gray-100 bg-white p-4">
