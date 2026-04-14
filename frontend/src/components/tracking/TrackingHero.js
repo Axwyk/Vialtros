@@ -1,5 +1,5 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import "./TrackingHero.css";
 
 export default function TrackingHero({
@@ -11,6 +11,17 @@ export default function TrackingHero({
   subtitle,
   meta = null,
 }) {
+  const navigate = useNavigate();
+  const handleBack = (e) => {
+    if (e && typeof e.preventDefault === "function") e.preventDefault();
+    try {
+      if (window?.history?.length > 1) navigate(-1);
+      else navigate(backTo);
+    } catch (err) {
+      // fallback navigation
+      navigate(backTo);
+    }
+  };
   return (
     <section className="tracking-hero-shell">
       <div
@@ -25,8 +36,9 @@ export default function TrackingHero({
       <div className="tracking-hero-content">
         <div className="tracking-hero-topbar">
           <div className="flex items-center gap-3 min-w-0">
-            <Link
-              to={backTo}
+            <button
+              type="button"
+              onClick={handleBack}
               className="tracking-hero-back"
               aria-label={backAriaLabel}
             >
@@ -41,7 +53,7 @@ export default function TrackingHero({
                 <line x1="19" y1="12" x2="5" y2="12" />
                 <polyline points="12 19 5 12 12 5" />
               </svg>
-            </Link>
+            </button>
 
             <div className="tracking-hero-status-wrap">
               <span className="tracking-hero-live-dot" aria-hidden="true">
