@@ -4,7 +4,7 @@ import Sidebar from '../components/dashboard/Sidebar';
 import Modal from '../components/Modal';
 import { icons } from '../components/dashboard/icons';
 import { getRoutes, createRoute, updateRoute, deleteRoute, getDrivers, getPassengers } from '../services/admin';
-import { searchBuenaventuraPlaces, geocodeAddress } from '../services/routing';
+import { searchBuenaventuraPlaces, geocodeAddress, snapPointToRoad } from '../services/routing';
 
 const EMPTY_FORM = { name: '', origin: '', destination: '', driver: '', passengers: [], origin_lat: null, origin_lng: null, destination_lat: null, destination_lng: null };
 
@@ -134,7 +134,7 @@ export default function AdminRoutesPage({ role, onLogout }) {
     if (!form.destination.trim()) { setFormError('El destino es obligatorio'); return; }
     setSaving(true); setFormError('');
     try {
-      // Resolve coordinates if not already set (user typed manually without selecting a suggestion)
+      // Always resolve + snap coordinates to road for maximum precision
       let originLat = form.origin_lat;
       let originLng = form.origin_lng;
       let destLat = form.destination_lat;
@@ -147,6 +147,16 @@ export default function AdminRoutesPage({ role, onLogout }) {
       if (destLat == null || destLng == null) {
         const resolved = await geocodeAddress(form.destination.trim()).catch(() => null);
         if (Array.isArray(resolved)) { destLat = resolved[0]; destLng = resolved[1]; }
+      }
+
+      // Snap to nearest road for sub-meter precision
+      if (Number.isFinite(originLat) && Number.isFinite(originLng)) {
+        const snapped = await snapPointToRoad([originLat, originLng]).catch(() => null);
+        if (Array.isArray(snapped)) { originLat = snapped[0]; originLng = snapped[1]; }
+      }
+      if (Number.isFinite(destLat) && Number.isFinite(destLng)) {
+        const snapped = await snapPointToRoad([destLat, destLng]).catch(() => null);
+        if (Array.isArray(snapped)) { destLat = snapped[0]; destLng = snapped[1]; }
       }
 
       const payload = { ...form, driver: form.driver || null, passengers: form.passengers || [], origin_lat: originLat, origin_lng: originLng, destination_lat: destLat, destination_lng: destLng };

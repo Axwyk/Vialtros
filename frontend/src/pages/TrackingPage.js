@@ -374,21 +374,21 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const [adminRouteOverlays, setAdminRouteOverlays] = useState([]);
 
   const resolveRouteInfo = useCallback(async (routeId) => {
-    const adminRoute = await getRoute(routeId).catch(() => null);
-    if (adminRoute) return adminRoute;
-
+    // Resolve by role first to avoid unnecessary 403s on admin-only endpoints
     if (currentRole === 'driver') {
       const assignedRoutes = await getDriverAssignedRoutes().catch(() => []);
-      return (Array.isArray(assignedRoutes) ? assignedRoutes : []).find((route) => Number(route.id) === routeId) || null;
+      const found = (Array.isArray(assignedRoutes) ? assignedRoutes : []).find((route) => Number(route.id) === routeId);
+      if (found) return found;
     }
 
     if (currentRole === 'user') {
       const assignedRouteData = await getUserAssignedRoute().catch(() => null);
       const assignedRoute = assignedRouteData?.route || null;
-      return Number(assignedRoute?.id) === routeId ? assignedRoute : null;
+      if (Number(assignedRoute?.id) === routeId) return assignedRoute;
     }
 
-    return null;
+    // Admin or fallback: direct route fetch
+    return getRoute(routeId).catch(() => null);
   }, [currentRole]);
 
   const trackingsCountRef = useRef(0);
@@ -645,6 +645,82 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     loadData();
     return () => { mounted = false; };
   }, [resolveRouteInfo, selectedRouteId, userCoords]);
+
+  // Periodic route info refresh: detect admin changes to origin/destination
+  const lastRouteVersionRef = useRef(null);
+  useEffect(() => {
+    if (!Number.isFinite(selectedRouteId)) return undefined;
+
+    const ROUTE_REFRESH_INTERVAL_MS = 20000; // 20s
+
+    const checkRouteUpdate = async () => {
+      try {
+        const freshRoute = await resolveRouteInfo(selectedRouteId);
+        if (!freshRoute) return;
+
+        const key = [
+          freshRoute.origin, freshRoute.destination,
+          freshRoute.origin_lat, freshRoute.origin_lng,
+          freshRoute.destination_lat, freshRoute.destination_lng,
+        ].join('|');
+
+        if (lastRouteVersionRef.current && lastRouteVersionRef.current !== key) {
+          // Route changed — update state and re-resolve polyline
+          setRouteInfo(freshRoute);
+
+          const hasOrigin = Number.isFinite(freshRoute.origin_lat) && Number.isFinite(freshRoute.origin_lng);
+          const hasDest = Number.isFinite(freshRoute.destination_lat) && Number.isFinite(freshRoute.destination_lng);
+
+          let from = hasOrigin ? [freshRoute.origin_lat, freshRoute.origin_lng] : null;
+          let to = hasDest ? [freshRoute.destination_lat, freshRoute.destination_lng] : null;
+
+          if (!from || !to) {
+            const [geoFrom, geoTo] = await Promise.all([
+              from ? Promise.resolve(from) : geocodeAddress(freshRoute.origin, { fallbackCoords: userCoords }),
+              to ? Promise.resolve(to) : geocodeAddress(freshRoute.destination, { fallbackCoords: userCoords }),
+            ]);
+            from = from || geoFrom;
+            to = to || geoTo;
+          }
+
+          if (Array.isArray(from) && Array.isArray(to)) {
+            setOriginCoords(from);
+            setDestinationCoords(to);
+            setForceBuenaventuraDemo(false);
+            const streetRoute = await getStreetRoute(from, to);
+            if (streetRoute && !streetRoute.isStraightLine) {
+              setRoutePolyline(streetRoute.coordinates);
+              setEta(Math.ceil(streetRoute.duration / 60));
+              setEtaUpdated(new Date());
+            } else {
+              try {
+                const roadPath = await buildRoadPathBetweenPoints([from, to]);
+                setRoutePolyline(roadPath?.length > 2 ? roadPath : null);
+              } catch {
+                setRoutePolyline(null);
+              }
+            }
+          }
+        }
+
+        lastRouteVersionRef.current = key;
+      } catch {
+        /* ignore transient errors */
+      }
+    };
+
+    // Initialize version key from current routeInfo
+    if (routeInfo) {
+      lastRouteVersionRef.current = [
+        routeInfo.origin, routeInfo.destination,
+        routeInfo.origin_lat, routeInfo.origin_lng,
+        routeInfo.destination_lat, routeInfo.destination_lng,
+      ].join('|');
+    }
+
+    const intervalId = setInterval(checkRouteUpdate, ROUTE_REFRESH_INTERVAL_MS);
+    return () => clearInterval(intervalId);
+  }, [resolveRouteInfo, selectedRouteId, userCoords, routeInfo]);
 
   useEffect(() => {
     if (!Number.isFinite(selectedRouteId)) return undefined;
