@@ -186,8 +186,6 @@ export default function TrackingMap({
     return Math.round(acc * 10) / 10;
   }
 
-  const traveledKm = hasVehicle ? computeTraveledKmFromVehicle(normalizedRoute, vehicleLat, vehicleLng) : 0;
-  const pendingKm = Math.round(Math.max(0, plannedKm - traveledKm) * 10) / 10;
 
   const routeGeoJson = useMemo(
     () => ({
@@ -204,6 +202,9 @@ export default function TrackingMap({
   const vehicleLat = Number(vehiclePosition?.lat ?? vehiclePosition?.latitude);
   const vehicleLng = Number(vehiclePosition?.lng ?? vehiclePosition?.longitude);
   const hasVehicle = Number.isFinite(vehicleLat) && Number.isFinite(vehicleLng);
+
+  const traveledKm = hasVehicle ? computeTraveledKmFromVehicle(normalizedRoute, vehicleLat, vehicleLng) : 0;
+  const pendingKm = Math.round(Math.max(0, plannedKm - traveledKm) * 10) / 10;
 
   useEffect(() => {
     if (!hasVehicle) return;
