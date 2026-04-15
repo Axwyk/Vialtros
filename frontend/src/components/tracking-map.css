@@ -322,5 +322,6 @@
   min-height: 40px;
   background: rgba(255,255,255,0.85); /* semi-transparente para reducir bloque blanco */
   border: 1px solid rgba(255,255,255,0.12);
+  -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
 }
