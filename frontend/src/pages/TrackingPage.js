@@ -27,6 +27,7 @@ import {
   buildRoadPathBetweenPoints,
 } from "../services/routing";
 import TrackingHero from "../components/tracking/TrackingHero";
+import TransportBar, { TransportIcon } from "../components/TransportBar";
 import "./TrackingPage.css";
 
 const LIVE_WINDOW_MINUTES = 20;
@@ -75,96 +76,7 @@ function sampleGuidedRoute(points, maxPoints = GUIDED_ROUTE_MAX_POINTS) {
       sampled.push(point);
     }
   }
-
-        // Derivar velocidad promedio por modo de transporte (km/h)
-        const modeSpeeds = {
-          vehicle: 30,
-          bus: 22,
-          bicycle: 12,
-          other: 15,
-        };
-
-        const fallbackSpeedKmh =
-          toNumber(latest.speed ?? latest.speed_kmh ?? latest.velocity) ||
-          GUIDED_ROUTE_SPEED_KMH;
-
-        if (Array.isArray(routePolyline) && routePolyline.length > 1) {
-          const remainingKm = remainingRouteDistanceKm(routePolyline, latestPoint);
-          if (Number.isFinite(remainingKm)) {
-            const speed = modeSpeeds[transportMode] || fallbackSpeedKmh || 12;
-            const minutes =
-              remainingKm <= 0.03
-                ? 0
-                : Math.max(1, Math.ceil((remainingKm / Math.max(speed, 6)) * 60));
-            setEta(minutes);
-            setEtaUpdated(new Date());
-            lastEtaRequestRef.current = {
-              point: latestPoint,
-              destinationKey: destinationCoords.join(","),
-            };
-            return;
-          }
-        }
-
-        const destinationKey = destinationCoords.join(",");
-        const previousEtaRequest = lastEtaRequestRef.current;
-        if (
-          previousEtaRequest.destinationKey === destinationKey &&
-          Array.isArray(previousEtaRequest.point) &&
-          distanceKm(
-            previousEtaRequest.point[0],
-            previousEtaRequest.point[1],
-            latest.latitude,
-            latest.longitude,
-          ) < ETA_REFRESH_DISTANCE_KM
-        ) {
-          return;
-        }
-
-        // Si el modo es 'vehicle' o 'bus' usamos el servicio remoto (si está disponible),
-        // para bicicleta u 'otro' calculamos estimación local por velocidad promedio.
-        if (transportMode === "vehicle" || transportMode === "bus") {
-          getETAMinutes([latest.latitude, latest.longitude], destinationCoords)
-            .then((minutes) => {
-              if (minutes === null) return;
-              // Si es bus, ajustar ligeramente (buses más lentos en paradas)
-              const adjusted =
-                transportMode === "bus"
-                  ? Math.max(1, Math.ceil(minutes * 1.08))
-                  : Math.max(1, Math.ceil(minutes));
-              lastEtaRequestRef.current = {
-                point: [latest.latitude, latest.longitude],
-                destinationKey,
-              };
-              setEta(adjusted);
-              setEtaUpdated(new Date());
-            })
-            .catch(() => {
-              // fallback local simple: distancia / velocidad
-              const remainingKm = remainingDistanceKm;
-              if (Number.isFinite(remainingKm)) {
-                const speed = modeSpeeds[transportMode] || fallbackSpeedKmh || 12;
-                const minutes = Math.max(
-                  1,
-                  Math.ceil((remainingKm / Math.max(speed, 6)) * 60),
-                );
-                setEta(minutes);
-                setEtaUpdated(new Date());
-              }
-            });
-        } else {
-          // bicycle u other: calcular localmente según distancia restante
-          const remainingKm = remainingDistanceKm;
-          if (Number.isFinite(remainingKm)) {
-            const speed = modeSpeeds[transportMode] || 12;
-            const minutes = Math.max(1, Math.ceil((remainingKm / Math.max(speed, 3)) * 60));
-            setEta(minutes);
-            setEtaUpdated(new Date());
-          }
-        }
-      ]),
-    ),
-  ].join("|");
+  return sampled;
 }
 
 function distanceKm(lat1, lng1, lat2, lng2) {
@@ -349,6 +261,57 @@ function normalizeTracking(raw, fallbackTimestamp) {
 function trackingKey(t) {
   if (t?.id != null) return `id:${t.id}`;
   return `geo:${t?.latitude}:${t?.longitude}:${t?.timestamp}`;
+}
+
+function normalizeIntermediateStops(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((s, idx) => {
+      const lat = toNumber(s?.latitude ?? s?.lat ?? s?.coords?.[0]);
+      const lng = toNumber(s?.longitude ?? s?.lng ?? s?.coords?.[1]);
+      const coords = Number.isFinite(lat) && Number.isFinite(lng) ? [lat, lng] : null;
+      return {
+        id: s?.id ?? `stop-${idx}`,
+        passenger_id: s?.passenger_id ?? null,
+        label: s?.label ?? s?.address ?? `Parada ${idx + 1}`,
+        address: s?.address ?? s?.label ?? null,
+        latitude: coords ? coords[0] : null,
+        longitude: coords ? coords[1] : null,
+        coords,
+      };
+    })
+    .filter(Boolean);
+}
+
+function buildRouteWaypointCoordinates(from, to, intermediateStops) {
+  const waypoints = [];
+  if (Array.isArray(from) && from.length === 2) waypoints.push(from);
+  const stops = normalizeIntermediateStops(intermediateStops || []);
+  stops.forEach((s) => {
+    if (Array.isArray(s.coords) && s.coords.length === 2) waypoints.push(s.coords);
+    else if (Number.isFinite(s.latitude) && Number.isFinite(s.longitude))
+      waypoints.push([s.latitude, s.longitude]);
+  });
+  if (Array.isArray(to) && to.length === 2) waypoints.push(to);
+  return dedupeConsecutivePoints(waypoints);
+}
+
+function buildRouteSignature(route) {
+  if (!route) return "";
+  const origin = Number.isFinite(route.origin_lat) && Number.isFinite(route.origin_lng)
+    ? `${route.origin_lat},${route.origin_lng}`
+    : String(route.origin || "");
+  const destination = Number.isFinite(route.destination_lat) && Number.isFinite(route.destination_lng)
+    ? `${route.destination_lat},${route.destination_lng}`
+    : String(route.destination || "");
+  const stops = (Array.isArray(route.intermediate_stops) ? route.intermediate_stops : [])
+    .map((s) => {
+      const lat = s?.latitude ?? s?.lat ?? (s?.coords ? s.coords[0] : "");
+      const lng = s?.longitude ?? s?.lng ?? (s?.coords ? s.coords[1] : "");
+      return `${lat || ""},${lng || ""},${s?.address || s?.label || ""}`;
+    })
+    .join("|");
+  return `${origin}->${destination}|${stops}`;
 }
 
 function mergeTrackings(prev, incoming) {
@@ -1873,13 +1836,8 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const etaLabel = eta === null ? "Sin ETA" : `${eta} min`;
 
   const transportModeDisplay = useMemo(() => {
-    const map = {
-      vehicle: "Vehículo",
-      bus: "Bus",
-      bicycle: "Bicicleta",
-      other: "Otro",
-    };
-    return map[transportMode] || transportMode;
+    // return the icon element for the current transport mode to avoid overflow
+    return <TransportIcon type={transportMode === "vehicle" ? "car" : transportMode} />;
   }, [transportMode]);
 
   const stopGuidedRoute = () => {
@@ -2243,6 +2201,19 @@ export default function TrackingPage({ routeId: routeIdProp }) {
             </>
           }
         />
+        <div className="tracking-transport-bar mt-3">
+          <TransportBar
+            value={transportMode}
+            onChange={(m) => {
+              try {
+                setTransportMode(m);
+                localStorage.setItem("transportMode", m);
+              } catch (e) {
+                /* ignore */
+              }
+            }}
+          />
+        </div>
         {showRouteFinishedToast && (
           <div
             className="route-finished-toast"
@@ -2472,27 +2443,14 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                   <div className="route-metric-tile">
                     <span className="route-metric-label">ETA</span>
                     <strong className="route-metric-value">{etaLabel}</strong>
-                    <div style={{ marginTop: 8 }}>
-                      <label className="kpi-label" style={{ marginRight: 8 }}>
-                        Modo
-                      </label>
-                      <select
-                        value={transportMode}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setTransportMode(v);
-                          try {
-                            localStorage.setItem("transportMode", v);
-                          } catch (err) {}
-                        }}
-                        className="transport-mode-select"
-                      >
-                        <option value="vehicle">Vehículo</option>
-                        <option value="bus">Bus</option>
-                        <option value="bicycle">Bicicleta</option>
-                        <option value="other">Otro</option>
-                      </select>
-                    </div>
+                    {transportMode !== "vehicle" && (
+                      <div style={{ marginTop: 8 }}>
+                        <label className="kpi-label" style={{ marginRight: 8 }}>
+                          Modo
+                        </label>
+                        <div className="transport-mode-display">{transportModeDisplay}</div>
+                      </div>
+                    )}
                   </div>
                   <div className="route-metric-tile">
                     <span className="route-metric-label">Planificada</span>

@@ -71,3 +71,10 @@ media/
 
 # ── Logs generales ────────────────────────────────────────────
 *.log
+
+# ── Scripts locales Windows (no subir) ─────────────────────────
+# Scripts de arranque y utilidades locales que no deben subirse al repo
+/run_vialtros.bat
+/Start_Server.bat
+/poblar_demo.bat
+/reiniciar_todo.bat
