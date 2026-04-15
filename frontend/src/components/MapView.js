@@ -427,6 +427,7 @@ export default function MapView({
 out center;`;
 
       const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(q)}`;
+      console.debug("MapView fetchPOIs url:", url);
       const res = await fetch(url);
       if (!res.ok) return;
       const data = await res.json();
@@ -436,6 +437,7 @@ out center;`;
         lon: el.lon ?? el.center?.lon,
         tags: el.tags || {},
       }));
+      console.debug("MapView fetchPOIs parsed:", parsed.length, parsed.slice(0, 6));
       setDisplayPois(parsed);
       console.debug("MapView fetched POIs:", parsed.length);
     } catch (err) {
@@ -587,11 +589,17 @@ out center;`;
     const coords = Array.isArray(vehiclePoint) ? vehiclePoint : null;
     const mapZoom = mapRef?.getZoom ? mapRef.getZoom() : 13;
     if (!coords) return undefined;
+    const radius = zoomToRadius(mapZoom);
+    console.debug("MapView POI effect: coords", coords, "zoom", mapZoom, "radius", radius, "currentPois", displayPois.length);
     if (poisTimerRef.current) clearTimeout(poisTimerRef.current);
-    poisTimerRef.current = setTimeout(() => {
-      const radius = zoomToRadius(mapZoom);
+    // If we don't have POIs yet, try an immediate fetch for debugging/first-load
+    if (!Array.isArray(displayPois) || displayPois.length === 0) {
       fetchPOIs(coords[0], coords[1], radius);
-    }, 500);
+    }
+    // Schedule a debounce fetch for subsequent updates
+    poisTimerRef.current = setTimeout(() => {
+      fetchPOIs(coords[0], coords[1], radius);
+    }, 1500);
 
     return () => {
       if (poisTimerRef.current) clearTimeout(poisTimerRef.current);
@@ -963,6 +971,9 @@ out center;`;
             >
               Inyectar POIs de prueba
             </button>
+            <div style={{ position: "absolute", top: 18, left: 160, zIndex: 800, background: "rgba(255,255,255,0.9)", padding: "6px 8px", borderRadius: 8, boxShadow: "0 6px 18px rgba(0,0,0,0.08)", fontSize: 12 }}>
+              POIs: {Array.isArray(displayPois) ? displayPois.length : 0}
+            </div>
             {console.debug ? console.debug("MapView received POIs:", displayPois.length) : null}
             {displayPois.map((p) => {
             const lat = Number(p.lat);
