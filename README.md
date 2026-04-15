@@ -1,11 +1,11 @@
 # Vialtros
 
-Reuniones: Miercoles, Jueves y Domingo - 12pm - 1pm
-https://meet.google.com/buu-yiqp-mmx
+Reuniones: Miercoles, Jueves y Domingo - 12pm - 1pm — [https://meet.google.com/buu-yiqp-mmx](https://meet.google.com/buu-yiqp-mmx)
 
 Plataforma SaaS de gestión de rutas con seguimiento GPS en tiempo real, roles diferenciados y panel administrativo profesional.
 
 **Características principales:**
+
 - ✓ Autenticación JWT con roles (Admin, Driver, User)
 - ✓ Dashboard SaaS con estadísticas y gráficos
 - ✓ WebSocket para tracking en tiempo real
@@ -14,11 +14,13 @@ Plataforma SaaS de gestión de rutas con seguimiento GPS en tiempo real, roles d
 - ✓ Iconografía SVG profesional (sin dependencias externas)
 
 ## Estado actual
+
 Proyecto en desarrollo activo — **V1 con funcionalidades core completadas**. Ver [`estado_proyecto.txt`](estado_proyecto.txt) para detalles de implementado vs pendiente.
 
 ## Stack Tecnológico
+
 | Componente | Tecnología |
-|---|---|
+| --- | --- |
 | **Backend** | Django 4+ · Django REST Framework · Channels · SimpleJWT |
 | **Frontend** | React 19 · Tailwind CSS · React Router v7 · Leaflet |
 | **BD** | SQLite (dev) / PostgreSQL (producción) |
@@ -26,14 +28,16 @@ Proyecto en desarrollo activo — **V1 con funcionalidades core completadas**. V
 | **Autenticación** | JWT con refresh token · Permisos por rol |
 
 ## Roles y Permisos
+
 | Rol | Permisos |
-|---|---|
+| --- | --- |
 | **Admin** | CRUD usuarios/conductores/rutas, acceso panel administrativo |
 | **Driver** | Ve sus rutas asignadas, marca estado de pasajeros |
 | **User** | Visualiza ubicación en tiempo real del vehículo |
 
 ## Estructura del Proyecto
-```
+
+```text
 Vialtros/
 ├── backend/
 │   ├── core/              # Configuración Django (settings, urls, asgi)
@@ -58,11 +62,13 @@ Vialtros/
 ## Instalación y Despliegue
 
 ### Requisitos
+
 - Python 3.10+
 - Node.js 18+
 - PostgreSQL (recomendado para producción)
 
 ### Backend (desarrollo)
+
 ```bash
 cd backend
 python -m venv venv
@@ -76,6 +82,7 @@ python manage.py runserver
 ```
 
 ### Frontend (desarrollo)
+
 ```bash
 cd frontend
 npm install
@@ -83,13 +90,16 @@ npm start                       # http://localhost:3000
 ```
 
 ### Datos de prueba
+
 ```bash
 cd backend
 python manage.py poblar_demo   # Carga usuarios, conductores y rutas de demo
 ```
 
 ## Documentación Completa
+
 Consulta la carpeta [`docs/`](docs/) para:
+
 - [Arquitectura del sistema](docs/arquitectura.md)
 - [Modelos de datos](docs/modelos.md)
 - [Referencia de API](docs/api.md)

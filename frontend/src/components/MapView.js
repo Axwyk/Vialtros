@@ -412,6 +412,8 @@ export default function MapView({
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const isPanningRef = useRef(false);
   const [isPanning, setIsPanning] = useState(false);
+  const containerRef = useRef(null);
+  const [viewportOffsetY, setViewportOffsetY] = useState(0);
   const [displayPoisSource, setDisplayPoisSource] = useState("none");
 
   function zoomToRadius(zoom) {
@@ -693,6 +695,33 @@ out center;`;
     };
   }, [mapRef]);
 
+  // Keep floating overlays clear of any fixed header when the page scrolls.
+  useEffect(() => {
+    const elem = containerRef.current;
+    if (!elem) return undefined;
+
+    function updateOffset() {
+      try {
+        const rect = elem.getBoundingClientRect();
+        const header = document.querySelector('.app-header') || document.querySelector('header');
+        const headerBottom = header ? header.getBoundingClientRect().bottom : 72;
+        const overlap = Math.max(0, headerBottom - rect.top);
+        setViewportOffsetY(overlap);
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    updateOffset();
+    window.addEventListener('scroll', updateOffset, { passive: true });
+    window.addEventListener('resize', updateOffset);
+
+    return () => {
+      window.removeEventListener('scroll', updateOffset);
+      window.removeEventListener('resize', updateOffset);
+    };
+  }, [containerRef.current]);
+
   const primaryVehicle = useMemo(
     () =>
       vehiclePoint
@@ -828,6 +857,7 @@ out center;`;
 
   return (
     <div
+      ref={containerRef}
       style={{ position: "relative", height: mapHeight }}
       className="tracking-map-container"
     >
@@ -1119,7 +1149,7 @@ out center;`;
         className={`floating-eta ${eta === null ? "floating-eta-hidden" : ""}`}
         aria-live="polite"
         style={{
-          transform: panOffset && (panOffset.x || panOffset.y) ? `translate(${panOffset.x}px, ${panOffset.y}px)` : undefined,
+          transform: `translate(${(panOffset && panOffset.x) || 0}px, ${((panOffset && panOffset.y) || 0) + (viewportOffsetY || 0)}px)`,
           transition: isPanning ? "none" : "transform 220ms ease",
         }}
       >
@@ -1135,7 +1165,13 @@ out center;`;
       </div>
 
       {/* Panel de métricas de ruta (planificada/recorrida/pendiente) */}
-      <div className="route-metrics-panel">
+      <div
+        className="route-metrics-panel"
+        style={{
+          transform: `translate(${(panOffset && panOffset.x) || 0}px, ${((panOffset && panOffset.y) || 0) + (viewportOffsetY || 0)}px)`,
+          transition: isPanning ? "none" : "transform 220ms ease",
+        }}
+      >
         <div className="route-metrics-grid">
           <div className="route-metric-tile">
             <span className="route-metric-label">Planif.</span>
