@@ -2453,7 +2453,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                     )}
                   </div>
                   <div className="route-metric-tile">
-                    <span className="route-metric-label">Planificada</span>
+                    <span className="route-metric-label">Planif.</span>
                     <strong className="route-metric-value">
                       {plannedDistanceKm > 0
                         ? `${plannedDistanceKm.toFixed(1)} km`
@@ -2461,7 +2461,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                     </strong>
                   </div>
                   <div className="route-metric-tile">
-                    <span className="route-metric-label">Recorrida</span>
+                    <span className="route-metric-label">Recorr.</span>
                     <strong className="route-metric-value">
                       {traveledDistanceKm > 0
                         ? `${traveledDistanceKm.toFixed(1)} km`
@@ -2469,7 +2469,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                     </strong>
                   </div>
                   <div className="route-metric-tile">
-                    <span className="route-metric-label">Pendiente</span>
+                    <span className="route-metric-label">Pend.</span>
                     <strong className="route-metric-value">
                       {remainingDistanceKm !== null
                         ? `${remainingDistanceKm.toFixed(1)} km`
