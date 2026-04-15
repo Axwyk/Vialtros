@@ -406,6 +406,44 @@ export default function MapView({
     setDisplayPois(samplePois);
     console.debug("MapView injected sample POIs", samplePois);
   }
+  const poisTimerRef = useRef(null);
+  const [mapRef, setMapRef] = useState(null);
+
+  function zoomToRadius(zoom) {
+    const base = 2000; // meters around zoom ~13
+    return Math.max(600, Math.round(base * Math.pow(2, 13 - (zoom || 13)) / 4));
+  }
+
+  async function fetchPOIs(lat, lng, radiusMeters = 2000) {
+    try {
+      const q = `[out:json][timeout:25];(
+  node(around:${radiusMeters},${lat},${lng})[amenity=school];
+  node(around:${radiusMeters},${lat},${lng})[amenity=university];
+  node(around:${radiusMeters},${lat},${lng})[amenity=hospital];
+  node(around:${radiusMeters},${lat},${lng})[amenity=fuel];
+  node(around:${radiusMeters},${lat},${lng})[shop~"mall|supermarket|department_store|mall"];
+  node(around:${radiusMeters},${lat},${lng})[leisure=park];
+);
+out center;`;
+
+      const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(q)}`;
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const data = await res.json();
+      const parsed = (data.elements || []).map((el) => ({
+        id: el.id,
+        lat: el.lat ?? el.center?.lat,
+        lon: el.lon ?? el.center?.lon,
+        tags: el.tags || {},
+      }));
+      setDisplayPois(parsed);
+      console.debug("MapView fetched POIs:", parsed.length);
+    } catch (err) {
+      console.warn("MapView error fetching POIs:", err);
+    }
+  }
+
+  // NOTE: POI fetch effect moved below after `vehiclePoint` declaration
   const startLabelIcon = useMemo(
     () => createRouteLabelIcon(originName || "Origen", "start"),
     [originName],
@@ -543,6 +581,23 @@ export default function MapView({
     () => animatedVehiclePoint || vehiclePoint,
     [animatedVehiclePoint, vehiclePoint],
   );
+
+  // Debounce POI fetch when vehicle or map changes
+  useEffect(() => {
+    const coords = Array.isArray(vehiclePoint) ? vehiclePoint : null;
+    const mapZoom = mapRef?.getZoom ? mapRef.getZoom() : 13;
+    if (!coords) return undefined;
+    if (poisTimerRef.current) clearTimeout(poisTimerRef.current);
+    poisTimerRef.current = setTimeout(() => {
+      const radius = zoomToRadius(mapZoom);
+      fetchPOIs(coords[0], coords[1], radius);
+    }, 500);
+
+    return () => {
+      if (poisTimerRef.current) clearTimeout(poisTimerRef.current);
+    };
+  }, [vehiclePoint, mapRef]);
+
   const primaryVehicle = useMemo(
     () =>
       vehiclePoint
@@ -708,6 +763,7 @@ export default function MapView({
         style={{ height: "100%", width: "100%" }}
         className="vt-map-base"
         attributionControl={false}
+        whenCreated={(m) => setMapRef(m)}
       >
         <TileLayer
           url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
