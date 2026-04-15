@@ -406,10 +406,10 @@
   z-index: 1200;
   background: linear-gradient(180deg, #ffffff, #f8fbff);
   border: 1px solid var(--vt-border);
-  padding: 10px 12px;
-  border-radius: 12px;
-  box-shadow: 0 10px 24px rgba(15,23,42,0.12);
-  min-width: 96px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  box-shadow: 0 6px 12px rgba(15,23,42,0.08);
+  min-width: 72px;
   text-align: center;
   font-weight: 800;
 }
@@ -423,11 +423,38 @@
 @keyframes vt-pulse { 0% { transform: scale(1); } 50% { transform: scale(1.03); } 100% { transform: scale(1); } }
 .floating-eta.pulse { animation: vt-pulse 600ms ease; }
 
-.route-metrics-grid {
+/* Contenedor para mostrar las métricas en la esquina (sobre el mapa) */
+.route-metrics-panel {
+  position: absolute;
+  right: 18px;
+  top: 86px; /* debajo del ETA */
+  z-index: 1200;
+}
+
+/* Forzar 3 columnas para las métricas cuando se muestran junto al ETA */
+.route-metrics-panel .route-metrics-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 10px;
-  margin-top: 14px;
+  grid-template-columns: 1fr; /* columna vertical */
+  gap: 8px;
+  width: 140px;
+}
+
+/* Ajustes visuales para tarjetas verticales */
+.route-metrics-panel .route-metrics-grid {
+  display: grid;
+  grid-template-columns: 1fr; /* columna vertical */
+  gap: 4px;
+  width: 116px;
+}
+
+.route-metrics-panel .route-metric-tile {
+  padding: 4px 6px;
+  text-align: right;
+  padding-right: 8px;
+  border-radius: 6px;
+  min-height: 40px;
+  background: linear-gradient(180deg, #fcfeff, #f8fbff);
+  border: 1px solid #eef6fd;
 }
 .route-metric-tile {
   box-sizing: border-box;

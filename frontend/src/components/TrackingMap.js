@@ -104,6 +104,91 @@ export default function TrackingMap({
     [routeCoordinates],
   );
 
+  // Distancia de ruta (normalizedRoute tiene [lng,lat]) → convertimos a [lat,lng]
+  function lineDistanceKmLngLat(line = []) {
+    if (!Array.isArray(line) || line.length < 2) return 0;
+    const toRad = (v) => (v * Math.PI) / 180;
+    const earthKm = 6371;
+    let total = 0;
+    for (let i = 1; i < line.length; i += 1) {
+      const prev = line[i - 1];
+      const cur = line[i];
+      if (!prev || !cur) continue;
+      const lat1 = Number(prev[1]);
+      const lng1 = Number(prev[0]);
+      const lat2 = Number(cur[1]);
+      const lng2 = Number(cur[0]);
+      if (!Number.isFinite(lat1) || !Number.isFinite(lng1) || !Number.isFinite(lat2) || !Number.isFinite(lng2)) continue;
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lng2 - lng1);
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      total += earthKm * c;
+    }
+    return total;
+  }
+
+  const plannedKm = Math.round((normalizedRoute?.length > 1 ? lineDistanceKmLngLat(normalizedRoute) : 0) * 10) / 10;
+  // Si tenemos posición del vehículo y ruta, estimamos km recorridos proyectando
+  function computeTraveledKmFromVehicle(route = [], lat, lng) {
+    if (!Array.isArray(route) || route.length < 2) return 0;
+    // Convert route to [lat,lng]
+    const toLatLng = (p) => [Number(p[1]), Number(p[0])];
+    const toRad = (v) => (v * Math.PI) / 180;
+    const earthKm = 6371;
+
+    // Haversine distance
+    const dist = (a, b) => {
+      const dLat = toRad(b[0] - a[0]);
+      const dLon = toRad(b[1] - a[1]);
+      const A =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRad(a[0])) * Math.cos(toRad(b[0])) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      return 2 * earthKm * Math.atan2(Math.sqrt(A), Math.sqrt(1 - A));
+    };
+
+    // Find closest projection point along route
+    let best = { index: -1, t: 0, sq: Infinity };
+    for (let i = 0; i < route.length - 1; i += 1) {
+      const a = toLatLng(route[i]);
+      const b = toLatLng(route[i + 1]);
+      const vx = b[0] - a[0];
+      const vy = b[1] - a[1];
+      const wx = lat - a[0];
+      const wy = lng - a[1];
+      const len2 = vx * vx + vy * vy;
+      const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, (wx * vx + wy * vy) / len2));
+      const proj = [a[0] + vx * t, a[1] + vy * t];
+      const dx = lat - proj[0];
+      const dy = lng - proj[1];
+      const sq = dx * dx + dy * dy;
+      if (sq < best.sq) best = { index: i, t, sq };
+    }
+
+    if (best.index < 0) return 0;
+
+    // Sum distances up to projected point
+    let acc = 0;
+    for (let i = 0; i < best.index; i += 1) {
+      const p1 = toLatLng(route[i]);
+      const p2 = toLatLng(route[i + 1]);
+      acc += dist(p1, p2);
+    }
+    // add partial segment
+    const segA = toLatLng(route[best.index]);
+    const segB = toLatLng(route[best.index + 1]);
+    const projPoint = [segA[0] + (segB[0] - segA[0]) * best.t, segA[1] + (segB[1] - segA[1]) * best.t];
+    acc += dist(segA, projPoint);
+    return Math.round(acc * 10) / 10;
+  }
+
+  const traveledKm = hasVehicle ? computeTraveledKmFromVehicle(normalizedRoute, vehicleLat, vehicleLng) : 0;
+  const pendingKm = Math.round(Math.max(0, plannedKm - traveledKm) * 10) / 10;
+
   const routeGeoJson = useMemo(
     () => ({
       type: "Feature",
@@ -342,6 +427,23 @@ out center;`;
           ) : null,
         )}
       </Map>
+      {/* Panel de métricas (Mapbox) */}
+      <div className="route-metrics-panel">
+        <div className="route-metrics-grid">
+          <div className="route-metric-tile">
+            <span className="route-metric-label">Planif.</span>
+            <span className="route-metric-value">{plannedKm} km</span>
+          </div>
+          <div className="route-metric-tile">
+            <span className="route-metric-label">Recorr.</span>
+            <span className="route-metric-value">{traveledKm} km</span>
+          </div>
+          <div className="route-metric-tile">
+            <span className="route-metric-label">Pend.</span>
+            <span className="route-metric-value">{pendingKm} km</span>
+          </div>
+        </div>
+      </div>
       {/* Leyenda en esquina inferior izquierda */}
       <div className="map-legend">
         <div className="legend-title">Leyenda</div>

@@ -579,6 +579,32 @@ export default function MapView({
 
   const hasLiveTrackings = validPoints.length > 0;
 
+  // Calcula distancia total de una línea de coordenadas [lat,lng] en kilómetros
+  function lineDistanceKm(line = []) {
+    if (!Array.isArray(line) || line.length < 2) return 0;
+    const toRad = (v) => (v * Math.PI) / 180;
+    const earthKm = 6371;
+    let total = 0;
+    for (let i = 1; i < line.length; i += 1) {
+      const [lat1, lng1] = line[i - 1];
+      const [lat2, lng2] = line[i];
+      if (!Number.isFinite(lat1) || !Number.isFinite(lng1) || !Number.isFinite(lat2) || !Number.isFinite(lng2)) continue;
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lng2 - lng1);
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      total += earthKm * c;
+    }
+    return total;
+  }
+
+  const plannedKm = Math.round((plannedLine?.length > 1 ? lineDistanceKm(plannedLine) : 0) * 10) / 10;
+  const traveledKm = Math.round((traveledLine?.length > 1 ? lineDistanceKm(traveledLine) : 0) * 10) / 10;
+  const pendingKm = Math.round(Math.max(0, plannedKm - traveledKm) * 10) / 10;
+
   useEffect(() => {
     if (!Array.isArray(vehiclePoint)) return undefined;
 
@@ -948,6 +974,25 @@ export default function MapView({
             Actualizado: {new Date(etaUpdated).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })}
           </div>
         )}
+      </div>
+
+      {/* Panel de métricas de ruta (planificada/recorrida/pendiente) */}
+      <div className="route-metrics-panel">
+        <div className="route-metrics-grid">
+          <div className="route-metric-tile">
+            <span className="route-metric-label">Planif.</span>
+            <span className="route-metric-value">{plannedKm} km</span>
+          </div>
+          <div className="route-metric-tile">
+            <span className="route-metric-label">Recorr.</span>
+            <span className="route-metric-value">{traveledKm} km</span>
+          </div>
+          <div className="route-metric-tile">
+            <span className="route-metric-label">Pend.</span>
+            <span className="route-metric-value">{pendingKm} km</span>
+          </div>
+          {/* 'Modo' removed - metrics simplified to Planif/Recorr/Pend */}
+        </div>
       </div>
 
       {/* Leyenda del mapa */}

@@ -298,3 +298,28 @@
 .poi-debug-btn:hover {
   transform: translateY(-1px);
 }
+
+/* Panel de métricas sobre el mapa (Mapbox) */
+.route-metrics-panel {
+  position: absolute;
+  right: 6px;
+  top: 78px; /* debajo del ETA */
+  z-index: 1200;
+}
+
+.route-metrics-panel .route-metrics-grid {
+  display: grid;
+  grid-template-columns: 1fr; /* columna vertical */
+  gap: 4px;
+  width: 116px;
+}
+
+.route-metrics-panel .route-metric-tile {
+  padding: 4px 6px;
+  text-align: right;
+  padding-right: 8px;
+  border-radius: 6px;
+  min-height: 40px;
+  background: linear-gradient(180deg, #fcfeff, #f8fbff);
+  border: 1px solid #eef6fd;
+}
