@@ -411,6 +411,7 @@ export default function MapView({
   const prevCenterRef = useRef(null);
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const isPanningRef = useRef(false);
+  const [isPanning, setIsPanning] = useState(false);
   const [displayPoisSource, setDisplayPoisSource] = useState("none");
 
   function zoomToRadius(zoom) {
@@ -651,6 +652,7 @@ out center;`;
 
     const onMoveStart = () => {
       isPanningRef.current = true;
+      setIsPanning(true);
       prevCenterRef.current = mapRef.getCenter();
       setPanOffset({ x: 0, y: 0 });
     };
@@ -674,7 +676,8 @@ out center;`;
 
     const onMoveEnd = () => {
       isPanningRef.current = false;
-      // reset transform smoothly
+      // allow smooth transition back to origin
+      setIsPanning(false);
       setPanOffset({ x: 0, y: 0 });
       prevCenterRef.current = null;
     };
@@ -1117,7 +1120,7 @@ out center;`;
         aria-live="polite"
         style={{
           transform: panOffset && (panOffset.x || panOffset.y) ? `translate(${panOffset.x}px, ${panOffset.y}px)` : undefined,
-          transition: isPanningRef.current ? "none" : "transform 220ms ease",
+          transition: isPanning ? "none" : "transform 220ms ease",
         }}
       >
         <div className="floating-eta-main">
