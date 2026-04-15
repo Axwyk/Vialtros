@@ -398,6 +398,31 @@
   gap: 2px;
 }
 
+/* Panel flotante ETA sobre el mapa */
+.floating-eta {
+  position: absolute;
+  right: 18px;
+  top: 18px;
+  z-index: 1200;
+  background: linear-gradient(180deg, #ffffff, #f8fbff);
+  border: 1px solid var(--vt-border);
+  padding: 10px 12px;
+  border-radius: 12px;
+  box-shadow: 0 10px 24px rgba(15,23,42,0.12);
+  min-width: 96px;
+  text-align: center;
+  font-weight: 800;
+}
+.floating-eta-hidden { display: none !important; }
+.floating-eta-main { display: flex; align-items: baseline; justify-content: center; gap: 8px; }
+.floating-eta-label { font-size: 11px; color: var(--vt-muted); text-transform: uppercase; }
+.floating-eta-value { font-size: 18px; color: var(--vt-primary-dark); }
+.floating-eta-updated { margin-top: 6px; font-size: 11px; color: #6b7280; font-weight: 600; }
+
+/* Sutil pulso al actualizar (se puede activar si se añade clase) */
+@keyframes vt-pulse { 0% { transform: scale(1); } 50% { transform: scale(1.03); } 100% { transform: scale(1); } }
+.floating-eta.pulse { animation: vt-pulse 600ms ease; }
+
 .route-metrics-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));

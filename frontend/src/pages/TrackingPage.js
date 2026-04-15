@@ -2733,6 +2733,8 @@ export default function TrackingPage({ routeId: routeIdProp }) {
             focusAllVehicles={isAdminView}
             routeOverlays={isAdminView ? adminRouteOverlays : []}
             highlightedRouteIds={isAdminView ? highlightedAdminRouteIds : []}
+            eta={eta}
+            etaUpdated={etaUpdated}
           />
         </main>
       </div>

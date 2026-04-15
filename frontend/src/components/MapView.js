@@ -336,6 +336,9 @@ function AutoFollowVehicle({ vehiclePoint, enabled = true }) {
 export default function MapView({
   trackings = [],
   routePolyline = null,
+  // ETA props: minutos estimados y timestamp de actualización
+  eta = null,
+  etaUpdated = null,
   plannedRoutePolyline = null,
   remainingRoutePolyline = null,
   traveledRoutePolyline = null,
@@ -930,6 +933,22 @@ export default function MapView({
           enabled={!focusAllVehicles && hasLiveTrackings}
         />
       </MapContainer>
+
+      {/* Panel flotante ETA: se actualiza dinámicamente desde TrackingPage */}
+      <div
+        className={`floating-eta ${eta === null ? "floating-eta-hidden" : ""}`}
+        aria-live="polite"
+      >
+        <div className="floating-eta-main">
+          <div className="floating-eta-label">ETA</div>
+          <div className="floating-eta-value">{eta === null ? "Sin datos" : `${eta} min`}</div>
+        </div>
+        {etaUpdated && (
+          <div className="floating-eta-updated">
+            Actualizado: {new Date(etaUpdated).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })}
+          </div>
+        )}
+      </div>
 
       {/* Leyenda del mapa */}
       <div className="map-legend">
