@@ -402,7 +402,8 @@
 .floating-eta {
   position: absolute;
   right: 18px;
-  top: 18px;
+  /* Mantener el ETA por debajo de la barra superior (header) */
+  top: 72px;
   z-index: 1200;
   background: linear-gradient(180deg, #ffffff, #f8fbff);
   border: 1px solid var(--vt-border);
@@ -427,7 +428,8 @@
 .route-metrics-panel {
   position: absolute;
   right: 18px;
-  top: 86px; /* debajo del ETA */
+  /* Ajustado para situarse debajo del ETA */
+  top: calc(72px + 12px);
   z-index: 1200;
 }
 
