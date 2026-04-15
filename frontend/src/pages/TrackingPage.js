@@ -462,6 +462,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const [routeInfo, setRouteInfo] = useState(null);
   const [originCoords, setOriginCoords] = useState(null);
   const [destinationCoords, setDestinationCoords] = useState(null);
+  const [detectedAddress, setDetectedAddress] = useState("Detectando ubicación...");
   const [routePolyline, setRoutePolyline] = useState(null);
   const [routeGeometryMode, setRouteGeometryMode] = useState("pending");
   const [matchedLiveRouteHistory, setMatchedLiveRouteHistory] = useState([]);
@@ -539,6 +540,49 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     setGuidedRouteRunning(false);
     setGuidedRouteError("");
   }, [selectedRouteId]);
+  useEffect(() => {
+  if (!navigator.geolocation) {
+    setDetectedAddress("Geolocalización no soportada");
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    async (position) => {
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+
+      try {
+        const accessToken = process.env.REACT_APP_MAPBOX_TOKEN;
+        if (!accessToken) {
+          setDetectedAddress("Falta token de Mapbox");
+          return;
+        }
+
+        const response = await fetch(
+          `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${accessToken}`
+        );
+
+        const data = await response.json();
+
+        if (Array.isArray(data?.features) && data.features.length > 0) {
+          setDetectedAddress(data.features[0].place_name);
+        } else {
+          setDetectedAddress("No se pudo detectar la dirección");
+        }
+      } catch {
+        setDetectedAddress("Error obteniendo dirección");
+      }
+    },
+    () => {
+      setDetectedAddress("Permiso de ubicación denegado");
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 60000,
+    }
+  );
+}, []);
 
   useEffect(
     () => () => {
@@ -2704,39 +2748,58 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           )}
         </aside>
 
-        <main
-          className={`map-container-wrapper h-[640px] ${showLiveTransition ? "map-live-transition" : ""}`}
-        >
-          {showLiveToast && (
-            <div className="live-toast" role="status" aria-live="polite">
-              <span className="live-toast-dot" /> Conectado en vivo
-            </div>
-          )}
-          <MapView
-            trackings={displayTrackings}
-            plannedRoutePolyline={displayPlannedRoutePolyline}
-            remainingRoutePolyline={routeProgressSegments.remaining}
-            traveledRoutePolyline={displayTraveledRoutePolyline}
-            originCoords={displayOriginCoords}
-            destinationCoords={displayDestinationCoords}
-            originName={routeInfo?.origin || "Centro"}
-            destinationName={
-              routeInfo?.destination || "Seminario San Buenaventura"
-            }
-            intermediateStops={displayIntermediateStops}
-            activeVehicles={displayActiveVehicles}
-            vehiclePosition={
-              showEmptyCityCanvas ? null : displayVehiclePosition
-            }
-            userCoords={userCoords}
-            mapHeight="640px"
-            focusAllVehicles={isAdminView}
-            routeOverlays={isAdminView ? adminRouteOverlays : []}
-            highlightedRouteIds={isAdminView ? highlightedAdminRouteIds : []}
-            eta={eta}
-            etaUpdated={etaUpdated}
-          />
-        </main>
+        <main className={`map-container-wrapper h-[640px] ${showLiveTransition ? "map-live-transition" : ""}`}>
+  {showLiveToast && (
+    <div className="live-toast" role="status" aria-live="polite">
+      <span className="live-toast-dot" /> Conectado en vivo
+    </div>
+  )}
+
+  <MapView
+    trackings={displayTrackings}
+    plannedRoutePolyline={displayPlannedRoutePolyline}
+    remainingRoutePolyline={routeProgressSegments.remaining}
+    traveledRoutePolyline={displayTraveledRoutePolyline}
+    originCoords={displayOriginCoords}
+    destinationCoords={displayDestinationCoords}
+    originName={routeInfo?.origin || "Centro"}
+    destinationName={routeInfo?.destination || "Seminario San Buenaventura"}
+    intermediateStops={displayIntermediateStops}
+    activeVehicles={displayActiveVehicles}
+    vehiclePosition={showEmptyCityCanvas ? null : displayVehiclePosition}
+    userCoords={userCoords}
+    mapHeight="640px"
+    focusAllVehicles={isAdminView}
+    routeOverlays={isAdminView ? adminRouteOverlays : []}
+    highlightedRouteIds={isAdminView ? highlightedAdminRouteIds : []}
+    eta={eta}
+    etaUpdated={etaUpdated}
+  />
+</main>
+
+
+<div className="mt-4 rounded-3xl bg-white border border-blue-100 shadow-xl p-4">
+  <div className="mb-3 flex items-center gap-3">
+    <div className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
+      📍
+    </div>
+    <div>
+      <p className="text-sm font-semibold text-slate-900">Confirma tu ubicación</p>
+      <p className="text-xs text-slate-400">Revisa la dirección detectada antes de continuar</p>
+    </div>
+  </div>
+
+  <div className="rounded-2xl bg-blue-50 border border-blue-100 px-3 py-3 mb-4">
+    <p className="text-sm text-slate-700">{detectedAddress}</p>
+  </div>
+
+  <button
+    type="button"
+    className="w-full rounded-2xl bg-blue-600 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+  >
+    Confirmar ubicación
+  </button>
+</div>
       </div>
     </div>
   );
