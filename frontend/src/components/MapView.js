@@ -971,7 +971,7 @@ out center;`;
             >
               Inyectar POIs de prueba
             </button>
-            <div style={{ position: "absolute", top: 18, left: 160, zIndex: 800, background: "rgba(255,255,255,0.9)", padding: "6px 8px", borderRadius: 8, boxShadow: "0 6px 18px rgba(0,0,0,0.08)", fontSize: 12 }}>
+            <div style={{ position: "absolute", top: 18, left: 160, zIndex: 700, background: "rgba(255,255,255,0.65)", padding: "4px 6px", borderRadius: 6, fontSize: 11, color: "#0a2b3d", boxShadow: "none", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)" }}>
               POIs: {Array.isArray(displayPois) ? displayPois.length : 0}
             </div>
             {console.debug ? console.debug("MapView received POIs:", displayPois.length) : null}
