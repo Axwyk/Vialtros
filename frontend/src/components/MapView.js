@@ -408,6 +408,9 @@ export default function MapView({
   }
   const poisTimerRef = useRef(null);
   const [mapRef, setMapRef] = useState(null);
+  const prevCenterRef = useRef(null);
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const isPanningRef = useRef(false);
   const [displayPoisSource, setDisplayPoisSource] = useState("none");
 
   function zoomToRadius(zoom) {
@@ -641,6 +644,51 @@ out center;`;
       if (poisTimerRef.current) clearTimeout(poisTimerRef.current);
     };
   }, [vehiclePoint, mapRef]);
+
+  // Make floating overlays follow the map while the user is panning/dragging.
+  useEffect(() => {
+    if (!mapRef || typeof mapRef.on !== "function") return undefined;
+
+    const onMoveStart = () => {
+      isPanningRef.current = true;
+      prevCenterRef.current = mapRef.getCenter();
+      setPanOffset({ x: 0, y: 0 });
+    };
+
+    const onMove = () => {
+      if (!isPanningRef.current || !prevCenterRef.current) return;
+      try {
+        const prev = prevCenterRef.current;
+        const curr = mapRef.getCenter();
+        const prevPt = mapRef.latLngToContainerPoint(prev);
+        const currPt = mapRef.latLngToContainerPoint(curr);
+        const dx = currPt.x - prevPt.x;
+        const dy = currPt.y - prevPt.y;
+        // Apply small damping to avoid huge jumps
+        setPanOffset({ x: dx, y: dy });
+        prevCenterRef.current = curr;
+      } catch (e) {
+        // ignore
+      }
+    };
+
+    const onMoveEnd = () => {
+      isPanningRef.current = false;
+      // reset transform smoothly
+      setPanOffset({ x: 0, y: 0 });
+      prevCenterRef.current = null;
+    };
+
+    mapRef.on("movestart", onMoveStart);
+    mapRef.on("move", onMove);
+    mapRef.on("moveend", onMoveEnd);
+
+    return () => {
+      mapRef.off("movestart", onMoveStart);
+      mapRef.off("move", onMove);
+      mapRef.off("moveend", onMoveEnd);
+    };
+  }, [mapRef]);
 
   const primaryVehicle = useMemo(
     () =>
@@ -1067,6 +1115,10 @@ out center;`;
       <div
         className={`floating-eta ${eta === null ? "floating-eta-hidden" : ""}`}
         aria-live="polite"
+        style={{
+          transform: panOffset && (panOffset.x || panOffset.y) ? `translate(${panOffset.x}px, ${panOffset.y}px)` : undefined,
+          transition: isPanningRef.current ? "none" : "transform 220ms ease",
+        }}
       >
         <div className="floating-eta-main">
           <div className="floating-eta-label">ETA</div>
