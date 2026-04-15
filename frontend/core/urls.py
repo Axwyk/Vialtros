@@ -16,6 +16,7 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
+from .views import completed_trips_history
 
 urlpatterns = [
     path('admin/', admin.site.urls),
