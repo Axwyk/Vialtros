@@ -453,8 +453,9 @@
   padding-right: 8px;
   border-radius: 6px;
   min-height: 40px;
-  background: linear-gradient(180deg, #fcfeff, #f8fbff);
-  border: 1px solid #eef6fd;
+  background: rgba(255,255,255,0.85); /* semi-transparente */
+  border: 1px solid rgba(255,255,255,0.12);
+  backdrop-filter: blur(4px);
 }
 .route-metric-tile {
   box-sizing: border-box;
