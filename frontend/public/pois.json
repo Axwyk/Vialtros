@@ -1,0 +1,5 @@
+[
+  { "id": "p1", "lat": 3.8925, "lon": -77.0280, "tags": { "name": "Universidad Ejemplo", "amenity": "university" } },
+  { "id": "p2", "lat": 3.8918, "lon": -77.0275, "tags": { "name": "Hospital Ejemplo", "amenity": "hospital" } },
+  { "id": "p3", "lat": 3.8920, "lon": -77.0290, "tags": { "name": "Parque Ejemplo", "leisure": "park" } }
+]

@@ -408,6 +408,7 @@ export default function MapView({
   }
   const poisTimerRef = useRef(null);
   const [mapRef, setMapRef] = useState(null);
+  const [displayPoisSource, setDisplayPoisSource] = useState("none");
 
   function zoomToRadius(zoom) {
     const base = 2000; // meters around zoom ~13
@@ -439,9 +440,44 @@ out center;`;
       }));
       console.debug("MapView fetchPOIs parsed:", parsed.length, parsed.slice(0, 6));
       setDisplayPois(parsed);
+      setDisplayPoisSource("overpass");
       console.debug("MapView fetched POIs:", parsed.length);
+      if (!parsed.length) {
+        console.debug("MapView: Overpass returned 0 elements, attempting local fallback");
+        await loadLocalPois();
+      }
     } catch (err) {
       console.warn("MapView error fetching POIs:", err);
+    }
+  }
+
+  async function loadLocalPois() {
+    try {
+      const res = await fetch("/pois.json");
+      if (!res.ok) {
+        console.debug("MapView local pois not found (status)", res.status);
+        setDisplayPoisSource("none");
+        return;
+      }
+      const data = await res.json();
+      let parsed = [];
+      if (Array.isArray(data)) {
+        parsed = data.map((el, i) => ({ id: el.id ?? `local-${i}`, lat: el.lat, lon: el.lon, tags: el.tags || {} }));
+      } else if (data.type === "FeatureCollection" && Array.isArray(data.features)) {
+        parsed = data.features
+          .map((f, i) => {
+            const coords = f.geometry?.coordinates;
+            if (!coords || coords.length < 2) return null;
+            return { id: f.id ?? `local-${i}`, lat: coords[1], lon: coords[0], tags: f.properties || {} };
+          })
+          .filter(Boolean);
+      }
+      setDisplayPois(parsed);
+      setDisplayPoisSource(parsed.length ? "local" : "none");
+      console.debug("MapView loaded local POIs:", parsed.length);
+    } catch (err) {
+      console.debug("MapView error loading local pois:", err);
+      setDisplayPoisSource("none");
     }
   }
 
@@ -972,7 +1008,7 @@ out center;`;
               Inyectar POIs de prueba
             </button>
             <div style={{ position: "absolute", top: 18, left: 160, zIndex: 700, background: "rgba(255,255,255,0.65)", padding: "4px 6px", borderRadius: 6, fontSize: 11, color: "#0a2b3d", boxShadow: "none", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)" }}>
-              POIs: {Array.isArray(displayPois) ? displayPois.length : 0}
+              POIs: {Array.isArray(displayPois) ? displayPois.length : 0} {displayPoisSource ? `(${displayPoisSource})` : ""}
             </div>
             {console.debug ? console.debug("MapView received POIs:", displayPois.length) : null}
             {displayPois.map((p) => {
