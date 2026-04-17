@@ -28,6 +28,9 @@ run_vialtros.bat
 
 Esto abre el backend en `http://localhost:8000` y el frontend en `http://localhost:3000`.
 
+### Repositorio Git
+- https://github.com/Axwyk/Vialtros
+
 ### Credenciales de acceso
 
 - Usuario: `admin`

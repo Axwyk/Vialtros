@@ -17,7 +17,7 @@
 ### 1. Clonar el repositorio
 
 ```bash
-git clone https://github.com/tu-usuario/vialtros.git
+git clone https://github.com/Axwyk/Vialtros.git
 cd Vialtros
 ```
 

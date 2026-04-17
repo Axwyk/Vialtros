@@ -1,6 +1,7 @@
 ﻿====================================================
   VIALTROS -- ESTADO DEL PROYECTO
-  Última actualización: 12 de abril de 2026
+  Última actualización: 16 de abril de 2026
+  Repositorio configurado y sincronizado con GitHub: https://github.com/Axwyk/Vialtros
 ====================================================
 
 
