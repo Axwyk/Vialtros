@@ -15,13 +15,16 @@ Plataforma SaaS de gestión de rutas con seguimiento GPS en tiempo real.
 ## Inicio rápido
 
 ```bash
-# Backend
-cd backend && pip install -r requirements.txt
-python manage.py migrate && python manage.py runserver
-
-# Frontend (en otra terminal)
-cd frontend && npm install && npm start
+# En Windows, desde la raíz del proyecto
+run_vialtros.bat
 ```
+
+Esto inicia el backend en `http://localhost:8000` y el frontend en `http://localhost:3000`.
+
+### Credenciales de acceso
+
+- Usuario: `admin`
+- Contraseña: `admin123`
 
 Ver [despliegue.md](despliegue.md) para la configuración completa.
 

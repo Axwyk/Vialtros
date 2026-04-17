@@ -18,6 +18,21 @@ Plataforma SaaS de gestión de rutas con seguimiento GPS en tiempo real, roles d
 
 Proyecto en desarrollo activo — **V1 con funcionalidades core completadas**. Ver [`estado_proyecto.txt`](estado_proyecto.txt) para detalles de implementado vs pendiente.
 
+## Inicio rápido
+
+En Windows, usa el script único de arranque:
+
+```bat
+run_vialtros.bat
+```
+
+Esto abre el backend en `http://localhost:8000` y el frontend en `http://localhost:3000`.
+
+### Credenciales de acceso
+
+- Usuario: `admin`
+- Contraseña: `admin123`
+
 ## Stack Tecnológico
 
 | Componente | Tecnología |
@@ -92,10 +107,7 @@ npm start                       # http://localhost:3000
 
 ### Datos de prueba
 
-```bash
-cd backend
-python manage.py poblar_demo   # Carga usuarios, conductores y rutas de demo
-```
+El script `poblar_demo` ya no está incluido en el proyecto. Usa el panel de administración Django o API para crear datos de prueba manualmente.
 
 ## Documentación Completa
 

@@ -1,0 +1,131 @@
+USO BÁSICO DE GIT
+
+1. ¿Qué es Git?
+- Git es una herramienta que guarda el historial de los cambios en tu código.
+- Se usa para trabajar en equipo, compartir código y volver a versiones anteriores.
+- El repositorio remoto es el lugar donde se guarda el código online (por ejemplo GitHub).
+
+2. ¿Cómo bajar el repositorio?
+- Abre una terminal en la carpeta donde quieras guardar el proyecto.
+- Ejecuta:
+  git clone <URL-del-repositorio>
+- Ejemplo:
+  git clone https://github.com/usuario/nombre-del-repo.git
+- Esto crea una carpeta con todo el código del proyecto.
+
+3. ¿Cómo entrar al proyecto?
+- En la terminal, ve a la carpeta creada:
+  cd nombre-del-repo
+
+4. ¿Cómo saber en qué rama estoy?
+- Usa:
+  git status
+- Verás la rama activa y si hay archivos sin guardar.
+
+5. Buenas prácticas antes de empezar a trabajar
+- Siempre trae los cambios nuevos del repositorio antes de empezar:
+  git pull origin main
+- Si el proyecto usa otra rama principal, reemplaza `main` por su nombre.
+- Crea una rama nueva para tu tarea o corrección, no trabajes directamente en `main`:
+  git checkout -b mi-rama-de-cambio
+
+6. ¿Cómo trabajar en tu rama?
+- Haz tus cambios en el código.
+- Revisa los archivos cambiados:
+  git status
+- Añade los archivos que quieres guardar:
+  git add archivo1 archivo2
+  o para todo:
+  git add .
+- Haz un commit con un mensaje claro:
+  git commit -m "Descripción corta y clara del cambio"
+
+7. ¿Cómo subir tus cambios al repositorio?
+- Empuja tu rama al repositorio remoto:
+  git push origin mi-rama-de-cambio
+- Si es la primera vez que creas esta rama, Git la creará en el servidor.
+
+8. ¿Qué hacer si otros colaboradores también cambian código?
+- Trae siempre los cambios antes de empezar:
+  git pull origin main
+- Si ya trabajaste y antes de subir tus cambios, actualiza tu rama:
+  git checkout main
+  git pull origin main
+  git checkout mi-rama-de-cambio
+  git merge main
+- Si hay conflictos, Git te pedirá que los resuelvas en los archivos afectados.
+- Después de resolverlos, marca el archivo como resuelto:
+  git add archivo-resuelto
+  git commit
+
+9. Buenas prácticas al colaborar
+- No trabajes directamente en `main` o `master`.
+- Crea una rama para cada tarea o problema.
+- Usa mensajes de commit claros como:
+  "Corrige validación de login" o "Agrega endpoint de rutas".
+- Haz `git pull` con frecuencia para mantener tu copia al día.
+- Si tu rama está atrasada respecto a `main`, actualízala antes de subirla.
+- Revisa tu código antes de enviar el push.
+
+10. Si quieres ver el histórico de commits
+- Usa:
+  git log --oneline
+- Esto muestra las versiones que se han guardado.
+
+11. Cómo traer solo los cambios del servidor sin mezclar aún
+- Usa:
+  git fetch origin
+- Luego puedes ver las ramas remotas o comparar.
+
+12. Cómo cambiar de rama
+- Lista las ramas:
+  git branch
+- Cambia de rama:
+  git checkout nombre-de-rama
+
+Comandos de Ramas: Operaciones Técnicas
+1. Crear y saltar a una rama nueva
+   git checkout -b <nombre-de-la-rama>
+
+   Qué hace exactamente: Crea un nuevo puntero en `.git` hacia el commit actual y mueve `HEAD` a esa rama.
+
+   Resultado: Tus próximos cambios se guardan en la rama nueva, mientras la rama anterior queda igual.
+
+2. Listar ramas
+   git branch
+
+   Qué hace exactamente: Lee las referencias locales en `.git/refs/heads` y muestra los nombres de las ramas.
+
+   Resultado: Verás la lista de ramas locales; la que tiene `*` es la rama activa.
+
+3. Cambiar de rama (existente)
+   git checkout <nombre-de-la-rama>
+
+   Qué hace exactamente: Mueve `HEAD` a la rama indicada y actualiza los archivos de tu carpeta de trabajo para que coincidan con esa rama.
+
+   Resultado: Tu proyecto cambia de estado y ahora refleja el código de la rama seleccionada.
+
+4. Fusionar ramas
+   git merge <nombre-de-la-rama>
+
+   Qué hace exactamente: Combina el historial y el contenido de la rama indicada con tu rama actual.
+
+   - Si no hay conflictos, crea un commit de merge con dos padres.
+   - Si hay cambios en las mismas líneas, Git te pide resolver conflictos manualmente.
+
+   Resultado: El código de la rama indicada se incorpora a tu rama activa.
+
+13. Resumen simple
+- `git clone`: baja el repositorio.
+- `git checkout -b rama`: crea y cambia a una rama nueva.
+- `git add .`: prepara archivos para guardar.
+- `git commit -m "mensaje"`: guarda tu cambio local.
+- `git push origin rama`: sube tu cambio al servidor.
+- `git pull origin main`: trae los últimos cambios de la rama principal.
+
+14. Recomendación final
+- Comunica lo que vas a hacer con tu equipo.
+- Evita hacer muchos cambios grandes en una sola rama.
+- Manten tu rama pequeña y fácil de revisar.
+- Usa Git como una forma de trabajar ordenada y colaborativa.
+

@@ -102,7 +102,6 @@ npm start
 
 | Script | Descripción |
 | --- | --- |
-| `poblar_demo.bat` | Aplica migraciones y carga datos de prueba |
 | `reiniciar_todo.bat` | Lanza backend (Daphne) y frontend (React) en terminales separadas |
 
 ---
@@ -253,11 +252,7 @@ Accesible en `/admin/` con las credenciales del superusuario.
 
 ## Datos de Prueba
 
-Ejecutar `poblar_demo.bat` (Windows) o el script equivalente para cargar:
-
-- Usuarios de ejemplo con cada rol
-- Conductores y pasajeros vinculados
-- Rutas de prueba con conductor asignado
+La carga de datos de prueba ya no está automatizada con `poblar_demo`. Usa el panel de administración Django o crea registros a través de la API.
 
 ---
 

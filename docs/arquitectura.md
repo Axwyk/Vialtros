@@ -101,7 +101,7 @@ Vialtros/
 │
 ├── estado_proyecto.txt
 ├── README.md
-├── poblar_demo.bat
+├── run_vialtros.bat
 └── reiniciar_todo.bat
 ```
 
