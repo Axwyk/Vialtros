@@ -646,7 +646,7 @@ out center;`;
     return () => {
       if (poisTimerRef.current) clearTimeout(poisTimerRef.current);
     };
-  }, [vehiclePoint, mapRef]);
+  }, [vehiclePoint, mapRef, displayPois, fetchPOIs]);
 
   // Make floating overlays follow the map while the user is panning/dragging.
   useEffect(() => {
@@ -720,7 +720,8 @@ out center;`;
       window.removeEventListener('scroll', updateOffset);
       window.removeEventListener('resize', updateOffset);
     };
-  }, [containerRef.current]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [containerRef]);
 
   const primaryVehicle = useMemo(
     () =>
