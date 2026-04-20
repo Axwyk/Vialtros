@@ -14,10 +14,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Install
-        run: npm install
+        run: npm ci
         working-directory: frontend
 
       - name: Build
