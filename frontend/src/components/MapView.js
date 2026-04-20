@@ -421,7 +421,7 @@ export default function MapView({
     return Math.max(600, Math.round(base * Math.pow(2, 13 - (zoom || 13)) / 4));
   }
 
-  async function fetchPOIs(lat, lng, radiusMeters = 2000) {
+  const fetchPOIs = React.useCallback(async (lat, lng, radiusMeters = 2000) => {
     try {
       const q = `[out:json][timeout:25];(
   node(around:${radiusMeters},${lat},${lng})[amenity=school];
@@ -455,7 +455,7 @@ out center;`;
     } catch (err) {
       console.warn("MapView error fetching POIs:", err);
     }
-  }
+  }, [loadLocalPois]);
 
   async function loadLocalPois() {
     try {
