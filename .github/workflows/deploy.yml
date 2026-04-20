@@ -2,7 +2,7 @@ name: Deploy Pages
 
 on:
   push:
-    branches: [main]
+    branches: [master]
 
 permissions:
   contents: read
@@ -18,14 +18,16 @@ jobs:
 
       - name: Install
         run: npm install
+        working-directory: frontend
 
       - name: Build
         run: npm run build
+        working-directory: frontend
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v2
         with:
-          path: ./dist  # o ./build según tu caso
+          path: frontend/dist   # 👈 o build si es CRA
 
   deploy:
     needs: build
