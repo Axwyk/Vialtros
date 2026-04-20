@@ -2,6 +2,7 @@
   "name": "frontend",
   "version": "0.1.0",
   "private": true,
+  "homepage": "https://axwyk.github.io/Vialtros",
   "proxy": "http://localhost:8000",
   "dependencies": {
     "@reduxjs/toolkit": "^2.11.2",
