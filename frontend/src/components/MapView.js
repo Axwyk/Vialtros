@@ -457,7 +457,7 @@ out center;`;
     }
   }, [loadLocalPois]);
 
-  async function loadLocalPois() {
+  const loadLocalPois = React.useCallback(async () => {
     try {
       const res = await fetch("/pois.json");
       if (!res.ok) {
@@ -485,7 +485,7 @@ out center;`;
       console.debug("MapView error loading local pois:", err);
       setDisplayPoisSource("none");
     }
-  }
+  }, []);
 
   // NOTE: POI fetch effect moved below after `vehiclePoint` declaration
   const startLabelIcon = useMemo(
