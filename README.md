@@ -3,6 +3,8 @@
 Reuniones: Miercoles, Jueves y Domingo - 12:00 pm 
 link: https://meet.google.com/yfp-zmkq-buk
 
+Trello: https://trello.com/b/Uu3eBPav/vialtros
+
 Plataforma SaaS de gestión de rutas con seguimiento GPS en tiempo real, roles diferenciados y panel administrativo profesional.
 
 **Características principales:**
