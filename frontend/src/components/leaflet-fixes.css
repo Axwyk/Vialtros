@@ -1,6 +1,5 @@
-@import url("https://unpkg.com/leaflet@1.9.4/dist/leaflet.css");
-
-.leaflet-container {
+/* Google Maps container */
+.tracking-map-container {
   width: 100%;
   height: 100%;
   z-index: 1;
@@ -11,34 +10,6 @@
     #e2efff 42%,
     #dbe9fb 100%
   );
-}
-
-/* Filtro SVG de colorización — referencia al <filter id="vt-map-colorize"> en MapView.js
-   Agua → azul medio  |  Bloques → teal/seafoam  |  Calles → blanco frío */
-.vt-map-base .leaflet-tile-pane {
-  filter: url(#vt-map-colorize);
-}
-
-.leaflet-control-attribution {
-  font-size: 10px;
-  background-color: rgba(255, 255, 255, 0.85) !important;
-  border-radius: 8px;
-  padding: 8px 12px !important;
-}
-
-.leaflet-pane,
-.leaflet-tile,
-.leaflet-marker-icon,
-.leaflet-marker-shadow,
-.leaflet-tile-container,
-.leaflet-pane > svg,
-.leaflet-pane > canvas,
-.leaflet-zoom-box,
-.leaflet-image-layer,
-.leaflet-layer {
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  user-select: none;
 }
 
 /* Puntos de ruta mejorados */
@@ -337,10 +308,10 @@
 
 @keyframes vt-current-point-pulse {
   0% {
-    stroke-opacity: 0.28;
+    opacity: 0.28;
   }
   100% {
-    stroke-opacity: 0.04;
+    opacity: 0.04;
   }
 }
 
