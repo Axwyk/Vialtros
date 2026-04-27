@@ -27,6 +27,8 @@ api.interceptors.request.use((config) => {
       config.headers["X-Tracking-Token"] =
         process.env.REACT_APP_TRACKING_INGEST_TOKEN || LOCAL_DEV_INGEST_TOKEN;
     }
+    // Agregar Authorization header incluso para local dev tokens
+    config.headers.Authorization = `Bearer ${token}`;
     return config;
   }
 

@@ -57,14 +57,14 @@ export default function Sidebar({ role, onLogout }) {
               (!item.admin || role === "admin") &&
               (!item.driver || role === "driver"),
           )
-          .map((item) => {
+          .map((item, index) => {
             const Icon = item.icon;
             const isActive = item.tracking
               ? location.pathname.startsWith("/tracking/")
               : location.pathname === item.to;
             return (
               <Link
-                key={item.to}
+                key={index}
                 to={item.to}
                 onClick={
                   item.disabled ? (event) => event.preventDefault() : undefined
