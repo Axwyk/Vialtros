@@ -421,6 +421,20 @@ export default function MapView({
     return Math.max(600, Math.round(base * Math.pow(2, 13 - (zoom || 13)) / 4));
   }
 
+  function resolvePoiCoords() {
+    if (Array.isArray(vehiclePoint)) {
+      return vehiclePoint;
+    }
+
+    if (mapRef?.getCenter) {
+      const mapCenter = mapRef.getCenter();
+      if (Number.isFinite(mapCenter?.lat) && Number.isFinite(mapCenter?.lng)) {
+        return [mapCenter.lat, mapCenter.lng];
+      }
+    }
+
+    return Array.isArray(center) ? center : null;
+  }
 
   const loadLocalPois = React.useCallback(async () => {
     try {
@@ -467,7 +481,11 @@ out center;`;
       const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(q)}`;
       console.debug("MapView fetchPOIs url:", url);
       const res = await fetch(url);
-      if (!res.ok) return;
+      if (!res.ok) {
+        console.debug("MapView fetchPOIs non-ok response:", res.status);
+        await loadLocalPois();
+        return;
+      }
       const data = await res.json();
       const parsed = (data.elements || []).map((el) => ({
         id: el.id,
@@ -485,6 +503,7 @@ out center;`;
       }
     } catch (err) {
       console.warn("MapView error fetching POIs:", err);
+      await loadLocalPois();
     }
   }, [loadLocalPois]);
 
@@ -629,7 +648,7 @@ out center;`;
 
   // Debounce POI fetch when vehicle or map changes
   useEffect(() => {
-    const coords = Array.isArray(vehiclePoint) ? vehiclePoint : null;
+    const coords = resolvePoiCoords();
     const mapZoom = mapRef?.getZoom ? mapRef.getZoom() : 13;
     if (!coords) return undefined;
     const radius = zoomToRadius(mapZoom);
@@ -647,7 +666,7 @@ out center;`;
     return () => {
       if (poisTimerRef.current) clearTimeout(poisTimerRef.current);
     };
-  }, [vehiclePoint, mapRef, displayPois, fetchPOIs]);
+  }, [vehiclePoint, mapRef, center, displayPois, fetchPOIs]);
 
   // Make floating overlays follow the map while the user is panning/dragging.
   useEffect(() => {

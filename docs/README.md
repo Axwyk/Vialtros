@@ -33,4 +33,4 @@ Ver [despliegue.md](despliegue.md) para la configuración completa.
 
 ## Estado del proyecto
 
-Ver [`estado_proyecto.txt`](../estado_proyecto.txt) para el detalle de funcionalidades listas y pendientes.
+Ver [../estado_proyecto.txt](../estado_proyecto.txt) para el detalle de funcionalidades listas y pendientes (última actualización: 12 de abril de 2026).

@@ -88,7 +88,7 @@ REACT_APP_API_URL=http://localhost:8000/api
 REACT_APP_WS_URL=ws://localhost:8000/ws
 ```
 
-#### Iniciar servidor de desarrollo
+#### Iniciar frontend en desarrollo
 
 ```bash
 npm start
@@ -244,6 +244,7 @@ server {
 Accesible en `/admin/` con las credenciales del superusuario.
 
 **Funcionalidades del admin Django:**
+
 - Gestión de todos los modelos (User, Driver, Passenger, Route, Tracking)
 - Visualización y edición de registros directamente en la base de datos
 - Solo accesible para usuarios con `is_staff=True`
@@ -268,4 +269,3 @@ La carga de datos de prueba ya no está automatizada con `poblar_demo`. Usa el p
 - [ ] Variables de entorno del frontend apuntan a URLs de producción (`https://` y `wss://`)
 - [ ] `npm run build` ejecutado para generar los estáticos
 - [ ] Archivos estáticos Django recolectados: `python manage.py collectstatic`
-
