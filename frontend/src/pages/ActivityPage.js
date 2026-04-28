@@ -34,6 +34,7 @@ export default function ActivityPage() {
 <div style={{ padding: 40, background: "#f1f5f9", minHeight: "100vh" }}></div>
 <h1 style={{ fontSize: 32, fontWeight: 800 }}></h1>
 <span>Vista administrativa</span>
+<p>Información actualizada desde el panel administrativo.</p>
 
 <ul style={{ marginTop: 20 }}></ul>
 
