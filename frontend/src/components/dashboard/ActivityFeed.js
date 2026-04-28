@@ -1,5 +1,6 @@
 import React from "react";
 import { icons } from "./icons";
+import { Link } from "react-router-dom";
 
 const colorMap = {
   emerald: { bg: "bg-emerald-50", text: "text-emerald-600" },
@@ -100,10 +101,13 @@ export default function ActivityFeed({
       </div>
 
       <div className="px-5 py-3 border-t border-slate-100 flex-shrink-0 bg-white">
-        <button className="inline-flex items-center gap-2 text-xs text-blue-600 font-semibold hover:text-blue-700 transition-colors">
-          Ver todo el historial
-          {icons.arrowRight({ size: 13, strokeWidth: 2.4 })}
-        </button>
+        <Link
+  to="/activity"
+  className="inline-flex items-center gap-2 text-xs text-blue-600 font-semibold hover:text-blue-700 transition-colors"
+>
+  Ver todo el historial
+  {icons.arrowRight({ size: 13, strokeWidth: 2.4 })}
+</Link>
       </div>
     </div>
   );
