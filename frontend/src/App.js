@@ -27,6 +27,7 @@ import {
   ensureLocalAccessSession,
   isLocalAccessEnabled,
 } from "./services/auth";
+import ActivityPage from "./pages/ActivityPage";
 
 function App() {
   const [isAuth, setIsAuth] = useState(() => {
@@ -72,6 +73,7 @@ function App() {
 
   return (
     <Router>
+      
       <div className="bg-gray-100 min-h-screen">
         {isAuth && (
           <nav className="bg-blue-800 text-white px-8 py-3.5 flex justify-between items-center shadow-lg sticky top-0 z-20">
@@ -101,6 +103,14 @@ function App() {
           </nav>
         )}
         <Routes>
+          <Route
+  path="/activity"
+  element={
+    <PrivateRoute>
+      <ActivityPage />
+    </PrivateRoute>
+  }
+/>
           <Route
             path="/login"
             element={<LoginPage onLogin={() => setIsAuth(true)} />}
