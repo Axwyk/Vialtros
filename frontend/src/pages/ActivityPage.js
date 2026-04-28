@@ -35,6 +35,8 @@ export default function ActivityPage() {
 <h1 style={{ fontSize: 32, fontWeight: 800 }}></h1>
 <span>Vista administrativa</span>
 
+<ul style={{ marginTop: 20 }}></ul>
+
     </div>
 
   </div>
