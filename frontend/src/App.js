@@ -6,6 +6,7 @@ import {
   Routes,
   Route,
   Navigate,
+  Link,
 } from "react-router-dom";
 
 import LoginPage from "./pages/LoginPage";
@@ -74,7 +75,9 @@ function App() {
       <div className="bg-gray-100 min-h-screen">
         {isAuth && (
           <nav className="bg-blue-800 text-white px-8 py-3.5 flex justify-between items-center shadow-lg sticky top-0 z-20">
-            <Logo variant="light" iconSize={36} />
+            <Link to="/dashboard" className="flex items-center">
+  <Logo variant="light" iconSize={36} />
+</Link>
             <button
               onClick={handleLogout}
               className="flex items-center gap-2 text-sm font-medium text-white-500 hover:text-red-600 transition px-3 py-2 rounded-lg hover:bg-red-50"

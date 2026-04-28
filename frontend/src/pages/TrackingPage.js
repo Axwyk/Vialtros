@@ -29,8 +29,10 @@ import {
 import TrackingHero from "../components/tracking/TrackingHero";
 import TransportBar, { TransportIcon } from "../components/TransportBar";
 import "./TrackingPage.css";
+import { useNavigate } from "react-router-dom";
 
 const LIVE_WINDOW_MINUTES = 20;
+const navigate = useNavigate();
 const ETA_REFRESH_DISTANCE_KM = 0.08;
 const ROUTE_MATCH_MIN_NEW_POINTS = 2;
 const ROUTE_MATCH_REFRESH_DISTANCE_KM = 0.06;
