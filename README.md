@@ -1,6 +1,15 @@
 # Vialtros
 
-Reuniones: Miercoles, Jueves y Domingo - 12:00 pm 
+Reuniones: Miercoles, Jueves y Domingo - 12:00 pm
+
+link: <https://meet.google.com/yfp-zmkq-buk>
+
+Trello: <https://trello.com/b/Uu3eBPav/vialtros>
+
+## Vialtros
+
+Reuniones: Miercoles, Jueves y Domingo - 12:00 pm
+
 link: https://meet.google.com/yfp-zmkq-buk
 
 Trello: https://trello.com/b/Uu3eBPav/vialtros
@@ -31,12 +40,14 @@ run_vialtros.bat
 Esto abre el backend en `http://localhost:8000` y el frontend en `http://localhost:3000`.
 
 ### Repositorio Git
-- https://github.com/Axwyk/Vialtros
+
+- <https://github.com/Axwyk/Vialtros>
 
 ### Credenciales de acceso
 
 - Usuario: `admin`
 - Contraseña: `admin123`
+
 
 ## Stack Tecnológico
 
