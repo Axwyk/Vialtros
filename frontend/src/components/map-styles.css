@@ -1,3 +1,109 @@
+/* =====================================================
+   HUD de navegación GPS (estilo Waze noche)
+   ===================================================== */
+
+.nav-hud-top {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.93);
+  color: #fff;
+  border-radius: 18px;
+  padding: 14px 22px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 260px;
+  max-width: 90vw;
+  box-shadow: 0 6px 32px rgba(0, 0, 0, 0.55);
+  z-index: 20;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+}
+
+.nav-hud-arrow {
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+}
+
+.nav-hud-arrow svg {
+  width: 52px;
+  height: 52px;
+}
+
+.nav-hud-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.nav-hud-distance {
+  font-size: 30px;
+  font-weight: 800;
+  color: #38bdf8;
+  line-height: 1;
+  letter-spacing: -0.5px;
+}
+
+.nav-hud-street {
+  font-size: 13px;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.nav-hud-bottom {
+  position: absolute;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.93);
+  color: #fff;
+  border-radius: 16px;
+  padding: 12px 28px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  box-shadow: 0 6px 32px rgba(0, 0, 0, 0.55);
+  z-index: 20;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+}
+
+.nav-hud-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 52px;
+}
+
+.nav-hud-stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: #e2e8f0;
+  line-height: 1;
+}
+
+.nav-hud-stat-label {
+  font-size: 10px;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.nav-hud-divider {
+  width: 1px;
+  height: 32px;
+  background: rgba(100, 116, 139, 0.4);
+}
+
 /* Google Maps container */
 .tracking-map-container {
   width: 100%;

@@ -54,6 +54,95 @@ const GOOGLE_MAPS_OPTIONS = {
   styles: GOOGLE_MAPS_STYLES,
 };
 
+const GPS_NIGHT_STYLES = [
+  { featureType: "all", elementType: "geometry", stylers: [{ color: "#1c2130" }] },
+  { featureType: "all", elementType: "labels.text.stroke", stylers: [{ color: "#1c2130" }] },
+  { featureType: "all", elementType: "labels.text.fill", stylers: [{ color: "#8ab4b4" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#2d3547" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#3d5075" }] },
+  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#2d3f5a" }] },
+  { featureType: "road.local", elementType: "geometry", stylers: [{ color: "#252f42" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0e1626" }] },
+  { featureType: "landscape", elementType: "geometry", stylers: [{ color: "#1a2035" }] },
+  { featureType: "poi", elementType: "geometry", stylers: [{ color: "#1e2b3a" }] },
+  { featureType: "transit", elementType: "geometry", stylers: [{ color: "#1e2b3a" }] },
+  { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#3b4d6b" }] },
+];
+
+function formatDistance(meters) {
+  if (!Number.isFinite(meters)) return "";
+  if (meters < 1000) return `${Math.round(meters)} m`;
+  return `${(meters / 1000).toFixed(1)} km`;
+}
+
+function getArrowSvg(modifier, type) {
+  if (type === "arrive") {
+    return (
+      <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="24" cy="24" r="12" fill="#38bdf8" />
+        <circle cx="24" cy="24" r="6" fill="#0f172a" />
+      </svg>
+    );
+  }
+  const mod = (modifier || "straight").toLowerCase();
+  if (mod === "left" || mod === "sharp left") {
+    return (
+      <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M32 38V22H18l8-8-3-3-14 14 14 14 3-3-8-8h11v10h6z" fill="#38bdf8" />
+      </svg>
+    );
+  }
+  if (mod === "right" || mod === "sharp right") {
+    return (
+      <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M16 38V22h14l-8-8 3-3 14 14-14 14-3-3 8-8H22v10h-6z" fill="#38bdf8" />
+      </svg>
+    );
+  }
+  if (mod === "slight left") {
+    return (
+      <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M26 10l-4 4 6 6H14v18h6V26h7l-6 6 4 4 12-12-11-14z" fill="#38bdf8" />
+      </svg>
+    );
+  }
+  if (mod === "slight right") {
+    return (
+      <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M22 10l4 4-6 6h13v18h-6V26h-7l6 6-4 4L10 24l12-14z" fill="#38bdf8" />
+      </svg>
+    );
+  }
+  if (mod === "uturn") {
+    return (
+      <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M30 8v6a10 10 0 010 20H16v-6l-8 8 8 8v-6h14a16 16 0 000-32h-8l4 4-3 3-7-7 7-7 3 3-4 4h-6z" fill="#38bdf8" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M24 8l-4 4 10 10H8v6h22l-10 10 4 4 16-16L24 8z" fill="#38bdf8" />
+    </svg>
+  );
+}
+
+function buildVoiceInstruction(step) {
+  const dirMap = {
+    "left": "gire a la izquierda",
+    "sharp left": "gire fuertemente a la izquierda",
+    "slight left": "manténgase a la izquierda",
+    "right": "gire a la derecha",
+    "sharp right": "gire fuertemente a la derecha",
+    "slight right": "manténgase a la derecha",
+    "straight": "continúe recto",
+    "uturn": "dé un giro en U",
+  };
+  if (step?.type === "arrive") return step.name ? `llegando al destino en ${step.name}` : "ha llegado al destino";
+  const action = dirMap[(step?.modifier || "").toLowerCase()] || "continúe";
+  return step?.name ? `${action} en ${step.name}` : action;
+}
+
 function projectPointOnSegment(point, start, end) {
   const startX = start[1];
   const startY = start[0];
@@ -242,6 +331,8 @@ export default function MapView({
   routeOverlays = [],
   highlightedRouteIds = [],
   pois = [],
+  gpsMode = false,
+  navigationSteps = null,
 }) {
   const { isLoaded: mapsApiLoaded } = useJsApiLoader({
     id: "vialtros-google-map",
@@ -262,9 +353,13 @@ export default function MapView({
   const lastFitLengthRef = useRef(-1);
   const firstFollowRef = useRef(true);
   const containerRef = useRef(null);
+  const spokenWarningsRef = useRef(new Set());
+  const lastSpokenStepKeyRef = useRef(null);
 
   useEffect(() => {
-    setDisplayPois(Array.isArray(pois) ? pois : []);
+    if (Array.isArray(pois) && pois.length > 0) {
+      setDisplayPois(pois);
+    }
   }, [pois]);
 
   const validPoints = useMemo(
@@ -542,21 +637,6 @@ out center;`;
     fittedOnceRef.current = true;
   }, [mapRef, fitCoords, focusAllVehicles, hasLiveTrackings]);
 
-  // AutoFollowVehicle: centra el mapa en el vehiculo cuando hay trackings en vivo
-  useEffect(() => {
-    if (!mapRef || !effectiveVehiclePoint || focusAllVehicles || !hasLiveTrackings) return;
-    const [lat, lng] = effectiveVehiclePoint;
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-    if (firstFollowRef.current) {
-      firstFollowRef.current = false;
-      mapRef.setCenter({ lat, lng });
-      mapRef.setZoom(Math.max(mapRef.getZoom() || 0, 17));
-      return;
-    }
-    mapRef.panTo({ lat, lng });
-    if ((mapRef.getZoom() || 0) < 17) mapRef.setZoom(17);
-  }, [mapRef, effectiveVehiclePoint, focusAllVehicles, hasLiveTrackings]);
-
   const primaryVehicle = useMemo(
     () =>
       vehiclePoint
@@ -591,6 +671,27 @@ out center;`;
     [vehicleDirectionLine, effectiveVehiclePoint, vehiclePoint],
   );
 
+  const primaryVehicleRotationRef = useRef(0);
+  primaryVehicleRotationRef.current = primaryVehicleRotation;
+
+  // AutoFollowVehicle: centra el mapa en el vehiculo cuando hay trackings en vivo
+  useEffect(() => {
+    if (!mapRef || !effectiveVehiclePoint || focusAllVehicles || !hasLiveTrackings) return;
+    const [lat, lng] = effectiveVehiclePoint;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    const targetZoom = gpsMode ? 19 : 17;
+    if (firstFollowRef.current) {
+      firstFollowRef.current = false;
+      mapRef.setCenter({ lat, lng });
+      mapRef.setZoom(targetZoom);
+      if (gpsMode) mapRef.setHeading(primaryVehicleRotationRef.current);
+      return;
+    }
+    mapRef.panTo({ lat, lng });
+    if ((mapRef.getZoom() || 0) < targetZoom) mapRef.setZoom(targetZoom);
+    if (gpsMode) mapRef.setHeading(primaryVehicleRotationRef.current);
+  }, [mapRef, effectiveVehiclePoint, focusAllVehicles, hasLiveTrackings, gpsMode]);
+
   // Calcula distancia total de una línea de coordenadas [lat,lng] en kilómetros
   function lineDistanceKm(line = []) {
     if (!Array.isArray(line) || line.length < 2) return 0;
@@ -616,6 +717,62 @@ out center;`;
   const plannedKm = Math.round((plannedLine?.length > 1 ? lineDistanceKm(plannedLine) : 0) * 10) / 10;
   const traveledKm = Math.round((traveledLine?.length > 1 ? lineDistanceKm(traveledLine) : 0) * 10) / 10;
   const pendingKm = Math.round(Math.max(0, plannedKm - traveledKm) * 10) / 10;
+
+  // Aplica estilos noche/día imperativamnente para no pasar un objeto nuevo como prop
+  // a <GoogleMap>, lo que detonaba re-renders infinitos en OverlayView
+  useEffect(() => {
+    if (!mapRef) return;
+    mapRef.setOptions({
+      styles: gpsMode ? GPS_NIGHT_STYLES : GOOGLE_MAPS_STYLES,
+      tilt: gpsMode ? 45 : 0,
+      zoomControl: !gpsMode,
+    });
+  }, [mapRef, gpsMode]);
+
+  const nextStep = useMemo(() => {
+    if (!gpsMode || !Array.isArray(navigationSteps) || !vehiclePoint) return null;
+    const [vLat, vLng] = vehiclePoint;
+    let closest = null;
+    let minDist = Infinity;
+    for (const step of navigationSteps) {
+      const dLat = step.location[0] - vLat;
+      const dLng = step.location[1] - vLng;
+      const distM = Math.sqrt(dLat * dLat + dLng * dLng) * 111000;
+      if (distM < minDist && distM < 3000) {
+        minDist = distM;
+        closest = { ...step, distanceAway: distM };
+      }
+    }
+    return closest;
+  }, [gpsMode, navigationSteps, vehiclePoint]);
+
+  useEffect(() => {
+    if (!gpsMode || !nextStep || !window.speechSynthesis) return;
+    const stepKey = `${nextStep.location[0].toFixed(5)},${nextStep.location[1].toFixed(5)}`;
+    const dist = nextStep.distanceAway;
+
+    if (lastSpokenStepKeyRef.current !== stepKey) {
+      lastSpokenStepKeyRef.current = stepKey;
+      spokenWarningsRef.current = new Set();
+    }
+
+    const announce = (prefix) => {
+      const instruction = buildVoiceInstruction(nextStep);
+      const utt = new window.SpeechSynthesisUtterance(`${prefix} ${instruction}`);
+      utt.lang = "es-CO";
+      utt.rate = 1.1;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utt);
+    };
+
+    if (dist > 250 && dist < 400 && !spokenWarningsRef.current.has(`${stepKey}-300`)) {
+      announce("En 300 metros,");
+      spokenWarningsRef.current.add(`${stepKey}-300`);
+    } else if (dist > 30 && dist < 80 && !spokenWarningsRef.current.has(`${stepKey}-now`)) {
+      announce("Ahora,");
+      spokenWarningsRef.current.add(`${stepKey}-now`);
+    }
+  }, [nextStep, gpsMode]);
 
   useEffect(() => {
     if (!Array.isArray(vehiclePoint)) return undefined;
@@ -930,7 +1087,46 @@ out center;`;
       )}
 
 
+      {/* ---- HUD GPS modo noche ---- */}
+      {gpsMode && (
+        <>
+          <div className="nav-hud-top" aria-live="polite">
+            <div className="nav-hud-arrow">
+              {getArrowSvg(nextStep?.modifier, nextStep?.type)}
+            </div>
+            <div className="nav-hud-text">
+              {nextStep ? (
+                <>
+                  <span className="nav-hud-distance">{formatDistance(nextStep.distanceAway)}</span>
+                  {nextStep.name && <span className="nav-hud-street">{nextStep.name}</span>}
+                </>
+              ) : (
+                <span className="nav-hud-distance">En ruta</span>
+              )}
+            </div>
+          </div>
+
+          <div className="nav-hud-bottom">
+            <div className="nav-hud-stat">
+              <span className="nav-hud-stat-value">{eta !== null ? `${eta}` : "--"}</span>
+              <span className="nav-hud-stat-label">min ETA</span>
+            </div>
+            <div className="nav-hud-divider" />
+            <div className="nav-hud-stat">
+              <span className="nav-hud-stat-value">{pendingKm}</span>
+              <span className="nav-hud-stat-label">km pend.</span>
+            </div>
+            <div className="nav-hud-divider" />
+            <div className="nav-hud-stat">
+              <span className="nav-hud-stat-value">{traveledKm}</span>
+              <span className="nav-hud-stat-label">km rec.</span>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* ---- Panel flotante ETA ---- */}
+      {!gpsMode && (
       <div
         className={`floating-eta ${eta === null ? "floating-eta-hidden" : ""}`}
         aria-live="polite"
@@ -946,8 +1142,10 @@ out center;`;
           </div>
         )}
       </div>
+      )}
 
       {/* ---- Métricas de ruta ---- */}
+      {!gpsMode && (
       <div className="route-metrics-panel">
         <div className="route-metrics-grid">
           <div className="route-metric-tile">
@@ -964,9 +1162,10 @@ out center;`;
           </div>
         </div>
       </div>
+      )}
 
       {/* ---- Leyenda ---- */}
-      <div className="map-legend">
+      {!gpsMode && <div className="map-legend">
         <div className="legend-title">Leyenda</div>
         {primaryVehicle && (
           <div className="legend-item">
@@ -1023,7 +1222,7 @@ out center;`;
             <span>Rutas resaltadas</span>
           </div>
         )}
-      </div>
+      </div>}
     </div>
   );
 }

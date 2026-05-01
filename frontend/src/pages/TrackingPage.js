@@ -487,6 +487,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const [guidedRouteRunning, setGuidedRouteRunning] = useState(false);
   const [guidedRouteError, setGuidedRouteError] = useState("");
   const [guidedRouteDisplayPath, setGuidedRouteDisplayPath] = useState([]);
+  const [navigationSteps, setNavigationSteps] = useState(null);
   const [adminStats, setAdminStats] = useState(null);
   const [adminRouteSummaries, setAdminRouteSummaries] = useState([]);
   const [adminActiveVehicles, setAdminActiveVehicles] = useState([]);
@@ -562,6 +563,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     setGuidedRouteLoading(false);
     setGuidedRouteRunning(false);
     setGuidedRouteError("");
+    setNavigationSteps(null);
   }, [selectedRouteId]);
 
   useEffect(
@@ -1865,6 +1867,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     guidedRouteIndexRef.current = 0;
     setGuidedRouteLoading(false);
     setGuidedRouteRunning(false);
+    setNavigationSteps(null);
   };
 
   const pushGuidedTrackingPoint = async (point) => {
@@ -1995,6 +1998,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           (waypointCoords.length > 1 ? waypointCoords : null);
         if (routeCoordinates?.length > 1) {
           setRoutePolyline(playbackRoute);
+          setNavigationSteps(streetRoute?.steps || null);
           setOriginCoords(from);
           setDestinationCoords(to);
           setForceBuenaventuraDemo(false);
@@ -2676,6 +2680,8 @@ export default function TrackingPage({ routeId: routeIdProp }) {
               highlightedRouteIds={isAdminView ? highlightedAdminRouteIds : []}
               eta={eta}
               etaUpdated={etaUpdated}
+              gpsMode={guidedRouteRunning}
+              navigationSteps={navigationSteps}
             />
           </div>
         </main>
