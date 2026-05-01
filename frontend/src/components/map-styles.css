@@ -1,5 +1,5 @@
 /* =====================================================
-   HUD de navegación GPS — estilo Waze / Google Maps
+   HUD de navegación GPS — estilo limpio y compacto
    ===================================================== */
 
 .nav-hud-top {
@@ -7,97 +7,83 @@
   top: 0;
   left: 0;
   right: 0;
-  background: linear-gradient(180deg, #060d1c 0%, #0c1829 100%);
+  background: #0f172a;
   color: #fff;
-  border-radius: 0 0 24px 24px;
-  padding: 16px 20px 20px;
+  border-radius: 0 0 14px 14px;
+  padding: 10px 16px 12px;
   display: flex;
   align-items: center;
-  gap: 14px;
-  box-shadow:
-    0 8px 48px rgba(0, 0, 0, 0.75),
-    inset 0 -2px 0 rgba(56, 189, 248, 0.45);
-  border-bottom: 2px solid rgba(56, 189, 248, 0.3);
+  gap: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.55);
   z-index: 20;
-  pointer-events: none;
+  pointer-events: auto;
+  font-family: inherit;
 }
 
 .nav-hud-arrow {
   flex-shrink: 0;
-  width: 58px;
-  height: 58px;
-  background: rgba(56, 189, 248, 0.1);
-  border-radius: 16px;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1.5px solid rgba(56, 189, 248, 0.28);
-  box-shadow:
-    0 0 20px rgba(56, 189, 248, 0.15),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .nav-hud-arrow svg {
-  width: 44px;
-  height: 44px;
-  filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.55));
+  width: 34px;
+  height: 34px;
 }
 
 .nav-hud-text {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 2px;
   min-width: 0;
 }
 
 .nav-hud-distance {
-  font-size: 36px;
-  font-weight: 900;
-  color: #38bdf8;
+  font-size: 26px;
+  font-weight: 800;
+  color: #ffffff;
   line-height: 1;
-  letter-spacing: -1.5px;
-  text-shadow: 0 0 28px rgba(56, 189, 248, 0.5);
+  letter-spacing: -0.8px;
 }
 
 .nav-hud-street {
-  font-size: 13px;
-  color: #6ea0bc;
+  font-size: 12px;
+  color: #94a3b8;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-weight: 500;
-  letter-spacing: 0.02em;
 }
 
 .nav-hud-eta-badge {
   flex-shrink: 0;
-  background: rgba(74, 222, 128, 0.1);
-  border: 1.5px solid rgba(74, 222, 128, 0.28);
-  border-radius: 14px;
-  padding: 8px 14px;
+  background: #1e293b;
+  border-radius: 10px;
+  padding: 6px 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  box-shadow: 0 0 18px rgba(74, 222, 128, 0.12);
+  gap: 1px;
 }
 
 .nav-hud-eta-value {
-  font-size: 24px;
-  font-weight: 900;
-  color: #4ade80;
+  font-size: 20px;
+  font-weight: 800;
+  color: #ffffff;
   line-height: 1;
   letter-spacing: -0.5px;
-  text-shadow: 0 0 16px rgba(74, 222, 128, 0.45);
 }
 
 .nav-hud-eta-unit {
   font-size: 9px;
-  color: rgba(74, 222, 128, 0.6);
+  color: #64748b;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
 }
 
 .nav-hud-bottom {
@@ -105,17 +91,14 @@
   bottom: 0;
   left: 0;
   right: 0;
-  background: linear-gradient(0deg, #060d1c 0%, #0c1829 100%);
+  background: #0f172a;
   color: #fff;
-  border-radius: 24px 24px 0 0;
-  padding: 18px 24px 24px;
+  border-radius: 14px 14px 0 0;
+  padding: 12px 24px 18px;
   display: flex;
   align-items: center;
   justify-content: space-around;
-  box-shadow:
-    0 -8px 48px rgba(0, 0, 0, 0.75),
-    inset 0 2px 0 rgba(56, 189, 248, 0.35);
-  border-top: 2px solid rgba(56, 189, 248, 0.25);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.55);
   z-index: 20;
   pointer-events: none;
 }
@@ -124,59 +107,70 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   min-width: 68px;
 }
 
 .nav-hud-stat-value {
-  font-size: 28px;
-  font-weight: 900;
-  color: #e2e8f0;
+  font-size: 22px;
+  font-weight: 800;
+  color: #ffffff;
   line-height: 1;
-  letter-spacing: -0.8px;
+  letter-spacing: -0.5px;
 }
 
 .nav-hud-stat-green {
   color: #4ade80;
-  text-shadow: 0 0 18px rgba(74, 222, 128, 0.45);
 }
 
 .nav-hud-stat-blue {
-  color: #38bdf8;
-  text-shadow: 0 0 18px rgba(56, 189, 248, 0.45);
+  color: #7dd3fc;
 }
 
 .nav-hud-stat-label {
   font-size: 10px;
-  color: #3d5068;
+  color: #475569;
   text-transform: uppercase;
-  letter-spacing: 0.65px;
-  font-weight: 700;
+  letter-spacing: 0.55px;
+  font-weight: 600;
 }
 
 .nav-hud-divider {
   width: 1px;
-  height: 40px;
-  background: linear-gradient(
-    180deg,
-    transparent 0%,
-    rgba(56, 189, 248, 0.32) 30%,
-    rgba(56, 189, 248, 0.32) 70%,
-    transparent 100%
-  );
+  height: 30px;
+  background: #1e293b;
+}
+
+.nav-hud-exit-btn {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border: none;
+  background: #1e293b;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #94a3b8;
+  padding: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.nav-hud-exit-btn:hover {
+  background: #334155;
+  color: #ffffff;
+}
+
+.nav-hud-exit-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 /* Flecha de navegación GPS (reemplaza chip de bus en modo GPS) */
 .vt-gps-nav-arrow {
-  width: 64px;
-  height: 64px;
-  filter: drop-shadow(0 0 14px rgba(59, 130, 246, 0.7));
-  animation: vt-nav-glow 2.2s ease-in-out infinite;
-}
-
-@keyframes vt-nav-glow {
-  0%, 100% { filter: drop-shadow(0 0 12px rgba(59, 130, 246, 0.6)); }
-  50%       { filter: drop-shadow(0 0 22px rgba(59, 130, 246, 0.95)); }
+  width: 52px;
+  height: 52px;
 }
 
 /* Google Maps container */

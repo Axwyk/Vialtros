@@ -33,6 +33,8 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  padding: 14px;
+  gap: 14px;
 }
 
 /* ── Sidebar ─────────────────────────────────────────────── */
@@ -42,8 +44,10 @@
   gap: 0;
   overflow-y: auto;
   background: var(--vt-surface);
-  border-right: 1px solid var(--vt-border);
+  border: 1px solid var(--vt-border);
+  border-radius: 14px;
   padding: 0 0 24px;
+  font-family: var(--sidebar-font);
 }
 
 .tracking-analytics-panel::-webkit-scrollbar {
@@ -904,8 +908,8 @@
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  padding: 12px;
-  background: #f0f6ff;
+  padding: 0;
+  background: transparent;
 }
 
 .map-frame {
@@ -913,7 +917,8 @@
   height: 100%;
   border-radius: 14px;
   overflow: hidden;
-  box-shadow: 0 4px 24px rgba(15, 23, 42, 0.12);
+  border: 1px solid var(--vt-border);
+  box-shadow: 0 4px 24px rgba(15, 23, 42, 0.10);
 }
 
 .map-container-wrapper .tracking-map-container {
@@ -950,21 +955,22 @@
     grid-template-rows: auto 1fr;
     height: auto;
     overflow: visible;
+    padding: 10px;
+    gap: 10px;
   }
 
   .tracking-analytics-panel {
     max-height: 45vh;
-    border-right: none;
-    border-bottom: 1px solid var(--vt-border);
+    border-radius: 12px;
   }
 
   .map-container-wrapper {
     height: 55vh;
-    padding: 8px;
+    padding: 0;
   }
 
   .map-frame {
-    border-radius: 10px;
+    border-radius: 12px;
   }
 
   .tracking-layout {
@@ -977,3 +983,110 @@
     width: 100%;
   }
 }
+
+/* ── Conductor: ruta actual (reemplaza el dropdown) ─────── */
+.driver-route-current-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.driver-route-current-name {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--vt-surface);
+  border: 1px solid var(--vt-border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--vt-text-primary);
+}
+
+.driver-route-counter {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--vt-text-muted);
+  background: var(--vt-bg);
+  border: 1px solid var(--vt-border);
+  border-radius: 20px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+/* ── Conductor: banner de siguiente ruta ────────────────── */
+.driver-next-route-banner {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  will-change: opacity, transform;
+  animation: slide-in-banner 0.3s ease-out;
+}
+
+@keyframes slide-in-banner {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.driver-next-route-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #4ade80;
+}
+
+.driver-next-route-info {
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.driver-next-route-info strong {
+  color: #f1f5f9;
+  font-weight: 600;
+}
+
+.driver-next-route-countdown {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.driver-next-route-seconds {
+  font-size: 32px;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.driver-next-route-seclabel {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.driver-next-route-now-btn {
+  margin-top: 2px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  color: #e2e8f0;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 0;
+  cursor: pointer;
+  transition: background 0.15s;
+  width: 100%;
+}
+
+.driver-next-route-now-btn:hover {
+  background: #334155;
+}
+

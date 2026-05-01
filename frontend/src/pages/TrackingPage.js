@@ -483,6 +483,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const [showLiveTransition, setShowLiveTransition] = useState(false);
   const [showLiveToast, setShowLiveToast] = useState(false);
   const [showRouteFinishedToast, setShowRouteFinishedToast] = useState(false);
+  const [nextRouteCountdown, setNextRouteCountdown] = useState(null);
   const [guidedRouteLoading, setGuidedRouteLoading] = useState(false);
   const [guidedRouteRunning, setGuidedRouteRunning] = useState(false);
   const [guidedRouteError, setGuidedRouteError] = useState("");
@@ -534,6 +535,8 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const guidedRouteFullPathRef = useRef([]);
   const routeEndNotifiedRef = useRef(false);
   const routeFinishedTimerRef = useRef(null);
+  const nextRouteCountdownRef = useRef(null);
+  const nextRouteRef = useRef(null);
   const userCoordsRef = useRef(userCoords);
   const wsStatusRef = useRef(wsStatus);
   const trackingsRef = useRef(trackings);
@@ -619,6 +622,18 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       cancelled = true;
     };
   }, [currentRole]);
+
+  // Ruta siguiente por orden de asignación (para auto-avance al terminar)
+  const nextRoute = useMemo(() => {
+    if (currentRole !== "driver" || !driverRoutes.length) return null;
+    const idx = driverRoutes.findIndex((r) => r.id === selectedRouteId);
+    if (idx < 0 || idx >= driverRoutes.length - 1) return null;
+    return driverRoutes[idx + 1];
+  }, [driverRoutes, selectedRouteId, currentRole]);
+
+  useEffect(() => {
+    nextRouteRef.current = nextRoute;
+  }, [nextRoute]);
 
   // Cleanup global: detener watch de geolocalizacion al desmontar
   useEffect(
@@ -967,6 +982,16 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       mounted = false;
     };
   }, [resolveRouteInfo, selectedRouteId]);
+
+  // Resetear estado de fin de ruta al cambiar de ruta
+  useEffect(() => {
+    routeEndNotifiedRef.current = false;
+    setNextRouteCountdown(null);
+    if (nextRouteCountdownRef.current) {
+      clearInterval(nextRouteCountdownRef.current);
+      nextRouteCountdownRef.current = null;
+    }
+  }, [selectedRouteId]);
 
   // Periodic route info refresh: detect admin changes to origin/destination
   const lastRouteVersionRef = useRef(null);
@@ -2128,6 +2153,22 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     // Stop any guided playback
     if (guidedRouteRunning) stopGuidedRoute();
 
+    // Auto-avance a la siguiente ruta asignada (solo conductor)
+    if (currentRole === "driver" && nextRouteRef.current) {
+      let count = 10;
+      setNextRouteCountdown(count);
+      nextRouteCountdownRef.current = setInterval(() => {
+        count -= 1;
+        setNextRouteCountdown(count);
+        if (count <= 0) {
+          clearInterval(nextRouteCountdownRef.current);
+          nextRouteCountdownRef.current = null;
+          setNextRouteCountdown(null);
+          navigate(`/tracking/${nextRouteRef.current.id}`);
+        }
+      }, 1000);
+    }
+
     return () => {
       if (routeFinishedTimerRef.current) {
         clearTimeout(routeFinishedTimerRef.current);
@@ -2433,23 +2474,45 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           {/* ==================== CONDUCTOR ==================== */}
           {currentRole === "driver" && (
             <>
-              {driverRoutes.length > 0 && (
-                <div className="driver-route-select-wrap">
-                  <label className="sidebar-label">Ruta asignada</label>
-                  <select
-                    value={Number.isFinite(selectedRouteId) ? selectedRouteId : ""}
-                    onChange={(e) => {
-                      const val = Number(e.target.value);
-                      if (Number.isFinite(val)) navigate(`/tracking/${val}`);
+              {routeInfo && (
+                <div className="driver-route-current-wrap">
+                  <span className="sidebar-label">Ruta asignada</span>
+                  <div className="driver-route-current-name">
+                    {routeInfo.name || `Ruta ${selectedRouteId}`}
+                    {driverRoutes.length > 1 && (
+                      <span className="driver-route-counter">
+                        {driverRoutes.findIndex((r) => r.id === selectedRouteId) + 1}
+                        {" / "}
+                        {driverRoutes.length}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {nextRouteCountdown !== null && nextRoute && (
+                <div className="driver-next-route-banner">
+                  <div className="driver-next-route-title">Ruta completada</div>
+                  <div className="driver-next-route-info">
+                    Siguiente: <strong>{nextRoute.name || `Ruta ${nextRoute.id}`}</strong>
+                  </div>
+                  <div className="driver-next-route-countdown">
+                    <span className="driver-next-route-seconds">{nextRouteCountdown}</span>
+                    <span className="driver-next-route-seclabel">seg</span>
+                  </div>
+                  <button
+                    className="driver-next-route-now-btn"
+                    onClick={() => {
+                      if (nextRouteCountdownRef.current) {
+                        clearInterval(nextRouteCountdownRef.current);
+                        nextRouteCountdownRef.current = null;
+                      }
+                      setNextRouteCountdown(null);
+                      navigate(`/tracking/${nextRoute.id}`);
                     }}
-                    disabled={loadingRoutes || guidedRouteRunning}
-                    className="route-select"
                   >
-                    <option value="">Selecciona una ruta</option>
-                    {driverRoutes.map((r) => (
-                      <option key={r.id} value={r.id}>{r.name || `Ruta ${r.id}`}</option>
-                    ))}
-                  </select>
+                    Ir ahora
+                  </button>
                 </div>
               )}
 
@@ -2682,6 +2745,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
               etaUpdated={etaUpdated}
               gpsMode={guidedRouteRunning}
               navigationSteps={navigationSteps}
+              onExitGps={canManageGuidedRoute ? stopGuidedRoute : null}
             />
           </div>
         </main>

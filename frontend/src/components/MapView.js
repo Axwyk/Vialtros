@@ -30,36 +30,7 @@ const BUENAVENTURA_BOUNDS = { south: 3.84, west: -77.09, north: 3.93, east: -76.
 const CORPORATE_ROUTE_COLOR = "#2563EB";
 const CORPORATE_ROUTE_HALO = "#FFFFFF";
 
-const GOOGLE_MAPS_STYLES = [
-  // Ocultar POIs comerciales que saturan el mapa
-  { featureType: "poi.business", stylers: [{ visibility: "off" }] },
-  { featureType: "poi.attraction", stylers: [{ visibility: "off" }] },
-  { featureType: "poi.government", stylers: [{ visibility: "off" }] },
-  { featureType: "poi.place_of_worship", stylers: [{ visibility: "off" }] },
-  { featureType: "transit", elementType: "labels.icon", stylers: [{ visibility: "off" }] },
-  // Landscape limpia
-  { featureType: "landscape", elementType: "geometry", stylers: [{ color: "#f0f4f8" }] },
-  { featureType: "landscape.man_made", elementType: "geometry", stylers: [{ color: "#e8edf4" }] },
-  { featureType: "poi", elementType: "geometry", stylers: [{ color: "#e8edf4" }] },
-  // Agua con azul más profundo y profesional
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#8fb8dc" }] },
-  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#1e3a5f" }] },
-  { featureType: "water", elementType: "labels.text.stroke", stylers: [{ color: "#7aaecc" }] },
-  // Jerarquía de calles clara
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
-  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#dde3ec" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#f5f0e0" }] },
-  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#d6c678" }] },
-  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
-  { featureType: "road.local", elementType: "geometry", stylers: [{ color: "#f9fafb" }] },
-  // Texto legible con stroke blanco
-  { featureType: "all", elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }, { weight: 3 }] },
-  { featureType: "all", elementType: "labels.text.fill", stylers: [{ color: "#2d3748" }] },
-  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#7f8ea3" }] },
-  { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#7a5f1a" }] },
-  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#0f172a" }] },
-  { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#c4cdd9" }] },
-];
+const GOOGLE_MAPS_STYLES = [];
 
 const GOOGLE_MAPS_OPTIONS = {
   restriction: { latLngBounds: BUENAVENTURA_BOUNDS, strictBounds: false },
@@ -74,23 +45,17 @@ const GOOGLE_MAPS_OPTIONS = {
 };
 
 const GPS_NIGHT_STYLES = [
-  { featureType: "all", elementType: "geometry", stylers: [{ color: "#18202e" }] },
-  { featureType: "all", elementType: "labels.text.stroke", stylers: [{ color: "#18202e" }] },
-  { featureType: "all", elementType: "labels.text.fill", stylers: [{ color: "#93a8c4" }] },
-  { featureType: "poi.business", stylers: [{ visibility: "off" }] },
-  { featureType: "poi.attraction", stylers: [{ visibility: "off" }] },
-  { featureType: "transit", elementType: "labels.icon", stylers: [{ visibility: "off" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#252f42" }] },
-  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#1a2234" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#2e3f5e" }] },
-  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#1e2d46" }] },
-  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#222c3e" }] },
-  { featureType: "road.local", elementType: "geometry", stylers: [{ color: "#1e2738" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0a1628" }] },
-  { featureType: "landscape", elementType: "geometry", stylers: [{ color: "#151d2b" }] },
-  { featureType: "poi", elementType: "geometry", stylers: [{ color: "#1a2438" }] },
-  { featureType: "transit", elementType: "geometry", stylers: [{ color: "#1a2438" }] },
-  { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#2d3f5a" }] },
+  { featureType: "all", elementType: "geometry", stylers: [{ color: "#1a2035" }] },
+  { featureType: "all", elementType: "labels.text.stroke", stylers: [{ color: "#1a2035" }] },
+  { featureType: "all", elementType: "labels.text.fill", stylers: [{ color: "#8fa8c4" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#2a3550" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#344468" }] },
+  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#243048" }] },
+  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#14213d" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0d1829" }] },
+  { featureType: "landscape", elementType: "geometry", stylers: [{ color: "#161e30" }] },
+  { featureType: "poi", elementType: "geometry", stylers: [{ color: "#1d2640" }] },
+  { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#283a5c" }] },
 ];
 
 function formatDistance(meters) {
@@ -102,51 +67,58 @@ function formatDistance(meters) {
 function getArrowSvg(modifier, type) {
   if (type === "arrive") {
     return (
-      <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="24" cy="24" r="12" fill="#38bdf8" />
-        <circle cx="24" cy="24" r="6" fill="#0f172a" />
+      <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="20" cy="20" r="11" fill="#ffffff" />
+        <circle cx="20" cy="20" r="5" fill="#0f172a" />
       </svg>
     );
   }
   const mod = (modifier || "straight").toLowerCase();
   if (mod === "left" || mod === "sharp left") {
     return (
-      <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M32 38V22H18l8-8-3-3-14 14 14 14 3-3-8-8h11v10h6z" fill="#38bdf8" />
+      <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M5 20L17 9v7h18v8H17v7z" fill="#ffffff" />
       </svg>
     );
   }
   if (mod === "right" || mod === "sharp right") {
     return (
-      <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M16 38V22h14l-8-8 3-3 14 14-14 14-3-3 8-8H22v10h-6z" fill="#38bdf8" />
+      <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M35 20L23 9v7H5v8h18v7z" fill="#ffffff" />
       </svg>
     );
   }
   if (mod === "slight left") {
     return (
-      <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M26 10l-4 4 6 6H14v18h6V26h7l-6 6 4 4 12-12-11-14z" fill="#38bdf8" />
+      <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <g transform="rotate(-30, 20, 20)">
+          <path d="M20 5L9 19h6v16h10V19h6z" fill="#ffffff" />
+        </g>
       </svg>
     );
   }
   if (mod === "slight right") {
     return (
-      <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M22 10l4 4-6 6h13v18h-6V26h-7l6 6-4 4L10 24l12-14z" fill="#38bdf8" />
+      <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <g transform="rotate(30, 20, 20)">
+          <path d="M20 5L9 19h6v16h10V19h6z" fill="#ffffff" />
+        </g>
       </svg>
     );
   }
   if (mod === "uturn") {
     return (
-      <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M30 8v6a10 10 0 010 20H16v-6l-8 8 8 8v-6h14a16 16 0 000-32h-8l4 4-3 3-7-7 7-7 3 3-4 4h-6z" fill="#38bdf8" />
+      <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="6" y="6" width="20" height="6" rx="3" fill="#ffffff" />
+        <rect x="6" y="6" width="6" height="22" rx="3" fill="#ffffff" />
+        <rect x="20" y="6" width="6" height="16" rx="3" fill="#ffffff" />
+        <path d="M14 34l-8-10h16z" fill="#ffffff" />
       </svg>
     );
   }
   return (
-    <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M24 8l-4 4 10 10H8v6h22l-10 10 4 4 16-16L24 8z" fill="#38bdf8" />
+    <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M20 5L9 19h6v16h10V19h6z" fill="#ffffff" />
     </svg>
   );
 }
@@ -357,6 +329,7 @@ export default function MapView({
   pois = [],
   gpsMode = false,
   navigationSteps = null,
+  onExitGps = null,
 }) {
   const { isLoaded: mapsApiLoaded } = useJsApiLoader({
     id: "vialtros-google-map",
@@ -1160,6 +1133,13 @@ out center;`;
                 <span className="nav-hud-eta-value">{eta}</span>
                 <span className="nav-hud-eta-unit">min</span>
               </div>
+            )}
+            {onExitGps && (
+              <button className="nav-hud-exit-btn" onClick={onExitGps} aria-label="Salir del GPS">
+                <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              </button>
             )}
           </div>
 
