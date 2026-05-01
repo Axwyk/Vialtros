@@ -1091,3 +1091,85 @@
   background: #334155;
 }
 
+/* ── Notificación de parada GPS ──────────────────────────── */
+.gps-stop-notif {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  background: #0f172a;
+  border: 1px solid #1e3a5f;
+  border-radius: 14px;
+  padding: 12px 14px 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
+  min-width: 240px;
+  max-width: 340px;
+  font-family: var(--sidebar-font);
+  will-change: opacity, transform;
+  animation: gps-notif-in 0.32s cubic-bezier(.2, .8, .3, 1.1);
+}
+
+@keyframes gps-notif-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.gps-stop-notif-icon {
+  font-size: 22px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.gps-stop-notif-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.gps-stop-notif-type {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #64748b;
+}
+
+.gps-stop-notif-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gps-stop-notif-eta {
+  font-size: 11px;
+  font-weight: 600;
+  color: #4ade80;
+  margin-top: 1px;
+}
+
+.gps-stop-notif-close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: #475569;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  transition: color 0.15s;
+}
+
+.gps-stop-notif-close:hover {
+  color: #94a3b8;
+}
+

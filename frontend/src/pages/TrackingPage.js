@@ -986,10 +986,16 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   // Resetear estado de fin de ruta al cambiar de ruta
   useEffect(() => {
     routeEndNotifiedRef.current = false;
+    notifiedStopsRef.current = new Set();
     setNextRouteCountdown(null);
+    setStopNotification(null);
     if (nextRouteCountdownRef.current) {
       clearInterval(nextRouteCountdownRef.current);
       nextRouteCountdownRef.current = null;
+    }
+    if (stopNotifTimerRef.current) {
+      clearTimeout(stopNotifTimerRef.current);
+      stopNotifTimerRef.current = null;
     }
   }, [selectedRouteId]);
 
@@ -2244,6 +2250,10 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const arrivalNotifTimerRef = useRef(null);
   const arrivalNotifiedRef = useRef(false);
 
+  const [stopNotification, setStopNotification] = useState(null);
+  const stopNotifTimerRef = useRef(null);
+  const notifiedStopsRef = useRef(new Set());
+
   useEffect(() => {
     if (nearDestination && !arrivalNotifiedRef.current) {
       arrivalNotifiedRef.current = true;
@@ -2258,6 +2268,34 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       if (arrivalNotifTimerRef.current) clearTimeout(arrivalNotifTimerRef.current);
     };
   }, [nearDestination, routeState]);
+
+  // Detectar proximidad a paradas intermedias en modo GPS y notificar
+  useEffect(() => {
+    if (!guidedRouteRunning || !vehiclePosition) return undefined;
+    const vLat = Number(vehiclePosition.latitude);
+    const vLng = Number(vehiclePosition.longitude);
+    if (!Number.isFinite(vLat) || !Number.isFinite(vLng)) return undefined;
+
+    const APPROACH_KM = 0.25;
+    const ARRIVING_KM = 0.07;
+
+    for (const stop of displayIntermediateStops) {
+      if (!stop.coords || notifiedStopsRef.current.has(stop.id)) continue;
+      const [sLat, sLng] = stop.coords;
+      if (!Number.isFinite(sLat) || !Number.isFinite(sLng)) continue;
+      const d = distanceKm(vLat, vLng, sLat, sLng);
+      if (d <= APPROACH_KM) {
+        notifiedStopsRef.current.add(stop.id);
+        const arriving = d <= ARRIVING_KM;
+        const etaMin = arriving ? null : Math.max(1, Math.round((d / 25) * 60));
+        setStopNotification({ label: stop.label, etaMin, arriving });
+        if (stopNotifTimerRef.current) clearTimeout(stopNotifTimerRef.current);
+        stopNotifTimerRef.current = setTimeout(() => setStopNotification(null), 7000);
+        break;
+      }
+    }
+    return undefined;
+  }, [guidedRouteRunning, vehiclePosition, displayIntermediateStops]);
 
   return (
     <div className="tracking-layout">
@@ -2278,6 +2316,28 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                 : "Próxima parada"}
             </p>
           </div>
+        </div>
+      )}
+
+      {guidedRouteRunning && stopNotification && (
+        <div className="gps-stop-notif" role="alert" aria-live="polite">
+          <div className="gps-stop-notif-icon">🚏</div>
+          <div className="gps-stop-notif-body">
+            <span className="gps-stop-notif-type">
+              {stopNotification.arriving ? "Llegando a parada" : "Próxima parada"}
+            </span>
+            <span className="gps-stop-notif-label">{stopNotification.label}</span>
+            {stopNotification.etaMin !== null && (
+              <span className="gps-stop-notif-eta">
+                ~{stopNotification.etaMin} min · {eta !== null ? `destino en ${eta} min` : ""}
+              </span>
+            )}
+          </div>
+          <button
+            className="gps-stop-notif-close"
+            onClick={() => setStopNotification(null)}
+            aria-label="Cerrar"
+          >×</button>
         </div>
       )}
 
