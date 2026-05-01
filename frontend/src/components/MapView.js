@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import React from "react";
 import { GoogleMap, LoadScript, Polyline, OverlayView } from "@react-google-maps/api";
-import "./leaflet-fixes.css";
+import "./map-styles.css";
 
 // ---------------------------------------------------------------------------
 // Helpers de coordenadas
@@ -244,7 +244,6 @@ export default function MapView({
   pois = [],
 }) {
   const [displayPois, setDisplayPois] = useState(Array.isArray(pois) ? pois : []);
-  const [displayPoisSource, setDisplayPoisSource] = useState("none");
   const [animatedVehiclePoint, setAnimatedVehiclePoint] = useState(null);
   const [mapRef, setMapRef] = useState(null);
 
@@ -290,27 +289,13 @@ export default function MapView({
       userCoords,
     ],
   );
-  const samplePois = useMemo(
-    () => [
-      { id: "s1", lat: center[0] + 0.002, lon: center[1] + 0.002, tags: { name: "Universidad Demo", amenity: "university" } },
-      { id: "s2", lat: center[0] - 0.0015, lon: center[1] - 0.0015, tags: { name: "Hospital Demo", amenity: "hospital" } },
-      { id: "s3", lat: center[0] + 0.0018, lon: center[1] - 0.0018, tags: { name: "Parque Demo", leisure: "park" } },
-      { id: "s4", lat: center[0] - 0.0022, lon: center[1] + 0.0012, tags: { name: "Gasolinera Demo", amenity: "fuel" } },
-    ],
-    [center],
-  );
-
-  function injectSamplePois() {
-    setDisplayPois(samplePois);
-  }
-
-
   const loadLocalPois = useCallback(async () => {
     try {
       const res = await fetch("/pois.json");
       if (!res.ok) {
         console.debug("MapView local pois not found (status)", res.status);
-        setDisplayPoisSource("none");
+        
+
         return;
       }
       const data = await res.json();
@@ -327,11 +312,13 @@ export default function MapView({
           .filter(Boolean);
       }
       setDisplayPois(parsed);
-      setDisplayPoisSource(parsed.length ? "local" : "none");
+      
+
       console.debug("MapView loaded local POIs:", parsed.length);
     } catch (err) {
       console.debug("MapView error loading local pois:", err);
-      setDisplayPoisSource("none");
+      
+
     }
   }, []);
 
@@ -360,7 +347,8 @@ out center;`;
       }));
       console.debug("MapView fetchPOIs parsed:", parsed.length, parsed.slice(0, 6));
       setDisplayPois(parsed);
-      setDisplayPoisSource("overpass");
+      
+
       console.debug("MapView fetched POIs:", parsed.length);
       if (!parsed.length) {
         console.debug("MapView: Overpass returned 0 elements, attempting local fallback");
@@ -506,15 +494,14 @@ out center;`;
   useEffect(() => {
     const coords = Array.isArray(vehiclePoint) ? vehiclePoint : null;
     if (!coords) return undefined;
-    const mapZoom = mapRef?.getZoom ? mapRef.getZoom() : 13;
-    const radius = Math.max(600, Math.round(2000 * Math.pow(2, 13 - (mapZoom || 13)) / 4));
-    if (!Array.isArray(displayPois) || displayPois.length === 0) {
-      fetchPOIs(coords[0], coords[1], radius);
-    }
     if (poisTimerRef.current) clearTimeout(poisTimerRef.current);
-    poisTimerRef.current = setTimeout(() => fetchPOIs(coords[0], coords[1], radius), 1500);
+    poisTimerRef.current = setTimeout(() => {
+      const mapZoom = mapRef?.getZoom ? mapRef.getZoom() : 13;
+      const radius = Math.max(600, Math.round(2000 * Math.pow(2, 13 - (mapZoom || 13)) / 4));
+      fetchPOIs(coords[0], coords[1], radius);
+    }, 1500);
     return () => { if (poisTimerRef.current) clearTimeout(poisTimerRef.current); };
-  }, [vehiclePoint, mapRef, displayPois, fetchPOIs]);
+  }, [vehiclePoint, mapRef, fetchPOIs]);
 
   // FitBounds: ajusta el viewport cuando cambian las coordenadas de la ruta
   useEffect(() => {
@@ -927,31 +914,6 @@ out center;`;
         </GoogleMap>
       </LoadScript>
 
-      {/* ---- Debug POIs ---- */}
-      {Array.isArray(displayPois) && (
-        <>
-          <button onClick={injectSamplePois} className="vt-poi-inject-btn">
-            Inyectar POIs de prueba
-          </button>
-          <div
-            style={{
-              position: "absolute",
-              top: 18,
-              left: 160,
-              zIndex: 700,
-              background: "rgba(255,255,255,0.65)",
-              padding: "4px 6px",
-              borderRadius: 6,
-              fontSize: 11,
-              color: "#0a2b3d",
-              backdropFilter: "blur(4px)",
-              WebkitBackdropFilter: "blur(4px)",
-            }}
-          >
-            POIs: {displayPois.length} {displayPoisSource ? `(${displayPoisSource})` : ""}
-          </div>
-        </>
-      )}
 
       {/* ---- Panel flotante ETA ---- */}
       <div

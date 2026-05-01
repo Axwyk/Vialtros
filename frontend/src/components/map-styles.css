@@ -12,7 +12,7 @@
   );
 }
 
-/* Puntos de ruta mejorados */
+/* Puntos de ruta */
 .vt-route-point {
   width: 18px;
   height: 18px;
@@ -51,7 +51,7 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  animation: leaflet-point-pulse 2s ease-out infinite;
+  animation: vt-point-pulse 2s ease-out infinite;
 }
 
 .vt-route-point-end {
@@ -119,7 +119,7 @@
   }
 }
 
-@keyframes leaflet-point-pulse {
+@keyframes vt-point-pulse {
   0% {
     width: 36px;
     height: 36px;
@@ -132,7 +132,7 @@
   }
 }
 
-/* Etiquetas de ruta mejoradas */
+/* Etiquetas de ruta */
 .vt-route-chip {
   display: inline-flex;
   align-items: center;
@@ -204,19 +204,19 @@
   line-height: 1;
 }
 
-/* Estilo para el botón de depuración en MapView (Leaflet) */
+/* Botón de depuración POIs */
 .vt-poi-inject-btn {
   position: absolute;
   top: 18px;
   left: 18px;
   z-index: 900;
   background: #ffffff;
-  border: 1px solid rgba(0,0,0,0.06);
+  border: 1px solid rgba(0, 0, 0, 0.06);
   padding: 8px 10px;
   border-radius: 10px;
   font-size: 12px;
   color: #0a2b3d;
-  box-shadow: 0 6px 20px rgba(2,6,23,0.08);
+  box-shadow: 0 6px 20px rgba(2, 6, 23, 0.08);
   cursor: pointer;
 }
 
@@ -327,6 +327,7 @@
   }
 }
 
+/* Leyenda */
 .map-legend {
   position: absolute;
   bottom: 18px;
@@ -430,35 +431,90 @@
   background: linear-gradient(90deg, #2563eb, #1d4ed8);
 }
 
-/* Mejoras generales de usabilidad */
-.leaflet-control {
-  border-radius: 10px;
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.16);
-  background-color: #ffffff;
-  border: 1px solid #dbe4f2;
+/* Panel flotante ETA */
+.floating-eta {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 500;
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 12px;
+  padding: 10px 14px;
+  border: 1px solid #c7daf8;
+  box-shadow: 0 12px 28px rgba(2, 6, 23, 0.16);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  transition: opacity 0.3s ease;
 }
 
-.leaflet-control-zoom {
+.floating-eta-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.floating-eta-main {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.floating-eta-label {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #31507f;
+}
+
+.floating-eta-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0a2b3d;
+}
+
+.floating-eta-updated {
+  font-size: 10px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+/* Panel de métricas */
+.route-metrics-panel {
+  position: absolute;
+  bottom: 18px;
+  right: 18px;
+  z-index: 500;
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 12px;
+  padding: 10px 14px;
+  border: 1px solid #c7daf8;
+  box-shadow: 0 12px 28px rgba(2, 6, 23, 0.16);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.route-metrics-grid {
+  display: flex;
+  gap: 14px;
+}
+
+.route-metric-tile {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-}
-
-.leaflet-control-zoom a {
-  display: flex;
   align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  font-size: 18px;
-  font-weight: 600;
-  color: #1a3a52;
-  background-color: transparent;
-  border: none;
-  transition: all 0.2s ease;
+  gap: 2px;
 }
 
-.leaflet-control-zoom a:hover {
-  background-color: #f0f4f8;
-  color: #0a5ccc;
+.route-metric-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+}
+
+.route-metric-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0a2b3d;
 }
