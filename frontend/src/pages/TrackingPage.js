@@ -26,8 +26,6 @@ import {
   snapPointToRoad,
   buildRoadPathBetweenPoints,
 } from "../services/routing";
-import TrackingHero from "../components/tracking/TrackingHero";
-import TransportBar, { TransportIcon } from "../components/TransportBar";
 import "./TrackingPage.css";
 
 
@@ -415,7 +413,6 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const [loadingRoutes, setLoadingRoutes] = useState(false);
   const [sharing, setSharing] = useState(false);
   const sharingWatchIdRef = useRef(null);
-  const [mode, setMode] = useState("manual"); // 'manual' | 'automatic'
 
   // Auto-resolución dinámica: si no hay routeId, redirigir a la ruta asignada según el rol
   useEffect(() => {
@@ -463,16 +460,13 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const [routeInfo, setRouteInfo] = useState(null);
   const [originCoords, setOriginCoords] = useState(null);
   const [destinationCoords, setDestinationCoords] = useState(null);
-  const [detectedAddress, setDetectedAddress] = useState("Detectando ubicación...");
+
   const [routePolyline, setRoutePolyline] = useState(null);
   const [routeGeometryMode, setRouteGeometryMode] = useState("pending");
   const [matchedLiveRouteHistory, setMatchedLiveRouteHistory] = useState([]);
   const [userCoords, setUserCoords] = useState(null);
   const [eta, setEta] = useState(null);
   const [etaUpdated, setEtaUpdated] = useState(null);
-  const [transportMode, setTransportMode] = useState(
-    localStorage.getItem("transportMode") || "vehicle",
-  );
   const [loading, setLoading] = useState(true);
   const [wsStatus, setWsStatus] = useState("connecting");
   const [isPollingFallback, setIsPollingFallback] = useState(false);
@@ -527,10 +521,15 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const guidedRouteFullPathRef = useRef([]);
   const routeEndNotifiedRef = useRef(false);
   const routeFinishedTimerRef = useRef(null);
+  const userCoordsRef = useRef(userCoords);
 
   useEffect(() => {
     trackingsCountRef.current = trackings.length;
   }, [trackings]);
+
+  useEffect(() => {
+    userCoordsRef.current = userCoords;
+  }, [userCoords]);
 
   useEffect(() => {
     setGuidedRouteDisplayPath([]);
@@ -541,49 +540,6 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     setGuidedRouteRunning(false);
     setGuidedRouteError("");
   }, [selectedRouteId]);
-  useEffect(() => {
-  if (!navigator.geolocation) {
-    setDetectedAddress("Geolocalización no soportada");
-    return;
-  }
-
-  navigator.geolocation.getCurrentPosition(
-    async (position) => {
-      const lat = position.coords.latitude;
-      const lng = position.coords.longitude;
-
-      try {
-        const accessToken = process.env.REACT_APP_MAPBOX_TOKEN;
-        if (!accessToken) {
-          setDetectedAddress("Falta token de Mapbox");
-          return;
-        }
-
-        const response = await fetch(
-          `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${accessToken}`
-        );
-
-        const data = await response.json();
-
-        if (Array.isArray(data?.features) && data.features.length > 0) {
-          setDetectedAddress(data.features[0].place_name);
-        } else {
-          setDetectedAddress("No se pudo detectar la dirección");
-        }
-      } catch {
-        setDetectedAddress("Error obteniendo dirección");
-      }
-    },
-    () => {
-      setDetectedAddress("Permiso de ubicación denegado");
-    },
-    {
-      enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 60000,
-    }
-  );
-}, []);
 
   useEffect(
     () => () => {
@@ -777,7 +733,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
         /* ignore */
       }
     };
-  }, [isAdminView, adminActiveVehicles, adminRouteSummaries]);
+  }, [isAdminView]);
 
   useEffect(() => {
     if (!isAdminView || adminRouteSummaries.length === 0) {
@@ -924,11 +880,11 @@ export default function TrackingPage({ routeId: routeIdProp }) {
             const [geocodedFrom, geocodedTo] = await Promise.all([
               from
                 ? Promise.resolve(from)
-                : geocodeAddress(route.origin, { fallbackCoords: userCoords }),
+                : geocodeAddress(route.origin, { fallbackCoords: userCoordsRef.current }),
               to
                 ? Promise.resolve(to)
                 : geocodeAddress(route.destination, {
-                    fallbackCoords: userCoords,
+                    fallbackCoords: userCoordsRef.current,
                   }),
             ]);
             from = from || geocodedFrom;
@@ -985,10 +941,12 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     return () => {
       mounted = false;
     };
-  }, [resolveRouteInfo, selectedRouteId, userCoords]);
+  }, [resolveRouteInfo, selectedRouteId]);
 
   // Periodic route info refresh: detect admin changes to origin/destination
   const lastRouteVersionRef = useRef(null);
+  const routeInfoRef = useRef(routeInfo);
+  useEffect(() => { routeInfoRef.current = routeInfo; }, [routeInfo]);
   useEffect(() => {
     if (!Number.isFinite(selectedRouteId)) return undefined;
 
@@ -1027,12 +985,12 @@ export default function TrackingPage({ routeId: routeIdProp }) {
               from
                 ? Promise.resolve(from)
                 : geocodeAddress(freshRoute.origin, {
-                    fallbackCoords: userCoords,
+                    fallbackCoords: userCoordsRef.current,
                   }),
               to
                 ? Promise.resolve(to)
                 : geocodeAddress(freshRoute.destination, {
-                    fallbackCoords: userCoords,
+                    fallbackCoords: userCoordsRef.current,
                   }),
             ]);
             from = from || geoFrom;
@@ -1074,13 +1032,13 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     };
 
     // Initialize version key from current routeInfo
-    if (routeInfo) {
-      lastRouteVersionRef.current = buildRouteSignature(routeInfo);
+    if (routeInfoRef.current) {
+      lastRouteVersionRef.current = buildRouteSignature(routeInfoRef.current);
     }
 
     const intervalId = setInterval(checkRouteUpdate, ROUTE_REFRESH_INTERVAL_MS);
     return () => clearInterval(intervalId);
-  }, [resolveRouteInfo, selectedRouteId, userCoords, routeInfo]);
+  }, [resolveRouteInfo, selectedRouteId]);
 
   useEffect(() => {
     if (!Number.isFinite(selectedRouteId)) return undefined;
@@ -1407,9 +1365,6 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     !forceBuenaventuraDemo && (hasResolvedStops || hasPlannedRoute);
   const canManageGuidedRoute = currentRole === "driver";
   const routeIsLive = guidedRouteRunning || hasLiveData;
-  const canStartGuidedRoute =
-    canManageGuidedRoute &&
-    (hasPlannedRoute || Boolean(routeInfo?.origin && routeInfo?.destination));
 
   const displayOriginCoords = showRouteContext ? originCoords : null;
   const displayDestinationCoords = showRouteContext ? destinationCoords : null;
@@ -1878,12 +1833,8 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     return "Ver impacto";
   };
 
-  const etaLabel = eta === null ? "Sin ETA" : `${eta} min`;
 
-  const transportModeDisplay = useMemo(() => {
-    // return the icon element for the current transport mode to avoid overflow
-    return <TransportIcon type={transportMode === "vehicle" ? "car" : transportMode} />;
-  }, [transportMode]);
+
 
   const stopGuidedRoute = () => {
     if (guidedRouteTimerRef.current) {
@@ -2204,7 +2155,6 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   };
 
   const handleStopAll = async () => {
-    // Stop guided playback and live transmission
     try {
       stopGuidedRoute();
     } catch (e) {
@@ -2217,110 +2167,109 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     }
   };
 
+  const nearDestination = useMemo(
+    () =>
+      Number.isFinite(remainingDistanceKm) &&
+      remainingDistanceKm <= 0.3 &&
+      routeState === "en_curso",
+    [remainingDistanceKm, routeState],
+  );
+
+  const [showArrivalNotif, setShowArrivalNotif] = useState(false);
+  const arrivalNotifTimerRef = useRef(null);
+  const arrivalNotifiedRef = useRef(false);
+
+  useEffect(() => {
+    if (nearDestination && !arrivalNotifiedRef.current) {
+      arrivalNotifiedRef.current = true;
+      setShowArrivalNotif(true);
+      if (arrivalNotifTimerRef.current) clearTimeout(arrivalNotifTimerRef.current);
+      arrivalNotifTimerRef.current = setTimeout(() => setShowArrivalNotif(false), 10000);
+    }
+    if (!nearDestination && routeState === "detenida") {
+      arrivalNotifiedRef.current = false;
+    }
+    return () => {
+      if (arrivalNotifTimerRef.current) clearTimeout(arrivalNotifTimerRef.current);
+    };
+  }, [nearDestination, routeState]);
+
   return (
-    <div className="tracking-layout min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 font-sans">
-      <div className="tracking-page-header px-4 md:px-8 pt-4 md:pt-6 pb-0 max-w-[1400px] mx-auto">
-        <TrackingHero
-          backTo="/dashboard"
-          backAriaLabel="Volver al dashboard"
-          eyebrow="Sistema activo"
-          title="Tracking en tiempo real"
-          description="Monitorea rutas activas, localiza conductores y sigue cada recorrido en tiempo real."
-          subtitle={
-            isAdminView
-              ? ""
-              : routeInfo?.name ||
-                (Number.isFinite(selectedRouteId)
-                  ? `Ruta #${selectedRouteId}`
-                  : "")
-          }
-          meta={
-            <>
-              <span className={`status-badge ${statusBadge.color}`}>
-                <span className="status-dot" />
-                {statusBadge.label}
-              </span>
-              <span className="tracking-page-hero-updates">
-                {trackings.length} actualizaciones
-              </span>
-            </>
-          }
-        />
-        <div className="tracking-transport-bar mt-3">
-          <TransportBar
-            value={transportMode}
-            onChange={(m) => {
-              try {
-                setTransportMode(m);
-                localStorage.setItem("transportMode", m);
-              } catch (e) {
-                /* ignore */
-              }
-            }}
-          />
+    <div className="tracking-layout">
+      {/* ---- Toasts globales ---- */}
+      {showRouteFinishedToast && (
+        <div className="route-finished-toast" role="status" aria-live="polite">
+          ✓ Recorrido finalizado
         </div>
-        {showRouteFinishedToast && (
-          <div
-            className="route-finished-toast"
-            role="status"
-            aria-live="polite"
-          >
-            Recorrido finalizado
+      )}
+      {showArrivalNotif && (
+        <div className="arrival-notif" role="alert" aria-live="assertive">
+          <span className="arrival-notif-icon">🚏</span>
+          <div>
+            <strong className="arrival-notif-title">Llegando al destino</strong>
+            <p className="arrival-notif-sub">
+              {remainingDistanceKm !== null
+                ? `${remainingDistanceKm.toFixed(2)} km restantes`
+                : "Próxima parada"}
+            </p>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      <div className="tracking-dashboard px-4 md:px-8 py-5 max-w-[1400px] mx-auto">
+      <div className="tracking-dashboard">
+        {/* ======================================================
+            SIDEBAR
+        ====================================================== */}
         <aside className="tracking-analytics-panel">
-          {isAdminView ? (
+          {/* Cabecera sidebar */}
+          <div className="sidebar-top">
+            <button
+              type="button"
+              className="sidebar-back"
+              onClick={() => navigate("/dashboard")}
+              aria-label="Volver al dashboard"
+            >
+              ← Volver
+            </button>
+            <span className={`status-badge ${statusBadge.color}`}>
+              <span className="status-dot" />
+              {statusBadge.label}
+            </span>
+          </div>
+
+          {showLiveToast && (
+            <div className="sidebar-live-toast" role="status" aria-live="polite">
+              <span className="live-toast-dot" /> Conectado en vivo
+            </div>
+          )}
+
+          {/* ==================== ADMIN ==================== */}
+          {isAdminView && (
             <>
-              <section className="kpi-card">
-                <div className="panel-title-row admin-panel-title-row">
-                  <div>
-                    <p className="kpi-label">KPIs globales</p>
-                    <h2 className="panel-title">Vision general</h2>
-                  </div>
-                  <span className="panel-counter">
-                    {displayActiveVehicles.length}
-                  </span>
+              <div className="admin-kpi-row">
+                <div className="admin-kpi-pill">
+                  <span className="admin-kpi-pill-num">{displayActiveVehicles.length}</span>
+                  <span className="admin-kpi-pill-label">Vehículos</span>
                 </div>
-
-                <div className="admin-kpi-grid">
-                  <article className="admin-kpi-tile">
-                    <span className="admin-kpi-name">Vehiculos activos</span>
-                    <strong className="admin-kpi-number">
-                      {displayActiveVehicles.length}
-                    </strong>
-                    <span className="admin-kpi-helper">
-                      de {adminStats?.vehicles_registered ?? 0} registrados
-                    </span>
-                  </article>
-                  <article className="admin-kpi-tile">
-                    <span className="admin-kpi-name">Estudiantes</span>
-                    <strong className="admin-kpi-number">
-                      {totalStudents}
-                    </strong>
-                    <span className="admin-kpi-helper">asignados a rutas</span>
-                  </article>
+                <div className="admin-kpi-pill">
+                  <span className="admin-kpi-pill-num">{filteredAdminRouteSummaries.length}</span>
+                  <span className="admin-kpi-pill-label">Rutas</span>
                 </div>
-              </section>
-
-              <section className="kpi-card">
-                <div className="panel-title-row admin-panel-title-row">
-                  <div>
-                    <p className="kpi-label">Rutas activas</p>
-                    <h2 className="panel-title">Operacion en ciudad</h2>
-                  </div>
-                  <span className="panel-counter">
-                    {filteredAdminRouteSummaries.length}
-                  </span>
+                <div className="admin-kpi-pill">
+                  <span className="admin-kpi-pill-num">{totalStudents}</span>
+                  <span className="admin-kpi-pill-label">Estudiantes</span>
                 </div>
+              </div>
 
+              <section className="sidebar-section">
+                <div className="sidebar-section-head">
+                  <span className="sidebar-section-title">Rutas activas</span>
+                  <span className="panel-counter">{filteredAdminRouteSummaries.length}</span>
+                </div>
                 {hasAdminRouteFilter && (
-                  <div className="admin-filter-banner">
+                  <div className="admin-filter-row">
                     <span className="admin-filter-text">
-                      Filtro activo sobre {filteredAdminRouteSummaries.length}{" "}
-                      ruta(s).
+                      Filtro: {filteredAdminRouteSummaries.length} ruta(s)
                     </span>
                     <button
                       type="button"
@@ -2331,45 +2280,24 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                     </button>
                   </div>
                 )}
-
                 {filteredAdminRouteSummaries.length === 0 ? (
                   <p className="panel-muted">No hay rutas para mostrar.</p>
                 ) : (
                   <div className="admin-route-list" role="list">
                     {filteredAdminRouteSummaries.map((route) => (
-                      <article
-                        key={route.id}
-                        className="admin-route-item"
-                        role="listitem"
-                      >
-                        <div className="admin-route-head">
-                          <div>
-                            <h3 className="admin-route-name">{route.name}</h3>
-                            <p className="admin-route-driver">
-                              {route.driver_name}
-                            </p>
+                      <article key={route.id} className="admin-route-row" role="listitem">
+                        <div className="admin-route-row-head">
+                          <span className={`admin-route-dot ${route.is_live ? "live" : "idle"}`} />
+                          <div className="admin-route-row-info">
+                            <span className="admin-route-row-name">{route.name}</span>
+                            <span className="admin-route-row-driver">{route.driver_name}</span>
                           </div>
-                          <span
-                            className={`admin-route-state ${route.is_live ? "live" : "idle"}`}
-                          >
+                          <span className={`admin-route-state ${route.is_live ? "live" : "idle"}`}>
                             {route.state_label}
                           </span>
                         </div>
-                        <div className="admin-route-progress-row">
-                          <span className="admin-route-progress-label">
-                            Avance
-                          </span>
-                          <strong className="admin-route-progress-value">
-                            {route.progress_percent}%
-                          </strong>
-                        </div>
-                        <div
-                          className="admin-route-progress-bar"
-                          aria-hidden="true"
-                        >
-                          <span
-                            style={{ width: `${route.progress_percent}%` }}
-                          />
+                        <div className="admin-route-progress-bar mini" aria-hidden="true">
+                          <span style={{ width: `${Math.min(route.progress_percent ?? 0, 100)}%` }} />
                         </div>
                       </article>
                     ))}
@@ -2377,430 +2305,288 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                 )}
               </section>
 
-              <section className="kpi-card">
-                <div className="panel-title-row admin-panel-title-row">
-                  <div>
-                    <p className="kpi-label">Alertas</p>
-                    <h2 className="panel-title">Monitoreo operativo</h2>
+              {contextualAdminAlerts.length > 0 && (
+                <section className="sidebar-section">
+                  <div className="sidebar-section-head">
+                    <span className="sidebar-section-title">Alertas</span>
+                    <span className="panel-counter alert">{contextualAdminAlerts.length}</span>
                   </div>
-                  <span className="panel-counter">
-                    {contextualAdminAlerts.length}
-                  </span>
-                </div>
-
-                {contextualAdminAlerts.length === 0 ? (
-                  <p className="panel-muted">
-                    Sin alertas operativas por ahora.
-                  </p>
-                ) : (
                   <div className="admin-alert-list">
                     {contextualAdminAlerts.map((alert) => (
                       <article
                         key={alert.id || `${alert.title}-${alert.detail}`}
-                        className={`admin-alert-item ${alert.tone}`}
+                        className={`admin-alert-row ${alert.tone}`}
                       >
-                        <div className="admin-alert-head">
-                          <div>
-                            <p className="admin-alert-title">{alert.title}</p>
-                            <p className="admin-alert-detail">{alert.detail}</p>
-                          </div>
-                          <button
-                            type="button"
-                            className="admin-alert-action"
-                            onClick={() => handleAdminAlertAction(alert)}
-                          >
-                            {getAdminAlertActionLabel(alert)}
-                          </button>
+                        <div className="admin-alert-row-body">
+                          <p className="admin-alert-title">{alert.title}</p>
+                          <p className="admin-alert-detail">{alert.detail}</p>
                         </div>
-                      </article>
-                    ))}
-                  </div>
-                )}
-              </section>
-            </>
-          ) : (
-            <>
-              <section className="kpi-card">
-                {currentRole === "driver" && (
-                  <div className="route-select-row">
-                    <label className="kpi-label">Ruta activa</label>
-                    <select
-                      value={
-                        Number.isFinite(selectedRouteId) ? selectedRouteId : ""
-                      }
-                      onChange={(e) => {
-                        const val = Number(e.target.value);
-                        if (Number.isFinite(val)) navigate(`/tracking/${val}`);
-                      }}
-                      disabled={loadingRoutes}
-                      className="route-select"
-                    >
-                      <option value="">Selecciona una ruta</option>
-                      {driverRoutes.map((r) => (
-                        <option key={r.id} value={r.id}>
-                          {r.name || `Ruta ${r.id}`}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-                <div className="route-summary-topbar">
-                  <p className="kpi-label mb-0">Ruta real</p>
-                  <span className={`route-auth-badge ${routeBadge.className}`}>
-                    {routeBadge.label}
-                  </span>
-                  {currentRole === "driver" && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setMode((m) =>
-                          m === "manual" ? "automatic" : "manual",
-                        )
-                      }
-                      className={`mode-toggle ${mode === "manual" ? "manual" : "automatic"}`}
-                    >
-                      Modo {mode === "manual" ? "Manual" : "Auto"}
-                    </button>
-                  )}
-                </div>
-                <div className="route-stop-stack">
-                  <div className="route-stop-card start">
-                    <span className="route-stop-dot" aria-hidden="true" />
-                    <div>
-                      <p className="kpi-label">Origen</p>
-                      <p className="kpi-value">
-                        {routeInfo?.origin || "Centro, Buenaventura"}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="route-stop-divider" aria-hidden="true" />
-                  <div className="route-stop-card end">
-                    <span className="route-stop-dot" aria-hidden="true" />
-                    <div>
-                      <p className="kpi-label">Destino</p>
-                      <p className="kpi-value">
-                        {routeInfo?.destination || "Seminario San Buenaventura"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <div className="route-metrics-grid">
-                  <div className="route-metric-tile">
-                    <span className="route-metric-label">ETA</span>
-                    <strong className="route-metric-value">{etaLabel}</strong>
-                    {transportMode !== "vehicle" && (
-                      <div style={{ marginTop: 8 }}>
-                        <label className="kpi-label" style={{ marginRight: 8 }}>
-                          Modo
-                        </label>
-                        <div className="transport-mode-display">{transportModeDisplay}</div>
-                      </div>
-                    )}
-                  </div>
-                  <div className="route-metric-tile">
-                    <span className="route-metric-label">Planif.</span>
-                    <strong className="route-metric-value">
-                      {plannedDistanceKm > 0
-                        ? `${plannedDistanceKm.toFixed(1)} km`
-                        : "Sin trazo"}
-                    </strong>
-                  </div>
-                  <div className="route-metric-tile">
-                    <span className="route-metric-label">Recorr.</span>
-                    <strong className="route-metric-value">
-                      {traveledDistanceKm > 0
-                        ? `${traveledDistanceKm.toFixed(1)} km`
-                        : "0.0 km"}
-                    </strong>
-                  </div>
-                  <div className="route-metric-tile">
-                    <span className="route-metric-label">Pend.</span>
-                    <strong className="route-metric-value">
-                      {remainingDistanceKm !== null
-                        ? `${remainingDistanceKm.toFixed(1)} km`
-                        : "Sin trazo"}
-                    </strong>
-                  </div>
-                </div>
-                {(canManageGuidedRoute || isAdminView) && (
-                  <div className="route-progress-block">
-                    <div className="route-progress-row">
-                      <span className="route-progress-label">
-                        Progreso del recorrido
-                      </span>
-                      <strong className="route-progress-value">
-                        {routeProgressPercent}%
-                      </strong>
-                    </div>
-                    <div className="route-progress-bar" aria-hidden="true">
-                      <span style={{ width: `${routeProgressPercent}%` }} />
-                    </div>
-                  </div>
-                )}
-                {(canManageGuidedRoute || isAdminView) && (
-                  <>
-                    <div className="kpi-eta-row">
-                      <span className="kpi-label">Estado de ruta</span>
-                      <strong className="kpi-eta-value">
-                        {routeBadge.statusLabel}
-                      </strong>
-                    </div>
-                    {etaUpdated && (
-                      <p className="kpi-updated">
-                        Actualizado:{" "}
-                        {etaUpdated.toLocaleTimeString("es", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </p>
-                    )}
-                  </>
-                )}
-                {canManageGuidedRoute ? (
-                  <div className="route-actions">
-                    {/** Primary route button: label and enabled state reflect routeState and playback */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setGuidedRouteError("");
-                        void startGuidedRoute();
-                      }}
-                      disabled={
-                        loading || guidedRouteLoading || guidedRouteRunning
-                      }
-                      className={`route-action-button primary ${guidedRouteRunning || routeState === "en_curso" ? "active" : ""}`}
-                    >
-                      {guidedRouteLoading
-                        ? "Preparando ruta..."
-                        : guidedRouteRunning || sharing
-                          ? "Ruta en curso"
-                          : routeState === "finalizada"
-                            ? "Finalizada"
-                            : "Iniciar Ruta"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void handleStopAll();
-                      }}
-                      disabled={
-                        (!sharing &&
-                          !guidedRouteRunning &&
-                          !guidedRouteLoading) ||
-                        routeState === "finalizada"
-                      }
-                      className="route-action-button secondary"
-                    >
-                      Detener
-                    </button>
-                  </div>
-                ) : (
-                  <div className="route-status-user">
-                    <div
-                      className="route-status-row"
-                      style={{ alignItems: "center" }}
-                    >
-                      <div style={{ flex: 1 }}>
-                        <span className="kpi-label">Estado de ruta</span>
-                        <div
-                          className={`route-status-badge ${routeBadge.className}`}
-                        >
-                          {routeBadge.statusLabel}
-                        </div>
-                      </div>
-                      <div style={{ textAlign: "right" }}>
-                        <div className="eta-small">{etaLabel}</div>
-                      </div>
-                    </div>
-
-                    {routeState === "finalizada" ? (
-                      <div className="panel-empty-state">
-                        <p className="panel-muted">
-                          El recorrido ha finalizado. Gracias por usar el
-                          servicio.
-                        </p>
                         <button
                           type="button"
-                          onClick={() => {
-                            navigate("/dashboard");
-                          }}
-                          className="route-action-button primary compact"
+                          className="admin-alert-action"
+                          onClick={() => handleAdminAlertAction(alert)}
                         >
-                          Ver historial
+                          {getAdminAlertActionLabel(alert)}
                         </button>
-                      </div>
-                    ) : (
-                      <>
-                        <p className="panel-muted">
-                          Esperando inicio por parte del conductor.
-                        </p>
-                        <div className="route-progress-compact">
-                          <div
-                            className="route-progress-bar small"
-                            aria-hidden="true"
-                          >
-                            <span
-                              style={{ width: `${routeProgressPercent}%` }}
-                            />
-                          </div>
-                          <strong className="route-progress-percent">
-                            {routeProgressPercent}%
-                          </strong>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
-                {guidedRouteError && (
-                  <p className="panel-error">{guidedRouteError}</p>
-                )}
-              </section>
-
-              <section className="kpi-card">
-                <div className="panel-title-row">
-                  <h2 className="panel-title">Vehiculos activos</h2>
-                  <span className="panel-counter">
-                    {displayActiveVehicles.length}
-                  </span>
-                </div>
-
-                {loading ? (
-                  <p className="panel-muted">Cargando datos...</p>
-                ) : displayActiveVehicles.length === 0 ? (
-                  <div className="panel-empty-state">
-                    <p className="panel-muted">
-                      Aun no hay posicion activa para esta ruta.
-                    </p>
-                    {canManageGuidedRoute ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void startGuidedRoute();
-                        }}
-                        disabled={
-                          guidedRouteLoading ||
-                          guidedRouteRunning ||
-                          !canStartGuidedRoute
-                        }
-                        className="route-action-button primary compact"
-                      >
-                        {guidedRouteLoading
-                          ? "Preparando..."
-                          : "Iniciar recorrido"}
-                      </button>
-                    ) : (
-                      <p className="panel-muted">
-                        Esperando a que el conductor active el recorrido.
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <div className="vehicle-list">
-                    {displayActiveVehicles.map((vehicle) => (
-                      <article key={vehicle.label} className="vehicle-item">
-                        <div className="vehicle-chip">
-                          <span
-                            className="vehicle-chip-icon"
-                            aria-hidden="true"
-                          >
-                            <svg
-                              width="12"
-                              height="12"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            >
-                              <rect x="1" y="4" width="16" height="12" rx="2" />
-                              <path d="M17 8h3l3 4v4h-6V8z" />
-                              <circle cx="5.5" cy="18.5" r="2.5" />
-                              <circle cx="18.5" cy="18.5" r="2.5" />
-                            </svg>
-                          </span>
-                          {vehicle.label}
-                        </div>
-                        <div className="vehicle-stats">
-                          <div>
-                            <p className="stat-label">Velocidad</p>
-                            <p className="stat-value">
-                              {vehicle.speedKmh} km/h
-                            </p>
-                          </div>
-                          <div>
-                            <p className="stat-label">A bordo</p>
-                            <p className="stat-value">
-                              {vehicle.studentsOnboard}
-                            </p>
-                          </div>
-                        </div>
-                        <span
-                          className={`vehicle-status ${vehicle.status === "En ruta" ? "moving" : "idle"}`}
-                        >
-                          {vehicle.status}
-                        </span>
                       </article>
                     ))}
                   </div>
-                )}
+                </section>
+              )}
+            </>
+          )}
+
+          {/* ==================== CONDUCTOR ==================== */}
+          {currentRole === "driver" && (
+            <>
+              {driverRoutes.length > 0 && (
+                <div className="driver-route-select-wrap">
+                  <label className="sidebar-label">Ruta asignada</label>
+                  <select
+                    value={Number.isFinite(selectedRouteId) ? selectedRouteId : ""}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      if (Number.isFinite(val)) navigate(`/tracking/${val}`);
+                    }}
+                    disabled={loadingRoutes || guidedRouteRunning}
+                    className="route-select"
+                  >
+                    <option value="">Selecciona una ruta</option>
+                    {driverRoutes.map((r) => (
+                      <option key={r.id} value={r.id}>{r.name || `Ruta ${r.id}`}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {guidedRouteRunning && (
+                <div className="gps-mode-banner">
+                  <span className="gps-mode-dot" />
+                  <span>Modo GPS activo</span>
+                </div>
+              )}
+
+              <section className="sidebar-section">
+                <div className="sidebar-section-head">
+                  <span className="sidebar-section-title">
+                    {routeInfo?.name ||
+                      (Number.isFinite(selectedRouteId)
+                        ? `Ruta #${selectedRouteId}`
+                        : "Sin ruta")}
+                  </span>
+                  <span className={`route-auth-badge ${routeBadge.className}`}>
+                    {routeBadge.statusLabel}
+                  </span>
+                </div>
+
+                <div className="route-stop-stack">
+                  <div className="route-stop-row">
+                    <span className="route-stop-dot start" />
+                    <div>
+                      <p className="stop-label">Origen</p>
+                      <p className="stop-value">{routeInfo?.origin || "—"}</p>
+                    </div>
+                  </div>
+                  {displayIntermediateStops.map((stop) => (
+                    <div key={stop.id} className="route-stop-row">
+                      <span className="route-stop-dot intermediate" />
+                      <div>
+                        <p className="stop-label">Parada {stop.order}</p>
+                        <p className="stop-value">{stop.label}</p>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="route-stop-row">
+                    <span className="route-stop-dot end" />
+                    <div>
+                      <p className="stop-label">Destino</p>
+                      <p className="stop-value">{routeInfo?.destination || "—"}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="progress-row">
+                  <span className="progress-label">Progreso</span>
+                  <strong className="progress-pct">{routeProgressPercent}%</strong>
+                </div>
+                <div className="progress-bar" aria-hidden="true">
+                  <span style={{ width: `${routeProgressPercent}%` }} />
+                </div>
               </section>
+
+              <div className="driver-actions">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGuidedRouteError("");
+                    void startGuidedRoute();
+                  }}
+                  disabled={loading || guidedRouteLoading || guidedRouteRunning}
+                  className={`action-btn primary${guidedRouteRunning || routeState === "en_curso" ? " active" : ""}`}
+                >
+                  {guidedRouteLoading
+                    ? "Preparando..."
+                    : guidedRouteRunning
+                      ? "Ruta en curso"
+                      : routeState === "finalizada"
+                        ? "Finalizada"
+                        : "Iniciar Ruta"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleStopAll()}
+                  disabled={
+                    (!sharing && !guidedRouteRunning && !guidedRouteLoading) ||
+                    routeState === "finalizada"
+                  }
+                  className="action-btn secondary"
+                >
+                  Detener
+                </button>
+              </div>
+
+              {nearDestination && (
+                <div className="near-destination-alert">
+                  <span>🚏</span>
+                  <div>
+                    <strong>Llegando al destino</strong>
+                    <p>
+                      {remainingDistanceKm !== null
+                        ? `${remainingDistanceKm.toFixed(2)} km restantes`
+                        : "Próxima parada"}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {guidedRouteError && (
+                <p className="panel-error">{guidedRouteError}</p>
+              )}
+            </>
+          )}
+
+          {/* ==================== USUARIO ==================== */}
+          {currentRole === "user" && (
+            <>
+              <section className="sidebar-section">
+                <div className="sidebar-section-head">
+                  <span className="sidebar-section-title">
+                    {routeInfo?.name ||
+                      (Number.isFinite(selectedRouteId)
+                        ? `Ruta #${selectedRouteId}`
+                        : "Sin ruta")}
+                  </span>
+                  <span className={`route-auth-badge ${routeBadge.className}`}>
+                    {routeBadge.statusLabel}
+                  </span>
+                </div>
+
+                <div className="route-stop-stack">
+                  <div className="route-stop-row">
+                    <span className="route-stop-dot start" />
+                    <div>
+                      <p className="stop-label">Origen</p>
+                      <p className="stop-value">{routeInfo?.origin || "—"}</p>
+                    </div>
+                  </div>
+                  {displayIntermediateStops.map((stop) => (
+                    <div key={stop.id} className="route-stop-row">
+                      <span className="route-stop-dot intermediate" />
+                      <div>
+                        <p className="stop-label">Parada {stop.order}</p>
+                        <p className="stop-value">{stop.label}</p>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="route-stop-row">
+                    <span className="route-stop-dot end" />
+                    <div>
+                      <p className="stop-label">Destino</p>
+                      <p className="stop-value">{routeInfo?.destination || "—"}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="progress-row">
+                  <span className="progress-label">Progreso del recorrido</span>
+                  <strong className="progress-pct">{routeProgressPercent}%</strong>
+                </div>
+                <div className="progress-bar" aria-hidden="true">
+                  <span style={{ width: `${routeProgressPercent}%` }} />
+                </div>
+
+                {routeState === "finalizada" ? (
+                  <div className="user-finished">
+                    <p className="panel-muted">
+                      El recorrido ha finalizado. Gracias por usar el servicio.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => navigate("/dashboard")}
+                      className="action-btn primary compact"
+                    >
+                      Ver historial
+                    </button>
+                  </div>
+                ) : routeState === "en_curso" ? (
+                  <div className="user-in-progress">
+                    <span className="user-status-dot live" />
+                    <span className="user-status-text">Ruta en progreso</span>
+                  </div>
+                ) : (
+                  <p className="panel-muted">
+                    Esperando inicio por parte del conductor.
+                  </p>
+                )}
+
+              </section>
+
+              {nearDestination && (
+                <div className="near-destination-alert">
+                  <span>🚏</span>
+                  <div>
+                    <strong>Llegando al destino</strong>
+                    <p>
+                      {remainingDistanceKm !== null
+                        ? `${remainingDistanceKm.toFixed(2)} km restantes`
+                        : "Próxima parada"}
+                    </p>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </aside>
 
-        <main className={`map-container-wrapper h-[640px] ${showLiveTransition ? "map-live-transition" : ""}`}>
-  {showLiveToast && (
-    <div className="live-toast" role="status" aria-live="polite">
-      <span className="live-toast-dot" /> Conectado en vivo
-    </div>
-  )}
-
-  <MapView
-    trackings={displayTrackings}
-    plannedRoutePolyline={displayPlannedRoutePolyline}
-    remainingRoutePolyline={routeProgressSegments.remaining}
-    traveledRoutePolyline={displayTraveledRoutePolyline}
-    originCoords={displayOriginCoords}
-    destinationCoords={displayDestinationCoords}
-    originName={routeInfo?.origin || "Centro"}
-    destinationName={routeInfo?.destination || "Seminario San Buenaventura"}
-    intermediateStops={displayIntermediateStops}
-    activeVehicles={displayActiveVehicles}
-    vehiclePosition={showEmptyCityCanvas ? null : displayVehiclePosition}
-    userCoords={userCoords}
-    mapHeight="640px"
-    focusAllVehicles={isAdminView}
-    routeOverlays={isAdminView ? adminRouteOverlays : []}
-    highlightedRouteIds={isAdminView ? highlightedAdminRouteIds : []}
-    eta={eta}
-    etaUpdated={etaUpdated}
-  />
-</main>
-
-
-<div className="mt-4 rounded-3xl bg-white border border-blue-100 shadow-xl p-4">
-  <div className="mb-3 flex items-center gap-3">
-    <div className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
-      📍
-    </div>
-    <div>
-      <p className="text-sm font-semibold text-slate-900">Confirma tu ubicación</p>
-      <p className="text-xs text-slate-400">Revisa la dirección detectada antes de continuar</p>
-    </div>
-  </div>
-
-  <div className="rounded-2xl bg-blue-50 border border-blue-100 px-3 py-3 mb-4">
-    <p className="text-sm text-slate-700">{detectedAddress}</p>
-  </div>
-
-  <button
-    type="button"
-    className="w-full rounded-2xl bg-blue-600 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
-  >
-    Confirmar ubicación
-  </button>
-</div>
+        {/* ======================================================
+            MAPA
+        ====================================================== */}
+        <main
+          className={`map-container-wrapper${showLiveTransition ? " map-live-transition" : ""}`}
+        >
+          <MapView
+            trackings={displayTrackings}
+            plannedRoutePolyline={displayPlannedRoutePolyline}
+            remainingRoutePolyline={routeProgressSegments.remaining}
+            traveledRoutePolyline={displayTraveledRoutePolyline}
+            originCoords={displayOriginCoords}
+            destinationCoords={displayDestinationCoords}
+            originName={routeInfo?.origin || "Centro"}
+            destinationName={
+              routeInfo?.destination || "Seminario San Buenaventura"
+            }
+            intermediateStops={displayIntermediateStops}
+            activeVehicles={displayActiveVehicles}
+            vehiclePosition={showEmptyCityCanvas ? null : displayVehiclePosition}
+            userCoords={userCoords}
+            mapHeight="100%"
+            focusAllVehicles={isAdminView}
+            routeOverlays={isAdminView ? adminRouteOverlays : []}
+            highlightedRouteIds={isAdminView ? highlightedAdminRouteIds : []}
+            eta={eta}
+            etaUpdated={etaUpdated}
+          />
+        </main>
       </div>
     </div>
   );

@@ -1,61 +1,58 @@
 // Mapa en tiempo real con estilo limpio tipo navegacion
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import React from "react";
-import L from "leaflet";
-import {
-  CircleMarker,
-  MapContainer,
-  Marker,
-  Polyline,
-  TileLayer,
-  useMap,
-} from "react-leaflet";
-import "./leaflet-fixes.css";
+import { GoogleMap, LoadScript, Polyline, OverlayView } from "@react-google-maps/api";
+import "./map-styles.css";
 
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl:
-    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-});
-
-const originIcon = L.divIcon({
-  className: "",
-  html: `
-    <div class="vt-route-point vt-route-point-start"></div>`,
-  iconSize: [18, 18],
-  iconAnchor: [9, 9],
-});
-
-const destinationIcon = L.divIcon({
-  className: "",
-  html: `
-    <div class="vt-route-point vt-route-point-end"></div>`,
-  iconSize: [20, 20],
-  iconAnchor: [10, 10],
-});
-
-function createIntermediateStopIcon(index) {
-  return L.divIcon({
-    className: "",
-    html: `
-      <div class="vt-route-stop-marker">
-        <span class="vt-route-stop-ring"></span>
-        <span class="vt-route-stop-core">${safeText(index)}</span>
-      </div>`,
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
-  });
+// ---------------------------------------------------------------------------
+// Helpers de coordenadas
+// ---------------------------------------------------------------------------
+function toLatLng(coords) {
+  if (!Array.isArray(coords) || coords.length < 2) return null;
+  const [lat, lng] = coords;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return { lat, lng };
 }
 
+function toLatLngArray(coordsArray) {
+  if (!Array.isArray(coordsArray)) return [];
+  return coordsArray
+    .filter((c) => Array.isArray(c) && Number.isFinite(c[0]) && Number.isFinite(c[1]))
+    .map(([lat, lng]) => ({ lat, lng }));
+}
+
+// ---------------------------------------------------------------------------
+// Constantes
+// ---------------------------------------------------------------------------
+const GOOGLE_MAPS_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "";
 const BUENAVENTURA_CENTER = [3.89243, -77.02824];
-const BUENAVENTURA_MAX_BOUNDS = [
-  [3.84, -77.09],
-  [3.93, -76.99],
-];
+const BUENAVENTURA_BOUNDS = { south: 3.84, west: -77.09, north: 3.93, east: -76.99 };
 const CORPORATE_ROUTE_COLOR = "#0A2B3D";
 const CORPORATE_ROUTE_HALO = "#dbeafe";
+
+const GOOGLE_MAPS_STYLES = [
+  { featureType: "all", elementType: "labels.text.fill", stylers: [{ color: "#0f172a" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#e2e8f0" }] },
+  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#f1f5f9" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#bfdbfe" }] },
+  { featureType: "landscape", elementType: "geometry", stylers: [{ color: "#f0f9ff" }] },
+  { featureType: "poi", elementType: "geometry", stylers: [{ color: "#e0f2fe" }] },
+  { featureType: "transit", elementType: "geometry", stylers: [{ color: "#dbeafe" }] },
+  { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#cbd5e1" }] },
+];
+
+const GOOGLE_MAPS_OPTIONS = {
+  restriction: { latLngBounds: BUENAVENTURA_BOUNDS, strictBounds: false },
+  disableDefaultUI: false,
+  zoomControl: true,
+  mapTypeControl: false,
+  scaleControl: false,
+  streetViewControl: false,
+  rotateControl: false,
+  fullscreenControl: false,
+  styles: GOOGLE_MAPS_STYLES,
+};
 
 function projectPointOnSegment(point, start, end) {
   const startX = start[1];
@@ -198,29 +195,6 @@ function getPointAtDistance(path, distance) {
   return path[path.length - 1];
 }
 
-function createVehicleIcon(label, status = "Detenido", rotation = 0) {
-  const safeLabel = safeText(label || "Vehiculo");
-  const normalizedStatus = status === "En ruta" ? "moving" : "idle";
-  const safeRotation = Number.isFinite(rotation) ? rotation : 0;
-  return L.divIcon({
-    className: "",
-    html: `
-      <div class="vt-vehicle-chip vt-vehicle-chip-${normalizedStatus}">
-        <span class="vt-vehicle-icon" aria-hidden="true" style="transform: rotate(${safeRotation}deg);">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="1" y="4" width="16" height="12" rx="2"></rect>
-            <path d="M17 8h3l3 4v4h-6V8z"></path>
-            <circle cx="5.5" cy="18.5" r="2.2"></circle>
-            <circle cx="18.5" cy="18.5" r="2.2"></circle>
-          </svg>
-        </span>
-        <span class="vt-vehicle-text">${safeLabel}</span>
-      </div>`,
-    iconSize: [132, 36],
-    iconAnchor: [66, 18],
-  });
-}
-
 function getPoiEmoji(tags = {}) {
   const amenity = (tags.amenity || "").toLowerCase();
   const shop = (tags.shop || "").toLowerCase();
@@ -234,93 +208,6 @@ function getPoiEmoji(tags = {}) {
   if (shop && /mall|supermarket|department_store/.test(shop)) return "🛍️";
 
   return "📍";
-}
-
-function safeText(value) {
-  return String(value || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function createRouteLabelIcon(label, variant) {
-  const safeLabel = safeText(
-    label || (variant === "start" ? "Origen" : "Destino"),
-  );
-  return L.divIcon({
-    className: "",
-    html: `
-      <div class="vt-route-chip vt-route-chip-${variant}">
-        <span class="vt-route-chip-text">${safeLabel}</span>
-        <span class="vt-route-chip-arrow">›</span>
-      </div>`,
-    iconSize: [220, 52],
-    iconAnchor: variant === "start" ? [10, 46] : [210, 46],
-  });
-}
-
-function FitBounds({ coordinates, freezeAfterFirstFit = false }) {
-  const map = useMap();
-  const lastLengthRef = useRef(-1);
-  const fittedOnceRef = useRef(false);
-
-  useEffect(() => {
-    if (!coordinates?.length) return;
-    if (freezeAfterFirstFit && fittedOnceRef.current) return;
-    if (coordinates.length === lastLengthRef.current) return;
-    lastLengthRef.current = coordinates.length;
-
-    const valid = coordinates.filter(
-      (c) => c && Number.isFinite(c[0]) && Number.isFinite(c[1]),
-    );
-    if (!valid.length) return;
-
-    if (valid.length === 1) {
-      map.setView(valid[0], 15, { animate: false });
-      fittedOnceRef.current = true;
-      return;
-    }
-
-    const bounds = L.latLngBounds(valid);
-    if (bounds.isValid()) {
-      map.fitBounds(bounds, { padding: [80, 80], animate: false, maxZoom: 16 });
-      fittedOnceRef.current = true;
-    }
-  }, [map, coordinates, freezeAfterFirstFit]);
-
-  return null;
-}
-
-function AutoFollowVehicle({ vehiclePoint, enabled = true }) {
-  const map = useMap();
-  const firstFollowRef = useRef(true);
-
-  useEffect(() => {
-    if (!enabled || !vehiclePoint) return;
-
-    const [lat, lng] = vehiclePoint;
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-
-    if (firstFollowRef.current) {
-      firstFollowRef.current = false;
-      map.setView([lat, lng], Math.max(map.getZoom(), 17), { animate: false });
-      return;
-    }
-
-    map.panTo([lat, lng], {
-      animate: true,
-      duration: 1.1,
-      easeLinearity: 0.22,
-    });
-
-    if (map.getZoom() < 17) {
-      map.setZoom(17, { animate: true });
-    }
-  }, [map, vehiclePoint, enabled]);
-
-  return null;
 }
 
 /**
@@ -357,15 +244,22 @@ export default function MapView({
   pois = [],
 }) {
   const [displayPois, setDisplayPois] = useState(Array.isArray(pois) ? pois : []);
-
-  useEffect(() => {
-    setDisplayPois(Array.isArray(pois) ? pois : []);
-  }, [pois]);
   const [animatedVehiclePoint, setAnimatedVehiclePoint] = useState(null);
+  const [mapRef, setMapRef] = useState(null);
+
   const animationFrameRef = useRef(null);
   const animationStartRef = useRef(0);
   const previousAnimatedPointRef = useRef(null);
   const previousTraveledLineLengthRef = useRef(0);
+  const poisTimerRef = useRef(null);
+  const fittedOnceRef = useRef(false);
+  const lastFitLengthRef = useRef(-1);
+  const firstFollowRef = useRef(true);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    setDisplayPois(Array.isArray(pois) ? pois : []);
+  }, [pois]);
 
   const validPoints = useMemo(
     () =>
@@ -395,39 +289,13 @@ export default function MapView({
       userCoords,
     ],
   );
-  const samplePois = [
-    { id: "s1", lat: center[0] + 0.002, lon: center[1] + 0.002, tags: { name: "Universidad Demo", amenity: "university" } },
-    { id: "s2", lat: center[0] - 0.0015, lon: center[1] - 0.0015, tags: { name: "Hospital Demo", amenity: "hospital" } },
-    { id: "s3", lat: center[0] + 0.0018, lon: center[1] - 0.0018, tags: { name: "Parque Demo", leisure: "park" } },
-    { id: "s4", lat: center[0] - 0.0022, lon: center[1] + 0.0012, tags: { name: "Gasolinera Demo", amenity: "fuel" } },
-  ];
-
-  function injectSamplePois() {
-    setDisplayPois(samplePois);
-    console.debug("MapView injected sample POIs", samplePois);
-  }
-  const poisTimerRef = useRef(null);
-  const [mapRef, setMapRef] = useState(null);
-  const prevCenterRef = useRef(null);
-  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
-  const isPanningRef = useRef(false);
-  const [isPanning, setIsPanning] = useState(false);
-  const containerRef = useRef(null);
-  const [viewportOffsetY, setViewportOffsetY] = useState(0);
-  const [displayPoisSource, setDisplayPoisSource] = useState("none");
-
-  function zoomToRadius(zoom) {
-    const base = 2000; // meters around zoom ~13
-    return Math.max(600, Math.round(base * Math.pow(2, 13 - (zoom || 13)) / 4));
-  }
-
-
-  const loadLocalPois = React.useCallback(async () => {
+  const loadLocalPois = useCallback(async () => {
     try {
       const res = await fetch("/pois.json");
       if (!res.ok) {
         console.debug("MapView local pois not found (status)", res.status);
-        setDisplayPoisSource("none");
+        
+
         return;
       }
       const data = await res.json();
@@ -444,15 +312,17 @@ export default function MapView({
           .filter(Boolean);
       }
       setDisplayPois(parsed);
-      setDisplayPoisSource(parsed.length ? "local" : "none");
+      
+
       console.debug("MapView loaded local POIs:", parsed.length);
     } catch (err) {
       console.debug("MapView error loading local pois:", err);
-      setDisplayPoisSource("none");
+      
+
     }
   }, []);
 
-  const fetchPOIs = React.useCallback(async (lat, lng, radiusMeters = 2000) => {
+  const fetchPOIs = useCallback(async (lat, lng, radiusMeters = 2000) => {
     try {
       const q = `[out:json][timeout:25];(
   node(around:${radiusMeters},${lat},${lng})[amenity=school];
@@ -477,7 +347,8 @@ out center;`;
       }));
       console.debug("MapView fetchPOIs parsed:", parsed.length, parsed.slice(0, 6));
       setDisplayPois(parsed);
-      setDisplayPoisSource("overpass");
+      
+
       console.debug("MapView fetched POIs:", parsed.length);
       if (!parsed.length) {
         console.debug("MapView: Overpass returned 0 elements, attempting local fallback");
@@ -487,16 +358,6 @@ out center;`;
       console.warn("MapView error fetching POIs:", err);
     }
   }, [loadLocalPois]);
-
-  // NOTE: POI fetch effect moved below after `vehiclePoint` declaration
-  const startLabelIcon = useMemo(
-    () => createRouteLabelIcon(originName || "Origen", "start"),
-    [originName],
-  );
-  const endLabelIcon = useMemo(
-    () => createRouteLabelIcon(destinationName || "Destino", "end"),
-    [destinationName],
-  );
 
   const plannedLine =
     plannedRoutePolyline?.length > 1
@@ -583,8 +444,8 @@ out center;`;
         ? [
             ...activeVehicleCoords,
             ...routeOverlayCoords,
-            BUENAVENTURA_MAX_BOUNDS[0],
-            BUENAVENTURA_MAX_BOUNDS[1],
+            [BUENAVENTURA_BOUNDS.south, BUENAVENTURA_BOUNDS.west],
+            [BUENAVENTURA_BOUNDS.north, BUENAVENTURA_BOUNDS.east],
           ]
         : plannedLine?.length > 1
           ? plannedLine
@@ -627,102 +488,58 @@ out center;`;
     [animatedVehiclePoint, vehiclePoint],
   );
 
+  const hasLiveTrackings = validPoints.length > 0;
+
   // Debounce POI fetch when vehicle or map changes
   useEffect(() => {
     const coords = Array.isArray(vehiclePoint) ? vehiclePoint : null;
-    const mapZoom = mapRef?.getZoom ? mapRef.getZoom() : 13;
     if (!coords) return undefined;
-    const radius = zoomToRadius(mapZoom);
-    console.debug("MapView POI effect: coords", coords, "zoom", mapZoom, "radius", radius, "currentPois", displayPois.length);
     if (poisTimerRef.current) clearTimeout(poisTimerRef.current);
-    // If we don't have POIs yet, try an immediate fetch for debugging/first-load
-    if (!Array.isArray(displayPois) || displayPois.length === 0) {
-      fetchPOIs(coords[0], coords[1], radius);
-    }
-    // Schedule a debounce fetch for subsequent updates
     poisTimerRef.current = setTimeout(() => {
+      const mapZoom = mapRef?.getZoom ? mapRef.getZoom() : 13;
+      const radius = Math.max(600, Math.round(2000 * Math.pow(2, 13 - (mapZoom || 13)) / 4));
       fetchPOIs(coords[0], coords[1], radius);
     }, 1500);
+    return () => { if (poisTimerRef.current) clearTimeout(poisTimerRef.current); };
+  }, [vehiclePoint, mapRef, fetchPOIs]);
 
-    return () => {
-      if (poisTimerRef.current) clearTimeout(poisTimerRef.current);
-    };
-  }, [vehiclePoint, mapRef, displayPois, fetchPOIs]);
-
-  // Make floating overlays follow the map while the user is panning/dragging.
+  // FitBounds: ajusta el viewport cuando cambian las coordenadas de la ruta
   useEffect(() => {
-    if (!mapRef || typeof mapRef.on !== "function") return undefined;
-
-    const onMoveStart = () => {
-      isPanningRef.current = true;
-      setIsPanning(true);
-      prevCenterRef.current = mapRef.getCenter();
-      setPanOffset({ x: 0, y: 0 });
-    };
-
-    const onMove = () => {
-      if (!isPanningRef.current || !prevCenterRef.current) return;
-      try {
-        const prev = prevCenterRef.current;
-        const curr = mapRef.getCenter();
-        const prevPt = mapRef.latLngToContainerPoint(prev);
-        const currPt = mapRef.latLngToContainerPoint(curr);
-        const dx = currPt.x - prevPt.x;
-        const dy = currPt.y - prevPt.y;
-        // Apply small damping to avoid huge jumps
-        setPanOffset({ x: dx, y: dy });
-        prevCenterRef.current = curr;
-      } catch (e) {
-        // ignore
-      }
-    };
-
-    const onMoveEnd = () => {
-      isPanningRef.current = false;
-      // allow smooth transition back to origin
-      setIsPanning(false);
-      setPanOffset({ x: 0, y: 0 });
-      prevCenterRef.current = null;
-    };
-
-    mapRef.on("movestart", onMoveStart);
-    mapRef.on("move", onMove);
-    mapRef.on("moveend", onMoveEnd);
-
-    return () => {
-      mapRef.off("movestart", onMoveStart);
-      mapRef.off("move", onMove);
-      mapRef.off("moveend", onMoveEnd);
-    };
-  }, [mapRef]);
-
-  // Keep floating overlays clear of any fixed header when the page scrolls.
-  useEffect(() => {
-    const elem = containerRef.current;
-    if (!elem) return undefined;
-
-    function updateOffset() {
-      try {
-        const rect = elem.getBoundingClientRect();
-        const header = document.querySelector('.app-header') || document.querySelector('header');
-        const headerBottom = header ? header.getBoundingClientRect().bottom : 72;
-        const overlap = Math.max(0, headerBottom - rect.top);
-        setViewportOffsetY(overlap);
-      } catch (e) {
-        // ignore
-      }
+    if (!mapRef || !fitCoords?.length) return;
+    const freezeAfterFirstFit = !focusAllVehicles && hasLiveTrackings;
+    if (freezeAfterFirstFit && fittedOnceRef.current) return;
+    if (fitCoords.length === lastFitLengthRef.current) return;
+    lastFitLengthRef.current = fitCoords.length;
+    const valid = fitCoords.filter(
+      (c) => Array.isArray(c) && Number.isFinite(c[0]) && Number.isFinite(c[1]),
+    );
+    if (!valid.length) return;
+    if (valid.length === 1) {
+      mapRef.setCenter({ lat: valid[0][0], lng: valid[0][1] });
+      mapRef.setZoom(15);
+      fittedOnceRef.current = true;
+      return;
     }
+    const bounds = new window.google.maps.LatLngBounds();
+    valid.forEach(([lat, lng]) => bounds.extend({ lat, lng }));
+    mapRef.fitBounds(bounds, { top: 80, right: 80, bottom: 80, left: 80 });
+    fittedOnceRef.current = true;
+  }, [mapRef, fitCoords, focusAllVehicles, hasLiveTrackings]);
 
-    updateOffset();
-    window.addEventListener('scroll', updateOffset, { passive: true });
-    window.addEventListener('resize', updateOffset);
-
-    return () => {
-      window.removeEventListener('scroll', updateOffset);
-      window.removeEventListener('resize', updateOffset);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [containerRef]);
+  // AutoFollowVehicle: centra el mapa en el vehiculo cuando hay trackings en vivo
+  useEffect(() => {
+    if (!mapRef || !effectiveVehiclePoint || focusAllVehicles || !hasLiveTrackings) return;
+    const [lat, lng] = effectiveVehiclePoint;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    if (firstFollowRef.current) {
+      firstFollowRef.current = false;
+      mapRef.setCenter({ lat, lng });
+      mapRef.setZoom(Math.max(mapRef.getZoom() || 0, 17));
+      return;
+    }
+    mapRef.panTo({ lat, lng });
+    if ((mapRef.getZoom() || 0) < 17) mapRef.setZoom(17);
+  }, [mapRef, effectiveVehiclePoint, focusAllVehicles, hasLiveTrackings]);
 
   const primaryVehicle = useMemo(
     () =>
@@ -757,8 +574,6 @@ out center;`;
       ),
     [vehicleDirectionLine, effectiveVehiclePoint, vehiclePoint],
   );
-
-  const hasLiveTrackings = validPoints.length > 0;
 
   // Calcula distancia total de una línea de coordenadas [lat,lng] en kilómetros
   function lineDistanceKm(line = []) {
@@ -863,297 +678,247 @@ out center;`;
       style={{ position: "relative", height: mapHeight }}
       className="tracking-map-container"
     >
-      {/* Filtro SVG — coloriza tiles: agua=azul, calles=blanco, bloques=teal */}
-      <svg
-        style={{
-          position: "absolute",
-          width: 0,
-          height: 0,
-          overflow: "hidden",
-        }}
-        aria-hidden="true"
+      <LoadScript
+        googleMapsApiKey={GOOGLE_MAPS_API_KEY}
+        loadingElement={<div style={{ height: "100%", background: "#f0f9ff" }} />}
       >
-        <defs>
-          <filter id="vt-map-colorize" colorInterpolationFilters="sRGB">
-            <feColorMatrix
-              type="matrix"
-              values="0.95 0 -0.20 0 0.12  0.70 0.35 0.00 0 0.06  0.00 0.00 1.00 0 0.03  0 0 0 1 0"
-            />
-          </filter>
-        </defs>
-      </svg>
-      <MapContainer
-        center={center}
-        zoom={focusAllVehicles ? 12 : 14}
-        maxBounds={BUENAVENTURA_MAX_BOUNDS}
-        maxBoundsViscosity={1}
-        style={{ height: "100%", width: "100%" }}
-        className="vt-map-base"
-        attributionControl={false}
-        whenCreated={(m) => setMapRef(m)}
-      >
-        <TileLayer
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          subdomains="abcd"
-          maxZoom={20}
-        />
-
-        {normalizedRouteOverlays.map((overlay) => {
-          const isHighlighted = highlightedRouteIdSet.has(Number(overlay.id));
-          const isDimmed = highlightedRouteIdSet.size > 0 && !isHighlighted;
-          const shadowColor = isHighlighted ? "#93c5fd" : CORPORATE_ROUTE_HALO;
-          const lineColor = CORPORATE_ROUTE_COLOR;
-
-          return (
-            <React.Fragment key={`route-overlay-${overlay.id}`}>
-              <Polyline
-                positions={overlay.polyline}
-                color={shadowColor}
-                weight={isHighlighted ? 6 : 5}
-                opacity={isDimmed ? 0.06 : 0.18}
-                smoothFactor={1.2}
-              />
-              <Polyline
-                positions={overlay.polyline}
-                color={lineColor}
-                weight={3}
-                opacity={isDimmed ? 0.16 : 0.7}
-                lineCap="round"
-                lineJoin="round"
-                smoothFactor={1.2}
-              />
-            </React.Fragment>
-          );
-        })}
-
-        {plannedLine?.length > 1 && !remainingLine && (
-          <>
-            <Polyline
-              positions={plannedLine}
-              pathOptions={{
-                color: CORPORATE_ROUTE_HALO,
-                weight: 6,
-                opacity: 0.18,
-              }}
-              className="vt-planned-route-line-shadow"
-            />
-            <Polyline
-              positions={plannedLine}
-              pathOptions={{
-                color: CORPORATE_ROUTE_COLOR,
-                weight: 4,
-                opacity: 0.95,
-                lineCap: "round",
-                lineJoin: "round",
-              }}
-              className="vt-planned-route-line-main"
-              smoothFactor={1.2}
-            />
-          </>
-        )}
-
-        {remainingLine?.length > 1 && (
-          <>
-            <Polyline
-              positions={remainingLine}
-              pathOptions={{ color: "#0891b2", weight: 6, opacity: 0.18 }}
-              className="vt-remaining-route-line-shadow"
-            />
-            <Polyline
-              positions={remainingLine}
-              pathOptions={{
-                color: "#0891b2",
-                weight: 4,
-                opacity: 0.95,
-                dashArray: "8 6",
-                lineCap: "round",
-                lineJoin: "round",
-              }}
-              className="vt-remaining-route-line-main"
-              smoothFactor={1.2}
-            />
-          </>
-        )}
-
-        {traveledLine?.length > 1 && (
-          <>
-            <Polyline
-              positions={traveledLine}
-              pathOptions={{
-                color: CORPORATE_ROUTE_HALO,
-                weight: 6,
-                opacity: 0.14,
-              }}
-              className="vt-traveled-route-line-shadow"
-            />
-            <Polyline
-              positions={traveledLine}
-              pathOptions={{
-                color: "#2563eb",
-                weight: 5,
-                opacity: 0.98,
-                lineCap: "round",
-                lineJoin: "round",
-              }}
-              className="vt-traveled-route-line-main"
-              smoothFactor={1.2}
-            />
-          </>
-        )}
-
-        {originCoords && (
-          <Marker
-            position={originCoords}
-            icon={originIcon}
-            interactive={false}
-          />
-        )}
-        {normalizedIntermediateStops.map((stop) => (
-          <Marker
-            key={`intermediate-stop-${stop.id}`}
-            position={stop.coords}
-            icon={createIntermediateStopIcon(stop.order)}
-            title={stop.address}
-            interactive={false}
-          />
-        ))}
-        {destinationCoords && (
-          <Marker
-            position={destinationCoords}
-            icon={destinationIcon}
-            interactive={false}
-          />
-        )}
-
-        {primaryVehicle && (
-          <>
-            <CircleMarker
-              center={[primaryVehicle.latitude, primaryVehicle.longitude]}
-              radius={14}
-              pathOptions={{
-                color: "#2563eb",
-                weight: 6,
-                opacity: 0.18,
-                fillOpacity: 0,
-              }}
-              className="vt-current-point-ring"
-              interactive={false}
-            />
-            <CircleMarker
-              center={[primaryVehicle.latitude, primaryVehicle.longitude]}
-              radius={6}
-              pathOptions={{
-                color: "#ffffff",
-                weight: 3,
-                fillColor: "#2563eb",
-                fillOpacity: 1,
-              }}
-              className="vt-current-point-core"
-              interactive={false}
-            />
-            <Marker
-              position={[primaryVehicle.latitude, primaryVehicle.longitude]}
-              icon={createVehicleIcon(
-                primaryVehicle.label,
-                primaryVehicle.status,
-                primaryVehicleRotation,
-              )}
-              interactive={false}
-            />
-          </>
-        )}
-
-        {secondaryVehicles.map((vehicle) => {
-          if (
-            !Number.isFinite(vehicle.latitude) ||
-            !Number.isFinite(vehicle.longitude)
-          ) {
-            return null;
-          }
-          return (
-            <Marker
-              key={`${vehicle.label}-${vehicle.latitude}-${vehicle.longitude}`}
-              position={[vehicle.latitude, vehicle.longitude]}
-              icon={createVehicleIcon(vehicle.label, vehicle.status)}
-              interactive={false}
-            />
-          );
-        })}
-
-        {/* POIs desde Overpass/TrackingMap */}
-        {Array.isArray(displayPois) && (
-          <>
-            <button
-              onClick={injectSamplePois}
-              style={{ position: "absolute", top: 18, left: 18, zIndex: 800 }}
-            >
-              Inyectar POIs de prueba
-            </button>
-            <div style={{ position: "absolute", top: 18, left: 160, zIndex: 700, background: "rgba(255,255,255,0.65)", padding: "4px 6px", borderRadius: 6, fontSize: 11, color: "#0a2b3d", boxShadow: "none", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)" }}>
-              POIs: {Array.isArray(displayPois) ? displayPois.length : 0} {displayPoisSource ? `(${displayPoisSource})` : ""}
-            </div>
-            {console.debug ? console.debug("MapView received POIs:", displayPois.length) : null}
-            {displayPois.map((p) => {
-            const lat = Number(p.lat);
-            const lon = Number(p.lon);
-            if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-
-            const tags = p.tags || {};
-            const emoji = getPoiEmoji(tags);
-
-            const poiIcon = L.divIcon({
-              className: "",
-              html: `<div class="vt-poi-marker">${emoji}</div>`,
-              iconSize: [28, 28],
-              iconAnchor: [14, 14],
-            });
-
+        <GoogleMap
+          mapContainerStyle={{ height: "100%", width: "100%" }}
+          center={toLatLng(center) || { lat: BUENAVENTURA_CENTER[0], lng: BUENAVENTURA_CENTER[1] }}
+          zoom={focusAllVehicles ? 12 : 14}
+          onLoad={(map) => setMapRef(map)}
+          options={GOOGLE_MAPS_OPTIONS}
+        >
+          {/* ---- Rutas superpuestas (modo admin / focus all) ---- */}
+          {normalizedRouteOverlays.map((overlay) => {
+            const isHighlighted = highlightedRouteIdSet.has(Number(overlay.id));
+            const isDimmed = highlightedRouteIdSet.size > 0 && !isHighlighted;
+            const path = toLatLngArray(overlay.polyline);
             return (
-              <Marker
-                key={`poi-${p.id}`}
-                position={[lat, lon]}
-                icon={poiIcon}
-                interactive={false}
-              />
+              <React.Fragment key={`route-overlay-${overlay.id}`}>
+                <Polyline
+                  path={path}
+                  options={{
+                    strokeColor: isHighlighted ? "#93c5fd" : CORPORATE_ROUTE_HALO,
+                    strokeWeight: isHighlighted ? 6 : 5,
+                    strokeOpacity: isDimmed ? 0.06 : 0.18,
+                  }}
+                />
+                <Polyline
+                  path={path}
+                  options={{
+                    strokeColor: CORPORATE_ROUTE_COLOR,
+                    strokeWeight: 3,
+                    strokeOpacity: isDimmed ? 0.16 : 0.7,
+                  }}
+                />
+              </React.Fragment>
             );
           })}
-          </>
-        )}
 
-        {originCoords && (
-          <Marker
-            position={originCoords}
-            icon={startLabelIcon}
-            interactive={false}
-          />
-        )}
-        {destinationCoords && (
-          <Marker
-            position={destinationCoords}
-            icon={endLabelIcon}
-            interactive={false}
-          />
-        )}
+          {/* ---- Ruta planificada ---- */}
+          {plannedLine?.length > 1 && !remainingLine && (
+            <>
+              <Polyline
+                path={toLatLngArray(plannedLine)}
+                options={{ strokeColor: CORPORATE_ROUTE_HALO, strokeWeight: 6, strokeOpacity: 0.18 }}
+              />
+              <Polyline
+                path={toLatLngArray(plannedLine)}
+                options={{ strokeColor: CORPORATE_ROUTE_COLOR, strokeWeight: 4, strokeOpacity: 0.95 }}
+              />
+            </>
+          )}
 
-        <FitBounds
-          coordinates={fitCoords}
-          freezeAfterFirstFit={focusAllVehicles ? false : hasLiveTrackings}
-        />
-        <AutoFollowVehicle
-          vehiclePoint={effectiveVehiclePoint || vehiclePoint}
-          enabled={!focusAllVehicles && hasLiveTrackings}
-        />
-      </MapContainer>
+          {/* ---- Tramo restante ---- */}
+          {remainingLine?.length > 1 && (
+            <>
+              <Polyline
+                path={toLatLngArray(remainingLine)}
+                options={{ strokeColor: "#0891b2", strokeWeight: 6, strokeOpacity: 0.18 }}
+              />
+              <Polyline
+                path={toLatLngArray(remainingLine)}
+                options={{
+                  strokeColor: "#0891b2",
+                  strokeWeight: 4,
+                  strokeOpacity: 0.95,
+                  icons: [{ icon: { path: "M 0,-1 0,1", strokeOpacity: 1, scale: 4 }, offset: "0", repeat: "15px" }],
+                }}
+              />
+            </>
+          )}
 
-      {/* Panel flotante ETA: se actualiza dinámicamente desde TrackingPage */}
+          {/* ---- Tramo recorrido ---- */}
+          {traveledLine?.length > 1 && (
+            <>
+              <Polyline
+                path={toLatLngArray(traveledLine)}
+                options={{ strokeColor: CORPORATE_ROUTE_HALO, strokeWeight: 6, strokeOpacity: 0.14 }}
+              />
+              <Polyline
+                path={toLatLngArray(traveledLine)}
+                options={{ strokeColor: "#2563eb", strokeWeight: 5, strokeOpacity: 0.98 }}
+              />
+            </>
+          )}
+
+          {/* ---- Origen ---- */}
+          {toLatLng(originCoords) && (
+            <OverlayView position={toLatLng(originCoords)} mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}>
+              <div style={{ transform: "translate(-50%, -50%)", pointerEvents: "none" }}>
+                <div className="vt-route-point vt-route-point-start" />
+              </div>
+            </OverlayView>
+          )}
+
+          {/* ---- Paradas intermedias ---- */}
+          {normalizedIntermediateStops.map((stop) => (
+            <OverlayView
+              key={`stop-${stop.id}`}
+              position={toLatLng(stop.coords)}
+              mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+            >
+              <div style={{ transform: "translate(-50%, -50%)", pointerEvents: "none" }}>
+                <div className="vt-route-stop-marker">
+                  <span className="vt-route-stop-ring" />
+                  <span className="vt-route-stop-core">{stop.order}</span>
+                </div>
+              </div>
+            </OverlayView>
+          ))}
+
+          {/* ---- Destino ---- */}
+          {toLatLng(destinationCoords) && (
+            <OverlayView position={toLatLng(destinationCoords)} mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}>
+              <div style={{ transform: "translate(-50%, -50%)", pointerEvents: "none" }}>
+                <div className="vt-route-point vt-route-point-end" />
+              </div>
+            </OverlayView>
+          )}
+
+          {/* ---- Vehículo principal ---- */}
+          {primaryVehicle && toLatLng([primaryVehicle.latitude, primaryVehicle.longitude]) && (
+            <>
+              <OverlayView
+                position={{ lat: primaryVehicle.latitude, lng: primaryVehicle.longitude }}
+                mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+              >
+                <div style={{ transform: "translate(-50%, -50%)", pointerEvents: "none" }}>
+                  <div
+                    className="vt-current-point-ring"
+                    style={{ width: 28, height: 28, borderRadius: "50%", border: "6px solid rgba(37,99,235,0.18)" }}
+                  />
+                </div>
+              </OverlayView>
+              <OverlayView
+                position={{ lat: primaryVehicle.latitude, lng: primaryVehicle.longitude }}
+                mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+              >
+                <div style={{ transform: "translate(-50%, -50%)", pointerEvents: "none" }}>
+                  <div
+                    className="vt-current-point-core"
+                    style={{ width: 12, height: 12, borderRadius: "50%", background: "#2563eb", border: "3px solid #ffffff" }}
+                  />
+                </div>
+              </OverlayView>
+              <OverlayView
+                position={{ lat: primaryVehicle.latitude, lng: primaryVehicle.longitude }}
+                mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+              >
+                <div style={{ transform: "translate(-50%, calc(-100% - 14px))", pointerEvents: "none" }}>
+                  <div className={`vt-vehicle-chip vt-vehicle-chip-${primaryVehicle.status === "En ruta" ? "moving" : "idle"}`}>
+                    <span className="vt-vehicle-icon" style={{ transform: `rotate(${primaryVehicleRotation}deg)` }}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="1" y="4" width="16" height="12" rx="2" />
+                        <path d="M17 8h3l3 4v4h-6V8z" />
+                        <circle cx="5.5" cy="18.5" r="2.2" />
+                        <circle cx="18.5" cy="18.5" r="2.2" />
+                      </svg>
+                    </span>
+                    <span className="vt-vehicle-text">{primaryVehicle.label || "Vehiculo"}</span>
+                  </div>
+                </div>
+              </OverlayView>
+            </>
+          )}
+
+          {/* ---- Vehículos secundarios ---- */}
+          {secondaryVehicles.map((vehicle) => {
+            if (!Number.isFinite(vehicle.latitude) || !Number.isFinite(vehicle.longitude)) return null;
+            return (
+              <OverlayView
+                key={`${vehicle.label}-${vehicle.latitude}-${vehicle.longitude}`}
+                position={{ lat: vehicle.latitude, lng: vehicle.longitude }}
+                mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+              >
+                <div style={{ transform: "translate(-50%, calc(-100% - 14px))", pointerEvents: "none" }}>
+                  <div className={`vt-vehicle-chip vt-vehicle-chip-${vehicle.status === "En ruta" ? "moving" : "idle"}`}>
+                    <span className="vt-vehicle-icon">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="1" y="4" width="16" height="12" rx="2" />
+                        <path d="M17 8h3l3 4v4h-6V8z" />
+                        <circle cx="5.5" cy="18.5" r="2.2" />
+                        <circle cx="18.5" cy="18.5" r="2.2" />
+                      </svg>
+                    </span>
+                    <span className="vt-vehicle-text">{vehicle.label || "Vehiculo"}</span>
+                  </div>
+                </div>
+              </OverlayView>
+            );
+          })}
+
+          {/* ---- POIs ---- */}
+          {Array.isArray(displayPois) &&
+            displayPois.map((p) => {
+              const lat = Number(p.lat);
+              const lon = Number(p.lon);
+              if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+              return (
+                <OverlayView
+                  key={`poi-${p.id}`}
+                  position={{ lat, lng: lon }}
+                  mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+                >
+                  <div style={{ transform: "translate(-50%, -50%)", pointerEvents: "none" }}>
+                    <div className="vt-poi-marker">{getPoiEmoji(p.tags || {})}</div>
+                  </div>
+                </OverlayView>
+              );
+            })}
+
+          {/* ---- Etiqueta de origen ---- */}
+          {toLatLng(originCoords) && (
+            <OverlayView position={toLatLng(originCoords)} mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}>
+              <div style={{ transform: "translate(14px, -28px)", pointerEvents: "none" }}>
+                <div className="vt-route-chip vt-route-chip-start">
+                  <span className="vt-route-chip-text">{originName || "Origen"}</span>
+                  <span className="vt-route-chip-arrow">›</span>
+                </div>
+              </div>
+            </OverlayView>
+          )}
+
+          {/* ---- Etiqueta de destino ---- */}
+          {toLatLng(destinationCoords) && (
+            <OverlayView position={toLatLng(destinationCoords)} mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}>
+              <div style={{ transform: "translate(calc(-100% - 14px), -28px)", pointerEvents: "none" }}>
+                <div className="vt-route-chip vt-route-chip-end">
+                  <span className="vt-route-chip-text">{destinationName || "Destino"}</span>
+                  <span className="vt-route-chip-arrow">›</span>
+                </div>
+              </div>
+            </OverlayView>
+          )}
+        </GoogleMap>
+      </LoadScript>
+
+
+      {/* ---- Panel flotante ETA ---- */}
       <div
         className={`floating-eta ${eta === null ? "floating-eta-hidden" : ""}`}
         aria-live="polite"
-        style={{
-          transform: `translate(${(panOffset && panOffset.x) || 0}px, ${((panOffset && panOffset.y) || 0) + (viewportOffsetY || 0)}px)`,
-          transition: isPanning ? "none" : "transform 220ms ease",
-        }}
       >
         <div className="floating-eta-main">
           <div className="floating-eta-label">ETA</div>
@@ -1161,19 +926,14 @@ out center;`;
         </div>
         {etaUpdated && (
           <div className="floating-eta-updated">
-            Actualizado: {new Date(etaUpdated).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })}
+            Actualizado:{" "}
+            {new Date(etaUpdated).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })}
           </div>
         )}
       </div>
 
-      {/* Panel de métricas de ruta (planificada/recorrida/pendiente) */}
-      <div
-        className="route-metrics-panel"
-        style={{
-          transform: `translate(${(panOffset && panOffset.x) || 0}px, ${((panOffset && panOffset.y) || 0) + (viewportOffsetY || 0)}px)`,
-          transition: isPanning ? "none" : "transform 220ms ease",
-        }}
-      >
+      {/* ---- Métricas de ruta ---- */}
+      <div className="route-metrics-panel">
         <div className="route-metrics-grid">
           <div className="route-metric-tile">
             <span className="route-metric-label">Planif.</span>
@@ -1187,65 +947,64 @@ out center;`;
             <span className="route-metric-label">Pend.</span>
             <span className="route-metric-value">{pendingKm} km</span>
           </div>
-          {/* 'Modo' removed - metrics simplified to Planif/Recorr/Pend */}
         </div>
       </div>
 
-      {/* Leyenda del mapa */}
+      {/* ---- Leyenda ---- */}
       <div className="map-legend">
         <div className="legend-title">Leyenda</div>
         {primaryVehicle && (
           <div className="legend-item">
-            <div className="legend-marker current-dot"></div>
+            <div className="legend-marker current-dot" />
             <span>Punto actual</span>
           </div>
         )}
         {originCoords && (
           <div className="legend-item">
-            <div className="legend-marker origin-dot"></div>
+            <div className="legend-marker origin-dot" />
             <span>Origen</span>
           </div>
         )}
         {destinationCoords && (
           <div className="legend-item">
-            <div className="legend-marker destination-dot"></div>
+            <div className="legend-marker destination-dot" />
             <span>Destino</span>
           </div>
         )}
         {normalizedIntermediateStops.length > 0 && (
           <div className="legend-item">
-            <div className="legend-marker stop-dot"></div>
+            <div className="legend-marker stop-dot" />
             <span>Paradas intermedias</span>
           </div>
         )}
         {remainingLine?.length > 1 ? (
           <div className="legend-item">
-            <div className="legend-line remaining"></div>
+            <div className="legend-line remaining" />
             <span>Tramo restante</span>
           </div>
         ) : (
           plannedLine?.length > 1 && (
             <div className="legend-item">
-              <div className="legend-line planned"></div>
+              <div className="legend-line planned" />
               <span>Ruta planificada</span>
             </div>
           )
         )}
         {traveledLine?.length > 1 && (
           <div className="legend-item">
-            <div className="legend-line traveled"></div>
+            <div className="legend-line traveled" />
             <span>Tramo recorrido</span>
           </div>
         )}
         {focusAllVehicles && normalizedRouteOverlays.length > 0 && (
           <div className="legend-item">
-            <div className="legend-line planned"></div>
+            <div className="legend-line planned" />
             <span>Rutas monitoreadas</span>
           </div>
         )}
         {focusAllVehicles && highlightedRouteIdSet.size > 0 && (
           <div className="legend-item">
-            <div className="legend-line traveled"></div>
+            <div className="legend-line traveled" />
             <span>Rutas resaltadas</span>
           </div>
         )}
@@ -1253,3 +1012,5 @@ out center;`;
     </div>
   );
 }
+
+
