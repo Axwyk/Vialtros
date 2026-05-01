@@ -63,13 +63,12 @@ export default function UserRoutePage({ role, onLogout }) {
   // Live tracking vía WebSocket
   const [livePosition, setLivePosition] = useState(null);
   const [wsStatus, setWsStatus] = useState("disconnected");
-  const wsRef = useRef(null);
 
   // Banners in-app
   const [showNearbyBanner, setShowNearbyBanner] = useState(false);
   const [showArrivingBanner, setShowArrivingBanner] = useState(false);
 
-  // Refs para evitar notificaciones duplicadas
+  // Refs para notificaciones (evitan duplicados entre renders)
   const notifiedApproachingRef = useRef(false);
   const notifiedAtStopRef = useRef(false);
   const notifiedAtDestRef = useRef(false);
@@ -150,7 +149,8 @@ export default function UserRoutePage({ role, onLogout }) {
         if (result?.coordinates?.length > 1) setRoutePolyline(result.coordinates);
       })
       .catch(() => {});
-  }, [originCoords, destinationCoords, data]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [originCoords, destinationCoords, data?.route?.intermediate_stops]);
 
   // Conectar WebSocket cuando la ruta esté disponible
   useEffect(() => {
@@ -181,17 +181,13 @@ export default function UserRoutePage({ role, onLogout }) {
       },
     );
 
-    wsRef.current = ws;
-    return () => {
-      ws.close();
-      wsRef.current = null;
-    };
+    return () => { ws.close(); };
   }, [data?.route?.id]);
 
   // Lógica de notificaciones basada en posición en tiempo real
   useEffect(() => {
     if (!livePosition) return;
-    const speed = (livePosition.speed_kmh > 2 ? livePosition.speed_kmh : DEFAULT_SPEED_KMH);
+    const speed = livePosition.speed_kmh > 2 ? livePosition.speed_kmh : DEFAULT_SPEED_KMH;
 
     // Notificaciones hacia la parada personal del usuario
     if (myPickupCoords) {
@@ -199,7 +195,6 @@ export default function UserRoutePage({ role, onLogout }) {
         livePosition.latitude, livePosition.longitude,
         myPickupCoords[0], myPickupCoords[1],
       );
-      const etaMins = Math.max(1, Math.round((km / speed) * 60));
 
       if (km <= NOTIFY_AT_STOP_KM && !notifiedAtStopRef.current) {
         notifiedAtStopRef.current = true;
@@ -211,6 +206,7 @@ export default function UserRoutePage({ role, onLogout }) {
       } else if (km <= NOTIFY_APPROACHING_KM && !notifiedApproachingRef.current) {
         notifiedApproachingRef.current = true;
         setShowNearbyBanner(true);
+        const etaMins = Math.max(1, Math.round((km / speed) * 60));
         sendBrowserNotification(
           "Tu bus se acerca",
           `El bus está a aproximadamente ${etaMins} min de tu parada. ¡Prepárate!`,
@@ -274,26 +270,20 @@ export default function UserRoutePage({ role, onLogout }) {
       destinationCoords[0],
       destinationCoords[1],
     );
-
     return km <= NEAR_DISTANCE_KM;
   }, [latestTracking, destinationCoords]);
 
-  const userTracking = trackings.find(
-    (t) => Number(t.route) === Number(route?.id),
-  );
-  const pickupStatus = userTracking?.status || "not_picked";
+  const pickupStatus = useMemo(() => {
+    const t = trackings.find((t) => Number(t.route) === Number(route?.id));
+    return t?.status || "not_picked";
+  }, [trackings, route?.id]);
 
-  const wsLabel = { connecting: "Conectando...", connected: "En vivo", disconnected: "Sin conexión" }[wsStatus];
-  const wsDotClass = {
-    connecting: "bg-amber-500 animate-pulse",
-    connected: "bg-emerald-500 animate-pulse",
-    disconnected: "bg-red-400",
-  }[wsStatus];
-  const wsBadgeClass = {
-    connecting: "bg-amber-100 text-amber-700",
-    connected: "bg-emerald-100 text-emerald-700",
-    disconnected: "bg-red-100 text-red-600",
-  }[wsStatus];
+  const WS_UI = {
+    connecting: { label: "Conectando...", dot: "bg-amber-500 animate-pulse", badge: "bg-amber-100 text-amber-700" },
+    connected:   { label: "En vivo",       dot: "bg-emerald-500 animate-pulse", badge: "bg-emerald-100 text-emerald-700" },
+    disconnected:{ label: "Sin conexión",  dot: "bg-red-400",                   badge: "bg-red-100 text-red-600" },
+  };
+  const { label: wsLabel, dot: wsDotClass, badge: wsBadgeClass } = WS_UI[wsStatus] ?? WS_UI.disconnected;
 
   return (
     <div className="min-h-screen flex bg-gray-50 font-sans">
