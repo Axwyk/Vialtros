@@ -1168,13 +1168,13 @@ out center;`;
         className={`floating-eta ${eta === null ? "floating-eta-hidden" : ""}`}
         aria-live="polite"
       >
+        <span className="floating-eta-label">ETA</span>
         <div className="floating-eta-main">
-          <div className="floating-eta-label">ETA</div>
-          <div className="floating-eta-value">{eta === null ? "Sin datos" : `${eta} min`}</div>
+          <span className="floating-eta-number">{eta === null ? "—" : eta}</span>
+          {eta !== null && <span className="floating-eta-unit">min</span>}
         </div>
         {etaUpdated && (
           <div className="floating-eta-updated">
-            Actualizado:{" "}
             {new Date(etaUpdated).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })}
           </div>
         )}
@@ -1187,15 +1187,26 @@ out center;`;
         <div className="route-metrics-grid">
           <div className="route-metric-tile">
             <span className="route-metric-label">Planif.</span>
-            <span className="route-metric-value">{plannedKm} km</span>
+            <div className="route-metric-value">
+              <span className="route-metric-number">{plannedKm}</span>
+              <span className="route-metric-kmunit"> km</span>
+            </div>
           </div>
+          <div className="route-metric-divider" />
           <div className="route-metric-tile">
             <span className="route-metric-label">Recorr.</span>
-            <span className="route-metric-value">{traveledKm} km</span>
+            <div className="route-metric-value">
+              <span className="route-metric-number">{traveledKm}</span>
+              <span className="route-metric-kmunit"> km</span>
+            </div>
           </div>
+          <div className="route-metric-divider" />
           <div className="route-metric-tile">
             <span className="route-metric-label">Pend.</span>
-            <span className="route-metric-value">{pendingKm} km</span>
+            <div className="route-metric-value">
+              <span className="route-metric-number">{pendingKm}</span>
+              <span className="route-metric-kmunit"> km</span>
+            </div>
           </div>
         </div>
       </div>
