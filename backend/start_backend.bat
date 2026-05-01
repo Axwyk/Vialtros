@@ -3,7 +3,7 @@ setlocal
 
 cd /d "%~dp0"
 
-set "VENV_PYTHON=%~dp0.venv\Scripts\python.exe"
+set "VENV_PYTHON=%~dp0..\.venv\Scripts\python.exe"
 set "BACKEND_PORT=8000"
 
 call :ensure_port_available %BACKEND_PORT%
