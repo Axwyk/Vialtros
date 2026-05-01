@@ -697,10 +697,20 @@ function isUsableRoadRoute(route, maxDistance = 60000) {
 }
 
 function toLatLngPolyline(route) {
+  const steps = (route.legs || []).flatMap((leg) =>
+    (leg.steps || []).map((step) => ({
+      location: [step.maneuver.location[1], step.maneuver.location[0]],
+      distance: step.distance,
+      name: step.name || "",
+      type: step.maneuver.type,
+      modifier: step.maneuver.modifier || "straight",
+    })).filter((s) => s.type !== "depart"),
+  );
   return {
     coordinates: route.geometry.coordinates.map(([lng, lat]) => [lat, lng]),
     duration: route.duration,
     distance: route.distance,
+    steps: steps.length > 0 ? steps : null,
   };
 }
 

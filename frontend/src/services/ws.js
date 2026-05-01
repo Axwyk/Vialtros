@@ -133,8 +133,8 @@ export function connectTrackingWS(routeId, onMessage, handlers = {}) {
     };
 
     socket.onclose = () => {
-      if (onClose) onClose();
       if (closedManually) return;
+      if (onClose) onClose();
       if (reconnectAttempts >= maxReconnectAttempts) return;
 
       reconnectAttempts += 1;

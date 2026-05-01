@@ -353,6 +353,15 @@ function trackingReducer(state, action) {
           action.payload,
         ),
       };
+    case "BATCH_POSITION_UPDATE": {
+      const { tracking, vehiclePosition, routePoint } = action.payload;
+      return {
+        ...state,
+        trackings: mergeTrackings(state.trackings, [tracking]),
+        vehiclePosition,
+        liveRouteHistory: appendHistoryPoint(state.liveRouteHistory, routePoint),
+      };
+    }
     default:
       return state;
   }
@@ -474,16 +483,21 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const [showLiveTransition, setShowLiveTransition] = useState(false);
   const [showLiveToast, setShowLiveToast] = useState(false);
   const [showRouteFinishedToast, setShowRouteFinishedToast] = useState(false);
+  const [nextRouteCountdown, setNextRouteCountdown] = useState(null);
   const [guidedRouteLoading, setGuidedRouteLoading] = useState(false);
   const [guidedRouteRunning, setGuidedRouteRunning] = useState(false);
   const [guidedRouteError, setGuidedRouteError] = useState("");
   const [guidedRouteDisplayPath, setGuidedRouteDisplayPath] = useState([]);
+  const [navigationSteps, setNavigationSteps] = useState(null);
   const [adminStats, setAdminStats] = useState(null);
   const [adminRouteSummaries, setAdminRouteSummaries] = useState([]);
   const [adminActiveVehicles, setAdminActiveVehicles] = useState([]);
   const [adminAlerts, setAdminAlerts] = useState([]);
   const [adminRouteFilterIds, setAdminRouteFilterIds] = useState([]);
   const [adminRouteOverlays, setAdminRouteOverlays] = useState([]);
+  const [kpiCollapsed, setKpiCollapsed] = useState(false);
+  const [routesCollapsed, setRoutesCollapsed] = useState(false);
+  const [showAlertsPanel, setShowAlertsPanel] = useState(false);
 
   const resolveRouteInfo = useCallback(
     async (routeId) => {
@@ -521,7 +535,12 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const guidedRouteFullPathRef = useRef([]);
   const routeEndNotifiedRef = useRef(false);
   const routeFinishedTimerRef = useRef(null);
+  const nextRouteCountdownRef = useRef(null);
+  const nextRouteRef = useRef(null);
   const userCoordsRef = useRef(userCoords);
+  const wsStatusRef = useRef(wsStatus);
+  const trackingsRef = useRef(trackings);
+  const lastSnapTimeRef = useRef(0);
 
   useEffect(() => {
     trackingsCountRef.current = trackings.length;
@@ -532,6 +551,14 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   }, [userCoords]);
 
   useEffect(() => {
+    wsStatusRef.current = wsStatus;
+  }, [wsStatus]);
+
+  useEffect(() => {
+    trackingsRef.current = trackings;
+  }, [trackings]);
+
+  useEffect(() => {
     setGuidedRouteDisplayPath([]);
     guidedRouteFullPathRef.current = [];
     guidedRoutePointsRef.current = [];
@@ -539,6 +566,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     setGuidedRouteLoading(false);
     setGuidedRouteRunning(false);
     setGuidedRouteError("");
+    setNavigationSteps(null);
   }, [selectedRouteId]);
 
   useEffect(
@@ -594,6 +622,18 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       cancelled = true;
     };
   }, [currentRole]);
+
+  // Ruta siguiente por orden de asignación (para auto-avance al terminar)
+  const nextRoute = useMemo(() => {
+    if (currentRole !== "driver" || !driverRoutes.length) return null;
+    const idx = driverRoutes.findIndex((r) => r.id === selectedRouteId);
+    if (idx < 0 || idx >= driverRoutes.length - 1) return null;
+    return driverRoutes[idx + 1];
+  }, [driverRoutes, selectedRouteId, currentRole]);
+
+  useEffect(() => {
+    nextRouteRef.current = nextRoute;
+  }, [nextRoute]);
 
   // Cleanup global: detener watch de geolocalizacion al desmontar
   useEffect(
@@ -943,6 +983,22 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     };
   }, [resolveRouteInfo, selectedRouteId]);
 
+  // Resetear estado de fin de ruta al cambiar de ruta
+  useEffect(() => {
+    routeEndNotifiedRef.current = false;
+    notifiedStopsRef.current = new Set();
+    setNextRouteCountdown(null);
+    setStopNotification(null);
+    if (nextRouteCountdownRef.current) {
+      clearInterval(nextRouteCountdownRef.current);
+      nextRouteCountdownRef.current = null;
+    }
+    if (stopNotifTimerRef.current) {
+      clearTimeout(stopNotifTimerRef.current);
+      stopNotifTimerRef.current = null;
+    }
+  }, [selectedRouteId]);
+
   // Periodic route info refresh: detect admin changes to origin/destination
   const lastRouteVersionRef = useRef(null);
   const routeInfoRef = useRef(routeInfo);
@@ -1080,38 +1136,35 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           );
         }
 
-        // Snap GPS point to nearest road for accurate display
-        snapPointToRoad([normalized.latitude, normalized.longitude])
+        // Snap GPS point to nearest road (throttled: máximo 1 llamada cada 3s)
+        const now = Date.now();
+        const snapPromise =
+          now - lastSnapTimeRef.current >= 3000
+            ? (lastSnapTimeRef.current = now,
+               snapPointToRoad([normalized.latitude, normalized.longitude]))
+            : Promise.resolve([normalized.latitude, normalized.longitude]);
+
+        snapPromise
           .then((snapped) => {
             const lat = snapped[0];
             const lng = snapped[1];
             dispatch({
-              type: "MERGE_TRACKINGS",
-              payload: [{ ...normalized, latitude: lat, longitude: lng }],
-            });
-            dispatch({
-              type: "SET_VEHICLE_POSITION",
+              type: "BATCH_POSITION_UPDATE",
               payload: {
-                latitude: lat,
-                longitude: lng,
-                timestamp: normalized.timestamp,
+                tracking: { ...normalized, latitude: lat, longitude: lng },
+                vehiclePosition: { latitude: lat, longitude: lng, timestamp: normalized.timestamp },
+                routePoint: [lat, lng],
               },
             });
-            dispatch({ type: "APPEND_ROUTE_POINT", payload: [lat, lng] });
           })
           .catch(() => {
-            dispatch({ type: "MERGE_TRACKINGS", payload: [normalized] });
             dispatch({
-              type: "SET_VEHICLE_POSITION",
+              type: "BATCH_POSITION_UPDATE",
               payload: {
-                latitude: normalized.latitude,
-                longitude: normalized.longitude,
-                timestamp: normalized.timestamp,
+                tracking: normalized,
+                vehiclePosition: { latitude: normalized.latitude, longitude: normalized.longitude, timestamp: normalized.timestamp },
+                routePoint: [normalized.latitude, normalized.longitude],
               },
-            });
-            dispatch({
-              type: "APPEND_ROUTE_POINT",
-              payload: [normalized.latitude, normalized.longitude],
             });
           });
       },
@@ -1183,14 +1236,14 @@ export default function TrackingPage({ routeId: routeIdProp }) {
         });
 
         // mark that polling provided recent data only when websocket isn't the primary source
-        if (wsStatus !== "live") setIsPollingFallback(true);
+        if (wsStatusRef.current !== "live") setIsPollingFallback(true);
       } catch {
         // ignore transient network errors
       }
     };
 
     // Poll faster when websocket is not live; otherwise poll less frequently as backup
-    const intervalMs = wsStatus === "live" ? 10000 : 5000;
+    const intervalMs = wsStatusRef.current === "live" ? 10000 : 5000;
 
     fetchLatest();
     const id = setInterval(fetchLatest, intervalMs);
@@ -1199,7 +1252,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       cancelled = true;
       clearInterval(id);
     };
-  }, [selectedRouteId, wsStatus]);
+  }, [selectedRouteId]);
 
   useEffect(() => {
     if (!destinationCoords || trackings.length === 0) return;
@@ -1295,7 +1348,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     let cancelled = false;
 
     const timerId = setTimeout(() => {
-      getTrackedStreetRoute(trackings)
+      getTrackedStreetRoute(trackingsRef.current)
         .then(async (matchedRoute) => {
           if (cancelled) return;
           lastMatchedRouteRef.current = {
@@ -1342,7 +1395,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       cancelled = true;
       clearTimeout(timerId);
     };
-  }, [guidedRouteDisplayPath, guidedRouteRunning, liveRouteHistory, trackings]);
+  }, [guidedRouteDisplayPath, guidedRouteRunning, liveRouteHistory]);
 
   const statusBadge = useMemo(() => {
     const badges = {
@@ -1845,6 +1898,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     guidedRouteIndexRef.current = 0;
     setGuidedRouteLoading(false);
     setGuidedRouteRunning(false);
+    setNavigationSteps(null);
   };
 
   const pushGuidedTrackingPoint = async (point) => {
@@ -1975,6 +2029,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           (waypointCoords.length > 1 ? waypointCoords : null);
         if (routeCoordinates?.length > 1) {
           setRoutePolyline(playbackRoute);
+          setNavigationSteps(streetRoute?.steps || null);
           setOriginCoords(from);
           setDestinationCoords(to);
           setForceBuenaventuraDemo(false);
@@ -2104,6 +2159,22 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     // Stop any guided playback
     if (guidedRouteRunning) stopGuidedRoute();
 
+    // Auto-avance a la siguiente ruta asignada (solo conductor)
+    if (currentRole === "driver" && nextRouteRef.current) {
+      let count = 10;
+      setNextRouteCountdown(count);
+      nextRouteCountdownRef.current = setInterval(() => {
+        count -= 1;
+        setNextRouteCountdown(count);
+        if (count <= 0) {
+          clearInterval(nextRouteCountdownRef.current);
+          nextRouteCountdownRef.current = null;
+          setNextRouteCountdown(null);
+          navigate(`/tracking/${nextRouteRef.current.id}`);
+        }
+      }, 1000);
+    }
+
     return () => {
       if (routeFinishedTimerRef.current) {
         clearTimeout(routeFinishedTimerRef.current);
@@ -2179,6 +2250,10 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const arrivalNotifTimerRef = useRef(null);
   const arrivalNotifiedRef = useRef(false);
 
+  const [stopNotification, setStopNotification] = useState(null);
+  const stopNotifTimerRef = useRef(null);
+  const notifiedStopsRef = useRef(new Set());
+
   useEffect(() => {
     if (nearDestination && !arrivalNotifiedRef.current) {
       arrivalNotifiedRef.current = true;
@@ -2193,6 +2268,34 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       if (arrivalNotifTimerRef.current) clearTimeout(arrivalNotifTimerRef.current);
     };
   }, [nearDestination, routeState]);
+
+  // Detectar proximidad a paradas intermedias en modo GPS y notificar
+  useEffect(() => {
+    if (!guidedRouteRunning || !vehiclePosition) return undefined;
+    const vLat = Number(vehiclePosition.latitude);
+    const vLng = Number(vehiclePosition.longitude);
+    if (!Number.isFinite(vLat) || !Number.isFinite(vLng)) return undefined;
+
+    const APPROACH_KM = 0.25;
+    const ARRIVING_KM = 0.07;
+
+    for (const stop of displayIntermediateStops) {
+      if (!stop.coords || notifiedStopsRef.current.has(stop.id)) continue;
+      const [sLat, sLng] = stop.coords;
+      if (!Number.isFinite(sLat) || !Number.isFinite(sLng)) continue;
+      const d = distanceKm(vLat, vLng, sLat, sLng);
+      if (d <= APPROACH_KM) {
+        notifiedStopsRef.current.add(stop.id);
+        const arriving = d <= ARRIVING_KM;
+        const etaMin = arriving ? null : Math.max(1, Math.round((d / 25) * 60));
+        setStopNotification({ label: stop.label, etaMin, arriving });
+        if (stopNotifTimerRef.current) clearTimeout(stopNotifTimerRef.current);
+        stopNotifTimerRef.current = setTimeout(() => setStopNotification(null), 7000);
+        break;
+      }
+    }
+    return undefined;
+  }, [guidedRouteRunning, vehiclePosition, displayIntermediateStops]);
 
   return (
     <div className="tracking-layout">
@@ -2216,6 +2319,28 @@ export default function TrackingPage({ routeId: routeIdProp }) {
         </div>
       )}
 
+      {guidedRouteRunning && stopNotification && (
+        <div className="gps-stop-notif" role="alert" aria-live="polite">
+          <div className="gps-stop-notif-icon">🚏</div>
+          <div className="gps-stop-notif-body">
+            <span className="gps-stop-notif-type">
+              {stopNotification.arriving ? "Llegando a parada" : "Próxima parada"}
+            </span>
+            <span className="gps-stop-notif-label">{stopNotification.label}</span>
+            {stopNotification.etaMin !== null && (
+              <span className="gps-stop-notif-eta">
+                ~{stopNotification.etaMin} min · {eta !== null ? `destino en ${eta} min` : ""}
+              </span>
+            )}
+          </div>
+          <button
+            className="gps-stop-notif-close"
+            onClick={() => setStopNotification(null)}
+            aria-label="Cerrar"
+          >×</button>
+        </div>
+      )}
+
       <div className="tracking-dashboard">
         {/* ======================================================
             SIDEBAR
@@ -2229,13 +2354,69 @@ export default function TrackingPage({ routeId: routeIdProp }) {
               onClick={() => navigate("/dashboard")}
               aria-label="Volver al dashboard"
             >
-              ← Volver
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Volver
             </button>
-            <span className={`status-badge ${statusBadge.color}`}>
-              <span className="status-dot" />
-              {statusBadge.label}
-            </span>
+            <div className="sidebar-top-right">
+              <span className={`status-badge ${statusBadge.color}`}>
+                <span className="status-dot" />
+                {statusBadge.label}
+              </span>
+              {isAdminView && contextualAdminAlerts.length > 0 && (
+                <button
+                  type="button"
+                  className="alert-bell-btn"
+                  onClick={() => setShowAlertsPanel((v) => !v)}
+                  aria-label={`${contextualAdminAlerts.length} alertas activas`}
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <span className="alert-bell-badge">{contextualAdminAlerts.length}</span>
+                </button>
+              )}
+            </div>
           </div>
+
+          {/* ---- Panel de alertas inline (admin) ---- */}
+          {isAdminView && showAlertsPanel && contextualAdminAlerts.length > 0 && (
+            <div className="alerts-popover" role="dialog" aria-label="Panel de alertas">
+              <div className="alerts-popover-header">
+                <span className="alerts-popover-title">Alertas activas</span>
+                <button
+                  type="button"
+                  className="alerts-popover-close"
+                  onClick={() => setShowAlertsPanel(false)}
+                  aria-label="Cerrar alertas"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="admin-alert-list alerts-popover-body">
+                {contextualAdminAlerts.map((alert) => (
+                  <article
+                    key={alert.id || `${alert.title}-${alert.detail}`}
+                    className={`admin-alert-row ${alert.tone}`}
+                  >
+                    <div className="admin-alert-row-body">
+                      <p className="admin-alert-title">{alert.title}</p>
+                      <p className="admin-alert-detail">{alert.detail}</p>
+                    </div>
+                    <button
+                      type="button"
+                      className="admin-alert-action"
+                      onClick={() => { handleAdminAlertAction(alert); setShowAlertsPanel(false); }}
+                    >
+                      {getAdminAlertActionLabel(alert)}
+                    </button>
+                  </article>
+                ))}
+              </div>
+            </div>
+          )}
 
           {showLiveToast && (
             <div className="sidebar-live-toast" role="status" aria-live="polite">
@@ -2246,116 +2427,152 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           {/* ==================== ADMIN ==================== */}
           {isAdminView && (
             <>
-              <div className="admin-kpi-row">
-                <div className="admin-kpi-pill">
-                  <span className="admin-kpi-pill-num">{displayActiveVehicles.length}</span>
-                  <span className="admin-kpi-pill-label">Vehículos</span>
-                </div>
-                <div className="admin-kpi-pill">
-                  <span className="admin-kpi-pill-num">{filteredAdminRouteSummaries.length}</span>
-                  <span className="admin-kpi-pill-label">Rutas</span>
-                </div>
-                <div className="admin-kpi-pill">
-                  <span className="admin-kpi-pill-num">{totalStudents}</span>
-                  <span className="admin-kpi-pill-label">Estudiantes</span>
-                </div>
+              {/* KPI compacto con toggle */}
+              <div className="admin-kpi-bar">
+                {!kpiCollapsed && (
+                  <div className="admin-kpi-pills">
+                    <div className="admin-kpi-pill">
+                      <span className="admin-kpi-pill-num">{displayActiveVehicles.length}</span>
+                      <span className="admin-kpi-pill-label">Vehículos</span>
+                    </div>
+                    <div className="admin-kpi-divider" />
+                    <div className="admin-kpi-pill">
+                      <span className="admin-kpi-pill-num">{filteredAdminRouteSummaries.length}</span>
+                      <span className="admin-kpi-pill-label">Rutas</span>
+                    </div>
+                    <div className="admin-kpi-divider" />
+                    <div className="admin-kpi-pill">
+                      <span className="admin-kpi-pill-num">{totalStudents}</span>
+                      <span className="admin-kpi-pill-label">Estudiantes</span>
+                    </div>
+                  </div>
+                )}
+                {kpiCollapsed && (
+                  <span className="admin-kpi-collapsed-summary">
+                    {displayActiveVehicles.length} veh · {filteredAdminRouteSummaries.length} rutas · {totalStudents} est.
+                  </span>
+                )}
+                <button
+                  type="button"
+                  className="section-collapse-btn"
+                  onClick={() => setKpiCollapsed((v) => !v)}
+                  aria-label={kpiCollapsed ? "Expandir estadísticas" : "Minimizar estadísticas"}
+                >
+                  {kpiCollapsed ? (
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  ) : (
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 8l4-4 4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  )}
+                </button>
               </div>
 
+              {/* Rutas activas con toggle */}
               <section className="sidebar-section">
                 <div className="sidebar-section-head">
                   <span className="sidebar-section-title">Rutas activas</span>
-                  <span className="panel-counter">{filteredAdminRouteSummaries.length}</span>
-                </div>
-                {hasAdminRouteFilter && (
-                  <div className="admin-filter-row">
-                    <span className="admin-filter-text">
-                      Filtro: {filteredAdminRouteSummaries.length} ruta(s)
-                    </span>
+                  <div className="sidebar-head-actions">
+                    <span className="panel-counter">{filteredAdminRouteSummaries.length}</span>
                     <button
                       type="button"
-                      className="admin-filter-clear"
-                      onClick={() => setAdminRouteFilterIds([])}
+                      className="section-collapse-btn"
+                      onClick={() => setRoutesCollapsed((v) => !v)}
+                      aria-label={routesCollapsed ? "Expandir rutas" : "Minimizar rutas"}
                     >
-                      Limpiar
+                      {routesCollapsed ? (
+                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      ) : (
+                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 8l4-4 4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      )}
                     </button>
                   </div>
-                )}
-                {filteredAdminRouteSummaries.length === 0 ? (
-                  <p className="panel-muted">No hay rutas para mostrar.</p>
-                ) : (
-                  <div className="admin-route-list" role="list">
-                    {filteredAdminRouteSummaries.map((route) => (
-                      <article key={route.id} className="admin-route-row" role="listitem">
-                        <div className="admin-route-row-head">
-                          <span className={`admin-route-dot ${route.is_live ? "live" : "idle"}`} />
-                          <div className="admin-route-row-info">
-                            <span className="admin-route-row-name">{route.name}</span>
-                            <span className="admin-route-row-driver">{route.driver_name}</span>
-                          </div>
-                          <span className={`admin-route-state ${route.is_live ? "live" : "idle"}`}>
-                            {route.state_label}
-                          </span>
-                        </div>
-                        <div className="admin-route-progress-bar mini" aria-hidden="true">
-                          <span style={{ width: `${Math.min(route.progress_percent ?? 0, 100)}%` }} />
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                )}
-              </section>
-
-              {contextualAdminAlerts.length > 0 && (
-                <section className="sidebar-section">
-                  <div className="sidebar-section-head">
-                    <span className="sidebar-section-title">Alertas</span>
-                    <span className="panel-counter alert">{contextualAdminAlerts.length}</span>
-                  </div>
-                  <div className="admin-alert-list">
-                    {contextualAdminAlerts.map((alert) => (
-                      <article
-                        key={alert.id || `${alert.title}-${alert.detail}`}
-                        className={`admin-alert-row ${alert.tone}`}
-                      >
-                        <div className="admin-alert-row-body">
-                          <p className="admin-alert-title">{alert.title}</p>
-                          <p className="admin-alert-detail">{alert.detail}</p>
-                        </div>
+                </div>
+                {!routesCollapsed && (
+                  <>
+                    {hasAdminRouteFilter && (
+                      <div className="admin-filter-row">
+                        <span className="admin-filter-text">
+                          Filtro: {filteredAdminRouteSummaries.length} ruta(s)
+                        </span>
                         <button
                           type="button"
-                          className="admin-alert-action"
-                          onClick={() => handleAdminAlertAction(alert)}
+                          className="admin-filter-clear"
+                          onClick={() => setAdminRouteFilterIds([])}
                         >
-                          {getAdminAlertActionLabel(alert)}
+                          Limpiar
                         </button>
-                      </article>
-                    ))}
-                  </div>
-                </section>
-              )}
+                      </div>
+                    )}
+                    {filteredAdminRouteSummaries.length === 0 ? (
+                      <p className="panel-muted">No hay rutas para mostrar.</p>
+                    ) : (
+                      <div className="admin-route-list" role="list">
+                        {filteredAdminRouteSummaries.map((route) => (
+                          <article key={route.id} className="admin-route-row" role="listitem">
+                            <div className="admin-route-row-head">
+                              <span className={`admin-route-dot ${route.is_live ? "live" : "idle"}`} />
+                              <div className="admin-route-row-info">
+                                <span className="admin-route-row-name">{route.name}</span>
+                                <span className="admin-route-row-driver">{route.driver_name}</span>
+                              </div>
+                              <span className={`admin-route-state ${route.is_live ? "live" : "idle"}`}>
+                                {route.state_label}
+                              </span>
+                            </div>
+                            <div className="admin-route-progress-bar mini" aria-hidden="true">
+                              <span style={{ width: `${Math.min(route.progress_percent ?? 0, 100)}%` }} />
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </section>
             </>
           )}
 
           {/* ==================== CONDUCTOR ==================== */}
           {currentRole === "driver" && (
             <>
-              {driverRoutes.length > 0 && (
-                <div className="driver-route-select-wrap">
-                  <label className="sidebar-label">Ruta asignada</label>
-                  <select
-                    value={Number.isFinite(selectedRouteId) ? selectedRouteId : ""}
-                    onChange={(e) => {
-                      const val = Number(e.target.value);
-                      if (Number.isFinite(val)) navigate(`/tracking/${val}`);
+              {routeInfo && (
+                <div className="driver-route-current-wrap">
+                  <span className="sidebar-label">Ruta asignada</span>
+                  <div className="driver-route-current-name">
+                    {routeInfo.name || `Ruta ${selectedRouteId}`}
+                    {driverRoutes.length > 1 && (
+                      <span className="driver-route-counter">
+                        {driverRoutes.findIndex((r) => r.id === selectedRouteId) + 1}
+                        {" / "}
+                        {driverRoutes.length}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {nextRouteCountdown !== null && nextRoute && (
+                <div className="driver-next-route-banner">
+                  <div className="driver-next-route-title">Ruta completada</div>
+                  <div className="driver-next-route-info">
+                    Siguiente: <strong>{nextRoute.name || `Ruta ${nextRoute.id}`}</strong>
+                  </div>
+                  <div className="driver-next-route-countdown">
+                    <span className="driver-next-route-seconds">{nextRouteCountdown}</span>
+                    <span className="driver-next-route-seclabel">seg</span>
+                  </div>
+                  <button
+                    className="driver-next-route-now-btn"
+                    onClick={() => {
+                      if (nextRouteCountdownRef.current) {
+                        clearInterval(nextRouteCountdownRef.current);
+                        nextRouteCountdownRef.current = null;
+                      }
+                      setNextRouteCountdown(null);
+                      navigate(`/tracking/${nextRoute.id}`);
                     }}
-                    disabled={loadingRoutes || guidedRouteRunning}
-                    className="route-select"
                   >
-                    <option value="">Selecciona una ruta</option>
-                    {driverRoutes.map((r) => (
-                      <option key={r.id} value={r.id}>{r.name || `Ruta ${r.id}`}</option>
-                    ))}
-                  </select>
+                    Ir ahora
+                  </button>
                 </div>
               )}
 
@@ -2564,28 +2781,33 @@ export default function TrackingPage({ routeId: routeIdProp }) {
         <main
           className={`map-container-wrapper${showLiveTransition ? " map-live-transition" : ""}`}
         >
-          <MapView
-            trackings={displayTrackings}
-            plannedRoutePolyline={displayPlannedRoutePolyline}
-            remainingRoutePolyline={routeProgressSegments.remaining}
-            traveledRoutePolyline={displayTraveledRoutePolyline}
-            originCoords={displayOriginCoords}
-            destinationCoords={displayDestinationCoords}
-            originName={routeInfo?.origin || "Centro"}
-            destinationName={
-              routeInfo?.destination || "Seminario San Buenaventura"
-            }
-            intermediateStops={displayIntermediateStops}
-            activeVehicles={displayActiveVehicles}
-            vehiclePosition={showEmptyCityCanvas ? null : displayVehiclePosition}
-            userCoords={userCoords}
-            mapHeight="100%"
-            focusAllVehicles={isAdminView}
-            routeOverlays={isAdminView ? adminRouteOverlays : []}
-            highlightedRouteIds={isAdminView ? highlightedAdminRouteIds : []}
-            eta={eta}
-            etaUpdated={etaUpdated}
-          />
+          <div className="map-frame">
+            <MapView
+              trackings={displayTrackings}
+              plannedRoutePolyline={displayPlannedRoutePolyline}
+              remainingRoutePolyline={routeProgressSegments.remaining}
+              traveledRoutePolyline={displayTraveledRoutePolyline}
+              originCoords={displayOriginCoords}
+              destinationCoords={displayDestinationCoords}
+              originName={routeInfo?.origin || "Centro"}
+              destinationName={
+                routeInfo?.destination || "Seminario San Buenaventura"
+              }
+              intermediateStops={displayIntermediateStops}
+              activeVehicles={displayActiveVehicles}
+              vehiclePosition={showEmptyCityCanvas ? null : displayVehiclePosition}
+              userCoords={userCoords}
+              mapHeight="100%"
+              focusAllVehicles={isAdminView}
+              routeOverlays={isAdminView ? adminRouteOverlays : []}
+              highlightedRouteIds={isAdminView ? highlightedAdminRouteIds : []}
+              eta={eta}
+              etaUpdated={etaUpdated}
+              gpsMode={guidedRouteRunning}
+              navigationSteps={navigationSteps}
+              onExitGps={canManageGuidedRoute ? stopGuidedRoute : null}
+            />
+          </div>
         </main>
       </div>
     </div>
