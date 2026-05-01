@@ -1,7 +1,7 @@
 // Mapa en tiempo real con estilo limpio tipo navegacion
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import React from "react";
-import { GoogleMap, LoadScript, Polyline, OverlayView } from "@react-google-maps/api";
+import { GoogleMap, useJsApiLoader, Polyline, OverlayView } from "@react-google-maps/api";
 import "./map-styles.css";
 
 // ---------------------------------------------------------------------------
@@ -243,6 +243,11 @@ export default function MapView({
   highlightedRouteIds = [],
   pois = [],
 }) {
+  const { isLoaded: mapsApiLoaded } = useJsApiLoader({
+    id: "vialtros-google-map",
+    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
+  });
+
   const [displayPois, setDisplayPois] = useState(Array.isArray(pois) ? pois : []);
   const [animatedVehiclePoint, setAnimatedVehiclePoint] = useState(null);
   const [mapRef, setMapRef] = useState(null);
@@ -252,6 +257,7 @@ export default function MapView({
   const previousAnimatedPointRef = useRef(null);
   const previousTraveledLineLengthRef = useRef(0);
   const poisTimerRef = useRef(null);
+  const lastPoisFetchCoordsRef = useRef(null);
   const fittedOnceRef = useRef(false);
   const lastFitLengthRef = useRef(-1);
   const firstFollowRef = useRef(true);
@@ -490,16 +496,26 @@ out center;`;
 
   const hasLiveTrackings = validPoints.length > 0;
 
-  // Debounce POI fetch when vehicle or map changes
+  // Fetch POIs solo una vez por sesión, o si el vehículo se movió más de 500m
   useEffect(() => {
     const coords = Array.isArray(vehiclePoint) ? vehiclePoint : null;
     if (!coords) return undefined;
+
+    const last = lastPoisFetchCoordsRef.current;
+    if (last) {
+      const dLat = coords[0] - last[0];
+      const dLng = coords[1] - last[1];
+      const approxKm = Math.sqrt(dLat * dLat + dLng * dLng) * 111;
+      if (approxKm < 0.5) return undefined;
+    }
+
     if (poisTimerRef.current) clearTimeout(poisTimerRef.current);
     poisTimerRef.current = setTimeout(() => {
+      lastPoisFetchCoordsRef.current = coords;
       const mapZoom = mapRef?.getZoom ? mapRef.getZoom() : 13;
       const radius = Math.max(600, Math.round(2000 * Math.pow(2, 13 - (mapZoom || 13)) / 4));
       fetchPOIs(coords[0], coords[1], radius);
-    }, 1500);
+    }, 5000);
     return () => { if (poisTimerRef.current) clearTimeout(poisTimerRef.current); };
   }, [vehiclePoint, mapRef, fetchPOIs]);
 
@@ -678,11 +694,10 @@ out center;`;
       style={{ position: "relative", height: mapHeight }}
       className="tracking-map-container"
     >
-      <LoadScript
-        googleMapsApiKey={GOOGLE_MAPS_API_KEY}
-        loadingElement={<div style={{ height: "100%", background: "#f0f9ff" }} />}
-      >
-        <GoogleMap
+      {!mapsApiLoaded ? (
+        <div style={{ height: "100%", background: "#f0f9ff" }} />
+      ) : (
+      <GoogleMap
           mapContainerStyle={{ height: "100%", width: "100%" }}
           center={toLatLng(center) || { lat: BUENAVENTURA_CENTER[0], lng: BUENAVENTURA_CENTER[1] }}
           zoom={focusAllVehicles ? 12 : 14}
@@ -912,7 +927,7 @@ out center;`;
             </OverlayView>
           )}
         </GoogleMap>
-      </LoadScript>
+      )}
 
 
       {/* ---- Panel flotante ETA ---- */}
