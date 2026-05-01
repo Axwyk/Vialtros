@@ -32,6 +32,8 @@ jobs:
       - name: Build
         run: npm run build
         working-directory: frontend
+        env:
+          CI: false
 
       - name: Configure Pages
         uses: actions/configure-pages@v4
