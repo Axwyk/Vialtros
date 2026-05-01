@@ -10,35 +10,39 @@ export default function Sidebar({ role, onLogout }) {
   const { trackingLink, trackingEnabled } = useTrackingRoute(role);
 
   const navItems = [
-    { to: "/dashboard", icon: icons.dashboard, label: "Inicio" },
+    { id: "home", to: "/dashboard", icon: icons.dashboard, label: "Inicio" },
     {
+      id: "driver-routes",
       to: "/driver/routes",
       icon: icons.routes,
       label: "Mis rutas",
       driver: true,
     },
-    { to: "/admin/users", icon: icons.users, label: "Usuarios", admin: true },
+    { id: "admin-users", to: "/admin/users", icon: icons.users, label: "Usuarios", admin: true },
     {
+      id: "admin-drivers",
       to: "/admin/drivers",
       icon: icons.drivers,
       label: "Conductores",
       admin: true,
     },
-    { to: "/admin/routes", icon: icons.routes, label: "Rutas", admin: true },
+    { id: "admin-routes", to: "/admin/routes", icon: icons.routes, label: "Rutas", admin: true },
     {
+      id: "admin-passengers",
       to: "/admin/passengers",
       icon: icons.clipboard,
       label: "Estudiantes",
       admin: true,
     },
     {
+      id: "tracking",
       to: trackingEnabled ? trackingLink : "/dashboard",
       icon: icons.tracking,
       label: "Tracking",
       disabled: !trackingEnabled,
       tracking: true,
     },
-    { to: "/profile", icon: icons.profile, label: "Mi Perfil" },
+    { id: "profile", to: "/profile", icon: icons.profile, label: "Mi Perfil" },
   ];
 
   return (
@@ -64,7 +68,7 @@ export default function Sidebar({ role, onLogout }) {
               : location.pathname === item.to;
             return (
               <Link
-                key={item.to}
+                key={item.id}
                 to={item.to}
                 onClick={
                   item.disabled ? (event) => event.preventDefault() : undefined
