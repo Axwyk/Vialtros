@@ -27,19 +27,38 @@ function toLatLngArray(coordsArray) {
 const GOOGLE_MAPS_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "";
 const BUENAVENTURA_CENTER = [3.89243, -77.02824];
 const BUENAVENTURA_BOUNDS = { south: 3.84, west: -77.09, north: 3.93, east: -76.99 };
-const CORPORATE_ROUTE_COLOR = "#0A2B3D";
-const CORPORATE_ROUTE_HALO = "#dbeafe";
+const CORPORATE_ROUTE_COLOR = "#2563EB";
+const CORPORATE_ROUTE_HALO = "#FFFFFF";
 
 const GOOGLE_MAPS_STYLES = [
-  { featureType: "all", elementType: "labels.text.fill", stylers: [{ color: "#0f172a" }] },
+  // Ocultar POIs comerciales que saturan el mapa
+  { featureType: "poi.business", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.attraction", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.government", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.place_of_worship", stylers: [{ visibility: "off" }] },
+  { featureType: "transit", elementType: "labels.icon", stylers: [{ visibility: "off" }] },
+  // Landscape limpia
+  { featureType: "landscape", elementType: "geometry", stylers: [{ color: "#f0f4f8" }] },
+  { featureType: "landscape.man_made", elementType: "geometry", stylers: [{ color: "#e8edf4" }] },
+  { featureType: "poi", elementType: "geometry", stylers: [{ color: "#e8edf4" }] },
+  // Agua con azul más profundo y profesional
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#8fb8dc" }] },
+  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#1e3a5f" }] },
+  { featureType: "water", elementType: "labels.text.stroke", stylers: [{ color: "#7aaecc" }] },
+  // Jerarquía de calles clara
   { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#e2e8f0" }] },
-  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#f1f5f9" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#bfdbfe" }] },
-  { featureType: "landscape", elementType: "geometry", stylers: [{ color: "#f0f9ff" }] },
-  { featureType: "poi", elementType: "geometry", stylers: [{ color: "#e0f2fe" }] },
-  { featureType: "transit", elementType: "geometry", stylers: [{ color: "#dbeafe" }] },
-  { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#cbd5e1" }] },
+  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#dde3ec" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#f5f0e0" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#d6c678" }] },
+  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+  { featureType: "road.local", elementType: "geometry", stylers: [{ color: "#f9fafb" }] },
+  // Texto legible con stroke blanco
+  { featureType: "all", elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }, { weight: 3 }] },
+  { featureType: "all", elementType: "labels.text.fill", stylers: [{ color: "#2d3748" }] },
+  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#7f8ea3" }] },
+  { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#7a5f1a" }] },
+  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#0f172a" }] },
+  { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#c4cdd9" }] },
 ];
 
 const GOOGLE_MAPS_OPTIONS = {
@@ -55,18 +74,23 @@ const GOOGLE_MAPS_OPTIONS = {
 };
 
 const GPS_NIGHT_STYLES = [
-  { featureType: "all", elementType: "geometry", stylers: [{ color: "#1c2130" }] },
-  { featureType: "all", elementType: "labels.text.stroke", stylers: [{ color: "#1c2130" }] },
-  { featureType: "all", elementType: "labels.text.fill", stylers: [{ color: "#8ab4b4" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#2d3547" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#3d5075" }] },
-  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#2d3f5a" }] },
-  { featureType: "road.local", elementType: "geometry", stylers: [{ color: "#252f42" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0e1626" }] },
-  { featureType: "landscape", elementType: "geometry", stylers: [{ color: "#1a2035" }] },
-  { featureType: "poi", elementType: "geometry", stylers: [{ color: "#1e2b3a" }] },
-  { featureType: "transit", elementType: "geometry", stylers: [{ color: "#1e2b3a" }] },
-  { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#3b4d6b" }] },
+  { featureType: "all", elementType: "geometry", stylers: [{ color: "#18202e" }] },
+  { featureType: "all", elementType: "labels.text.stroke", stylers: [{ color: "#18202e" }] },
+  { featureType: "all", elementType: "labels.text.fill", stylers: [{ color: "#93a8c4" }] },
+  { featureType: "poi.business", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.attraction", stylers: [{ visibility: "off" }] },
+  { featureType: "transit", elementType: "labels.icon", stylers: [{ visibility: "off" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#252f42" }] },
+  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#1a2234" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#2e3f5e" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#1e2d46" }] },
+  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#222c3e" }] },
+  { featureType: "road.local", elementType: "geometry", stylers: [{ color: "#1e2738" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0a1628" }] },
+  { featureType: "landscape", elementType: "geometry", stylers: [{ color: "#151d2b" }] },
+  { featureType: "poi", elementType: "geometry", stylers: [{ color: "#1a2438" }] },
+  { featureType: "transit", elementType: "geometry", stylers: [{ color: "#1a2438" }] },
+  { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#2d3f5a" }] },
 ];
 
 function formatDistance(meters) {
@@ -848,7 +872,9 @@ out center;`;
   return (
     <div
       ref={containerRef}
-      style={{ position: "relative", height: mapHeight }}
+      style={gpsMode
+        ? { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999 }
+        : { position: "relative", height: mapHeight }}
       className="tracking-map-container"
     >
       {!mapsApiLoaded ? (
@@ -871,17 +897,19 @@ out center;`;
                 <Polyline
                   path={path}
                   options={{
-                    strokeColor: isHighlighted ? "#93c5fd" : CORPORATE_ROUTE_HALO,
-                    strokeWeight: isHighlighted ? 6 : 5,
-                    strokeOpacity: isDimmed ? 0.06 : 0.18,
+                    strokeColor: "#FFFFFF",
+                    strokeWeight: isHighlighted ? 10 : 8,
+                    strokeOpacity: isDimmed ? 0.04 : isHighlighted ? 0.65 : 0.5,
+                    geodesic: true,
                   }}
                 />
                 <Polyline
                   path={path}
                   options={{
-                    strokeColor: CORPORATE_ROUTE_COLOR,
-                    strokeWeight: 3,
-                    strokeOpacity: isDimmed ? 0.16 : 0.7,
+                    strokeColor: isHighlighted ? "#3B82F6" : CORPORATE_ROUTE_COLOR,
+                    strokeWeight: isHighlighted ? 6 : 4,
+                    strokeOpacity: isDimmed ? 0.15 : 0.88,
+                    geodesic: true,
                   }}
                 />
               </React.Fragment>
@@ -893,11 +921,15 @@ out center;`;
             <>
               <Polyline
                 path={toLatLngArray(plannedLine)}
-                options={{ strokeColor: CORPORATE_ROUTE_HALO, strokeWeight: 6, strokeOpacity: 0.18 }}
+                options={{ strokeColor: "#FFFFFF", strokeWeight: 14, strokeOpacity: 0.52, geodesic: true }}
               />
               <Polyline
                 path={toLatLngArray(plannedLine)}
-                options={{ strokeColor: CORPORATE_ROUTE_COLOR, strokeWeight: 4, strokeOpacity: 0.95 }}
+                options={{ strokeColor: CORPORATE_ROUTE_COLOR, strokeWeight: 8, strokeOpacity: 0.98, geodesic: true }}
+              />
+              <Polyline
+                path={toLatLngArray(plannedLine)}
+                options={{ strokeColor: "#93c5fd", strokeWeight: 3, strokeOpacity: 0.45, geodesic: true }}
               />
             </>
           )}
@@ -907,16 +939,15 @@ out center;`;
             <>
               <Polyline
                 path={toLatLngArray(remainingLine)}
-                options={{ strokeColor: "#0891b2", strokeWeight: 6, strokeOpacity: 0.18 }}
+                options={{ strokeColor: "#FFFFFF", strokeWeight: 14, strokeOpacity: 0.5, geodesic: true }}
               />
               <Polyline
                 path={toLatLngArray(remainingLine)}
-                options={{
-                  strokeColor: "#0891b2",
-                  strokeWeight: 4,
-                  strokeOpacity: 0.95,
-                  icons: [{ icon: { path: "M 0,-1 0,1", strokeOpacity: 1, scale: 4 }, offset: "0", repeat: "15px" }],
-                }}
+                options={{ strokeColor: "#3B82F6", strokeWeight: 8, strokeOpacity: 0.98, geodesic: true }}
+              />
+              <Polyline
+                path={toLatLngArray(remainingLine)}
+                options={{ strokeColor: "#bfdbfe", strokeWeight: 3, strokeOpacity: 0.4, geodesic: true }}
               />
             </>
           )}
@@ -926,11 +957,11 @@ out center;`;
             <>
               <Polyline
                 path={toLatLngArray(traveledLine)}
-                options={{ strokeColor: CORPORATE_ROUTE_HALO, strokeWeight: 6, strokeOpacity: 0.14 }}
+                options={{ strokeColor: "#FFFFFF", strokeWeight: 10, strokeOpacity: 0.28, geodesic: true }}
               />
               <Polyline
                 path={toLatLngArray(traveledLine)}
-                options={{ strokeColor: "#2563eb", strokeWeight: 5, strokeOpacity: 0.98 }}
+                options={{ strokeColor: "#64748b", strokeWeight: 6, strokeOpacity: 0.8, geodesic: true }}
               />
             </>
           )}
@@ -971,48 +1002,68 @@ out center;`;
 
           {/* ---- Vehículo principal ---- */}
           {primaryVehicle && toLatLng([primaryVehicle.latitude, primaryVehicle.longitude]) && (
-            <>
+            gpsMode ? (
               <OverlayView
                 position={{ lat: primaryVehicle.latitude, lng: primaryVehicle.longitude }}
                 mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
               >
                 <div style={{ transform: "translate(-50%, -50%)", pointerEvents: "none" }}>
                   <div
-                    className="vt-current-point-ring"
-                    style={{ width: 28, height: 28, borderRadius: "50%", border: "6px solid rgba(37,99,235,0.18)" }}
-                  />
-                </div>
-              </OverlayView>
-              <OverlayView
-                position={{ lat: primaryVehicle.latitude, lng: primaryVehicle.longitude }}
-                mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
-              >
-                <div style={{ transform: "translate(-50%, -50%)", pointerEvents: "none" }}>
-                  <div
-                    className="vt-current-point-core"
-                    style={{ width: 12, height: 12, borderRadius: "50%", background: "#2563eb", border: "3px solid #ffffff" }}
-                  />
-                </div>
-              </OverlayView>
-              <OverlayView
-                position={{ lat: primaryVehicle.latitude, lng: primaryVehicle.longitude }}
-                mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
-              >
-                <div style={{ transform: "translate(-50%, calc(-100% - 14px))", pointerEvents: "none" }}>
-                  <div className={`vt-vehicle-chip vt-vehicle-chip-${primaryVehicle.status === "En ruta" ? "moving" : "idle"}`}>
-                    <span className="vt-vehicle-icon" style={{ transform: `rotate(${primaryVehicleRotation}deg)` }}>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="1" y="4" width="16" height="12" rx="2" />
-                        <path d="M17 8h3l3 4v4h-6V8z" />
-                        <circle cx="5.5" cy="18.5" r="2.2" />
-                        <circle cx="18.5" cy="18.5" r="2.2" />
-                      </svg>
-                    </span>
-                    <span className="vt-vehicle-text">{primaryVehicle.label || "Vehiculo"}</span>
+                    className="vt-gps-nav-arrow"
+                    style={{ transform: `rotate(${primaryVehicleRotation}deg)` }}
+                  >
+                    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <circle cx="32" cy="32" r="30" fill="rgba(8,14,28,0.93)" stroke="#3b82f6" strokeWidth="2.5"/>
+                      <path d="M32 10 L46 52 L32 42 L18 52 Z" fill="#3b82f6"/>
+                      <path d="M32 13 L44 50 L32 40 L20 50 Z" fill="white" fillOpacity="0.16"/>
+                    </svg>
                   </div>
                 </div>
               </OverlayView>
-            </>
+            ) : (
+              <>
+                <OverlayView
+                  position={{ lat: primaryVehicle.latitude, lng: primaryVehicle.longitude }}
+                  mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+                >
+                  <div style={{ transform: "translate(-50%, -50%)", pointerEvents: "none" }}>
+                    <div
+                      className="vt-current-point-ring"
+                      style={{ width: 28, height: 28, borderRadius: "50%", border: "6px solid rgba(37,99,235,0.18)" }}
+                    />
+                  </div>
+                </OverlayView>
+                <OverlayView
+                  position={{ lat: primaryVehicle.latitude, lng: primaryVehicle.longitude }}
+                  mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+                >
+                  <div style={{ transform: "translate(-50%, -50%)", pointerEvents: "none" }}>
+                    <div
+                      className="vt-current-point-core"
+                      style={{ width: 12, height: 12, borderRadius: "50%", background: "#2563eb", border: "3px solid #ffffff" }}
+                    />
+                  </div>
+                </OverlayView>
+                <OverlayView
+                  position={{ lat: primaryVehicle.latitude, lng: primaryVehicle.longitude }}
+                  mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+                >
+                  <div style={{ transform: "translate(-50%, calc(-100% - 14px))", pointerEvents: "none" }}>
+                    <div className={`vt-vehicle-chip vt-vehicle-chip-${primaryVehicle.status === "En ruta" ? "moving" : "idle"}`}>
+                      <span className="vt-vehicle-icon" style={{ transform: `rotate(${primaryVehicleRotation}deg)` }}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="1" y="4" width="16" height="12" rx="2" />
+                          <path d="M17 8h3l3 4v4h-6V8z" />
+                          <circle cx="5.5" cy="18.5" r="2.2" />
+                          <circle cx="18.5" cy="18.5" r="2.2" />
+                        </svg>
+                      </span>
+                      <span className="vt-vehicle-text">{primaryVehicle.label || "Vehiculo"}</span>
+                    </div>
+                  </div>
+                </OverlayView>
+              </>
+            )
           )}
 
           {/* ---- Vehículos secundarios ---- */}
@@ -1104,22 +1155,28 @@ out center;`;
                 <span className="nav-hud-distance">En ruta</span>
               )}
             </div>
+            {eta !== null && (
+              <div className="nav-hud-eta-badge">
+                <span className="nav-hud-eta-value">{eta}</span>
+                <span className="nav-hud-eta-unit">min</span>
+              </div>
+            )}
           </div>
 
           <div className="nav-hud-bottom">
             <div className="nav-hud-stat">
-              <span className="nav-hud-stat-value">{eta !== null ? `${eta}` : "--"}</span>
+              <span className={`nav-hud-stat-value nav-hud-stat-green`}>{eta !== null ? `${eta}` : "--"}</span>
               <span className="nav-hud-stat-label">min ETA</span>
             </div>
             <div className="nav-hud-divider" />
             <div className="nav-hud-stat">
-              <span className="nav-hud-stat-value">{pendingKm}</span>
-              <span className="nav-hud-stat-label">km pend.</span>
+              <span className="nav-hud-stat-value nav-hud-stat-blue">{pendingKm}</span>
+              <span className="nav-hud-stat-label">km restantes</span>
             </div>
             <div className="nav-hud-divider" />
             <div className="nav-hud-stat">
               <span className="nav-hud-stat-value">{traveledKm}</span>
-              <span className="nav-hud-stat-label">km rec.</span>
+              <span className="nav-hud-stat-label">km recorr.</span>
             </div>
           </div>
         </>
