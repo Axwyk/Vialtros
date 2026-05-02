@@ -501,17 +501,12 @@ export default function LandingPage() {
                       <p className="text-xs text-gray-400">{r.stops}</p>
                     </div>
                   </div>
-                  <span
-                    className={`text-xs font-medium px-3 py-1 rounded-full ${r.statusClass}`}
-                  >
-                    {r.status}
-                  </span>
+                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${r.statusClass}`}>{r.status}</span>
                 </div>
               ))}
             </div>
-            <div className="grid grid-cols-3 gap-3 relative z-10">
+            <div className="flex gap-6 mt-6">
               {[
-                { val: "18", lbl: "Vehículos" },
                 { val: "247", lbl: "Pasajeros" },
                 { val: "94%", lbl: "Puntualidad", accent: true },
               ].map((s) => (
@@ -687,29 +682,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* FOOTER */}
-      <footer className="w-full bg-gradient-to-r from-blue-700 via-blue-800 to-indigo-900 py-10 px-8 md:px-20">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-5">
-          <div className="flex items-center gap-2.5">
-            <LogoIcon size={22} color="#60a5fa" />
-            <span className="font-bold text-white text-lg">Vialtros</span>
-          </div>
-          <p className="text-blue-200 text-sm">
-            © {new Date().getFullYear()} Vialtros. Sistema de gestión de rutas y
-            transporte.
-          </p>
-          <div className="flex gap-6">
-            {["Privacidad", "Términos", "Soporte"].map((l) => (
-              <button
-                key={l}
-                className="text-blue-300 hover:text-white text-sm transition-colors no-underline bg-transparent border-none cursor-pointer p-0"
-              >
-                {l}
-              </button>
-            ))}
-          </div>
-        </div>
-      </footer>
+      {/* FOOTER eliminado, ahora se usa el global */}
     </div>
   );
 }
