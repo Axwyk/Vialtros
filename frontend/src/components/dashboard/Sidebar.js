@@ -87,6 +87,27 @@ export default function Sidebar({ role, onLogout }) {
             );
           })}
       </nav>
+      {/* Enlaces legales y soporte */}
+      <div className="flex flex-col gap-1 mt-8">
+        <Link
+          to="/privacy"
+          className="text-xs text-gray-400 hover:text-blue-700 px-4 py-1 transition-colors"
+        >
+          Privacidad
+        </Link>
+        <Link
+          to="/terms"
+          className="text-xs text-gray-400 hover:text-blue-700 px-4 py-1 transition-colors"
+        >
+          Términos y Condiciones
+        </Link>
+        <Link
+          to="/support"
+          className="text-xs text-gray-400 hover:text-blue-700 px-4 py-1 transition-colors"
+        >
+          Soporte
+        </Link>
+      </div>
       {onLogout && (
         <button
           onClick={onLogout}
