@@ -32,6 +32,7 @@ import Footer from "./components/Footer";
 import PrivacyPage from "./pages/PrivacyPage";
 import TermsPage from "./pages/TermsPage";
 import SupportPage from "./pages/SupportPage";
+import ProfileScreen from "./pages/ProfileScreen";
 
 function App() {
   const [isAuth, setIsAuth] = useState(() => {
@@ -204,6 +205,7 @@ function App() {
             <Route path="/privacy" element={<PrivacyPage />} />
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/support" element={<SupportPage />} />
+            <Route path="/profile" element={<ProfileScreen />} />
             <Route
               path="*"
               element={<Navigate to={isAuth ? "/dashboard" : "/"} />}
