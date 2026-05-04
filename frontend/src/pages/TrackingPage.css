@@ -526,6 +526,25 @@
   letter-spacing: 0.06em;
 }
 
+.gps-reenter-btn {
+  margin-left: auto;
+  border: 1px solid rgba(125, 211, 252, 0.5);
+  background: rgba(125, 211, 252, 0.12);
+  color: #7dd3fc;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 4px 10px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.gps-reenter-btn:hover {
+  background: rgba(125, 211, 252, 0.25);
+  color: #e0f2fe;
+}
+
 .gps-mode-dot {
   width: 8px;
   height: 8px;
@@ -894,12 +913,12 @@
 
 .panel-error {
   font-size: 12px;
-  color: #ef4444;
+  color: #1e3a5f;
   margin: 8px 16px 0;
   padding: 8px 12px;
-  background: #fef2f2;
+  background: #eff6ff;
   border-radius: 8px;
-  border: 1px solid #fca5a5;
+  border: 1px solid #93c5fd;
 }
 
 /* ── Mapa ────────────────────────────────────────────────── */
@@ -1097,20 +1116,28 @@
   bottom: 80px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 9999;
-  background: #0f172a;
-  border: 1px solid #1e3a5f;
+  z-index: 10001;
+  background: #ffffff;
+  border: 1px solid #dbeafe;
+  border-left: 4px solid #1a56db;
   border-radius: 14px;
   padding: 12px 14px 12px 16px;
   display: flex;
   align-items: center;
   gap: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 8px 32px rgba(15, 36, 68, 0.18), 0 2px 8px rgba(0, 0, 0, 0.06);
   min-width: 240px;
   max-width: 340px;
   font-family: var(--sidebar-font);
   will-change: opacity, transform;
   animation: gps-notif-in 0.32s cubic-bezier(.2, .8, .3, 1.1);
+}
+
+/* Variante anticipada (5 min antes) — fondo azul muy suave */
+.gps-stop-notif-early {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  border-left-color: #1a56db;
 }
 
 @keyframes gps-notif-in {
@@ -1122,6 +1149,8 @@
   font-size: 22px;
   flex-shrink: 0;
   line-height: 1;
+  display: flex;
+  align-items: center;
 }
 
 .gps-stop-notif-body {
@@ -1137,13 +1166,13 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: #64748b;
+  color: #1a56db;
 }
 
 .gps-stop-notif-label {
   font-size: 14px;
   font-weight: 700;
-  color: #ffffff;
+  color: #0f2444;
   line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
@@ -1153,7 +1182,7 @@
 .gps-stop-notif-eta {
   font-size: 11px;
   font-weight: 600;
-  color: #4ade80;
+  color: #1a56db;
   margin-top: 1px;
 }
 
@@ -1161,7 +1190,7 @@
   flex-shrink: 0;
   background: none;
   border: none;
-  color: #475569;
+  color: #94a3b8;
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
@@ -1170,6 +1199,6 @@
 }
 
 .gps-stop-notif-close:hover {
-  color: #94a3b8;
+  color: #1e3a5f;
 }
 

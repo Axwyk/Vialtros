@@ -1,176 +1,427 @@
 /* =====================================================
-   HUD de navegación GPS — estilo limpio y compacto
+   HUD de navegación GPS — overlays flotantes estilo Google Maps
    ===================================================== */
 
-.nav-hud-top {
+/* ---- Banner superior izquierdo — instrucción de giro ---- */
+.gps-overlay-top {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  background: #0f172a;
-  color: #fff;
-  border-radius: 0 0 14px 14px;
-  padding: 10px 16px 12px;
+  top: 16px;
+  left: 16px;
+  max-width: 270px;
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 14px 18px 14px 14px;
+  box-shadow:
+    0 4px 20px rgba(15, 36, 68, 0.14),
+    0 1px 4px rgba(0, 0, 0, 0.07);
+  z-index: 20;
+  pointer-events: auto;
   display: flex;
   align-items: center;
   gap: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.55);
-  z-index: 20;
-  pointer-events: auto;
   font-family: inherit;
+  border: 1px solid #e8eef8;
 }
 
-.nav-hud-arrow {
+/* Línea de acento izquierda azul */
+.gps-overlay-top::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 20%;
+  bottom: 20%;
+  width: 3px;
+  background: linear-gradient(180deg, #93c5fd, #1a56db);
+  border-radius: 0 3px 3px 0;
+}
+
+.gps-overlay-icon {
   flex-shrink: 0;
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: #eff6ff;
+  border-radius: 10px;
+  border: 1px solid #dbeafe;
 }
 
-.nav-hud-arrow svg {
-  width: 34px;
-  height: 34px;
+.gps-overlay-icon svg {
+  width: 40px;
+  height: 40px;
 }
 
-.nav-hud-text {
+.gps-overlay-info {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.gps-overlay-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.gps-overlay-distance {
+  font-size: 26px;
+  font-weight: 800;
+  color: #0f2444;
+  line-height: 1;
+  letter-spacing: -0.5px;
+}
+
+.gps-overlay-street {
+  font-size: 12px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+  letter-spacing: 0.1px;
+}
+
+.gps-overlay-exit-btn {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #64748b;
+  padding: 0;
+  transition: background 0.15s, color 0.15s;
+  pointer-events: auto;
+}
+
+.gps-overlay-exit-btn:hover {
+  background: #e0e7ff;
+  color: #1e3a5f;
+  border-color: #c7d2fe;
+}
+
+/* Chip "después" — siguiente instrucción */
+.gps-overlay-after {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+/* ---- Toast GPS: inicio / giro / llegada ---- */
+.gps-toast {
+  position: absolute;
+  top: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 25;
+  background: #ffffff;
+  border: 1px solid #dbeafe;
+  border-left: 4px solid #1a56db;
+  border-radius: 14px;
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 8px 28px rgba(15, 36, 68, 0.16), 0 2px 6px rgba(0,0,0,0.06);
+  min-width: 200px;
+  max-width: 300px;
+  cursor: pointer;
+  animation: gpsToastIn 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+  pointer-events: auto;
+}
+
+.gps-toast-arrive {
+  border-left-color: #059669;
+  border-color: #a7f3d0;
+}
+
+.gps-toast-start {
+  border-left-color: #1a56db;
+}
+
+@keyframes gpsToastIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(-10px) scale(0.96); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+
+.gps-toast-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.gps-toast-body {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
 }
 
-.nav-hud-distance {
-  font-size: 26px;
-  font-weight: 800;
-  color: #ffffff;
-  line-height: 1;
-  letter-spacing: -0.8px;
-}
-
-.nav-hud-street {
-  font-size: 12px;
-  color: #94a3b8;
+.gps-toast-text {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f2444;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.gps-toast-sub {
+  font-size: 11px;
   font-weight: 500;
-}
-
-.nav-hud-eta-badge {
-  flex-shrink: 0;
-  background: #1e293b;
-  border-radius: 10px;
-  padding: 6px 12px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1px;
-}
-
-.nav-hud-eta-value {
-  font-size: 20px;
-  font-weight: 800;
-  color: #ffffff;
-  line-height: 1;
-  letter-spacing: -0.5px;
-}
-
-.nav-hud-eta-unit {
-  font-size: 9px;
   color: #64748b;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.nav-hud-bottom {
+/* ---- Banner inferior — resumen flotante ---- */
+.gps-overlay-bottom {
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
-  background: #0f172a;
-  color: #fff;
-  border-radius: 14px 14px 0 0;
-  padding: 12px 24px 18px;
+  background: #ffffff;
+  border-radius: 20px 20px 0 0;
+  padding: 0 20px 22px;
+  box-shadow:
+    0 -4px 24px rgba(15, 36, 68, 0.14),
+    0 -1px 0 rgba(26, 86, 219, 0.12);
+  z-index: 20;
+  pointer-events: auto;
   display: flex;
   align-items: center;
-  justify-content: space-around;
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.55);
-  z-index: 20;
-  pointer-events: none;
+  gap: 0;
+  font-family: inherit;
+  /* Barra azul decorativa en el top */
+  border-top: 3px solid #1a56db;
 }
 
-.nav-hud-stat {
+/* Handle visual superior */
+.gps-overlay-bottom::before {
+  content: "";
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 36px;
+  height: 4px;
+  background: rgba(26, 86, 219, 0.35);
+  border-radius: 2px;
+}
+
+.gps-overlay-col {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 1px;
+  padding-top: 18px;
+}
+
+.gps-overlay-col-eta {
   min-width: 68px;
+  align-items: flex-start;
 }
 
-.nav-hud-stat-value {
-  font-size: 22px;
+.gps-overlay-col-dist {
+  flex: 1;
+  align-items: center;
+}
+
+.gps-overlay-col-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  min-width: 96px;
+  justify-content: flex-end;
+  padding-top: 18px;
+}
+
+.gps-overlay-eta-num {
+  font-size: 36px;
   font-weight: 800;
-  color: #ffffff;
+  color: #0f2444;
   line-height: 1;
-  letter-spacing: -0.5px;
+  letter-spacing: -1px;
 }
 
-.nav-hud-stat-green {
-  color: #4ade80;
+.gps-overlay-dist-num {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1a56db;
+  line-height: 1.1;
+  letter-spacing: -0.3px;
 }
 
-.nav-hud-stat-blue {
-  color: #7dd3fc;
-}
-
-.nav-hud-stat-label {
-  font-size: 10px;
-  color: #475569;
-  text-transform: uppercase;
-  letter-spacing: 0.55px;
+.gps-overlay-label-sm {
+  font-size: 11px;
+  color: #9ca3af;
   font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
 }
 
-.nav-hud-divider {
+.gps-overlay-arrival {
+  font-size: 13px;
+  color: #374151;
+  font-weight: 600;
+  margin-top: 3px;
+  background: #f0f4ff;
+  padding: 2px 8px;
+  border-radius: 20px;
+  color: #1a56db;
+}
+
+.gps-overlay-sep {
   width: 1px;
-  height: 30px;
-  background: #1e293b;
+  height: 40px;
+  background: linear-gradient(180deg, transparent, #e0e7ff 30%, #e0e7ff 70%, transparent);
+  flex-shrink: 0;
+  align-self: center;
+  margin-top: 18px;
 }
 
-.nav-hud-exit-btn {
-  flex-shrink: 0;
-  width: 34px;
-  height: 34px;
+.gps-action-btn {
+  width: 36px;
+  height: 36px;
   border: none;
-  background: #1e293b;
-  border-radius: 8px;
+  background: #f3f4f6;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: #94a3b8;
+  color: #6b7280;
   padding: 0;
-  transition: background 0.15s, color 0.15s;
+  border-radius: 50%;
+  transition: color 0.15s, background 0.15s, transform 0.1s;
+  pointer-events: auto;
+  border: 1px solid #e5e7eb;
 }
 
-.nav-hud-exit-btn:hover {
-  background: #334155;
-  color: #ffffff;
+.gps-action-btn:hover {
+  color: #0f2444;
+  background: #e0e7ff;
+  border-color: #c7d2fe;
+  transform: scale(1.08);
 }
 
-.nav-hud-exit-btn svg {
-  width: 16px;
-  height: 16px;
+.gps-action-btn-cancel:hover {
+  color: #dc2626;
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+.gps-action-btn-muted {
+  color: #dc2626 !important;
+  background: #fee2e2 !important;
+  border-color: #fca5a5 !important;
+}
+
+.gps-action-btn-active {
+  color: #1a56db;
+  background: #e0e7ff;
+  border-color: #a5b4fc;
+}
+
+/* Wrapper para posicionamiento relativo del menú popup */
+.gps-menu-wrapper {
+  position: relative;
+}
+
+/* Menú popup tres puntos */
+.gps-menu-popup {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  right: 0;
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow:
+    0 8px 32px rgba(15, 36, 68, 0.18),
+    0 2px 8px rgba(0, 0, 0, 0.08),
+    0 0 0 1px rgba(26, 86, 219, 0.08);
+  min-width: 200px;
+  padding: 6px 0;
+  z-index: 30;
+  animation: gpsMenuFadeIn 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes gpsMenuFadeIn {
+  from { opacity: 0; transform: translateY(6px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.gps-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 11px 18px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1f2937;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+}
+
+.gps-menu-item:hover {
+  background: #f0f4ff;
+  color: #0f2444;
+}
+
+.gps-menu-item svg {
+  flex-shrink: 0;
+  color: #6b7280;
+}
+
+.gps-menu-item:hover svg {
+  color: #1a56db;
+}
+
+.gps-menu-item-danger {
+  color: #dc2626;
+}
+
+.gps-menu-item-danger svg {
+  color: #dc2626;
+}
+
+.gps-menu-divider {
+  height: 1px;
+  background: #f0f0f0;
+  margin: 4px 0;
 }
 
 /* Flecha de navegación GPS (reemplaza chip de bus en modo GPS) */
 .vt-gps-nav-arrow {
-  width: 52px;
-  height: 52px;
+  width: 56px;
+  height: 56px;
+  filter: drop-shadow(0 3px 8px rgba(15, 36, 68, 0.5));
+  animation: gpsArrowPulse 2.4s ease-in-out infinite;
+}
+
+@keyframes gpsArrowPulse {
+  0%, 100% { filter: drop-shadow(0 2px 6px rgba(26, 86, 219, 0.45)); }
+  50%       { filter: drop-shadow(0 4px 14px rgba(26, 86, 219, 0.75)); }
 }
 
 /* Google Maps container */
