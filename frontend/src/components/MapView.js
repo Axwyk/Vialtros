@@ -1185,7 +1185,7 @@ out center;`;
       {!gpsMode && (
       <div className="route-metrics-panel">
         <div className="route-metrics-grid">
-          <div className="route-metric-tile">
+          <div className="route-metric-tile route-metric-tile--planif">
             <span className="route-metric-label">Planif.</span>
             <div className="route-metric-value">
               <span className="route-metric-number">{plannedKm}</span>
@@ -1193,7 +1193,7 @@ out center;`;
             </div>
           </div>
           <div className="route-metric-divider" />
-          <div className="route-metric-tile">
+          <div className="route-metric-tile route-metric-tile--recorr">
             <span className="route-metric-label">Recorr.</span>
             <div className="route-metric-value">
               <span className="route-metric-number">{traveledKm}</span>
@@ -1201,7 +1201,7 @@ out center;`;
             </div>
           </div>
           <div className="route-metric-divider" />
-          <div className="route-metric-tile">
+          <div className="route-metric-tile route-metric-tile--pend">
             <span className="route-metric-label">Pend.</span>
             <div className="route-metric-value">
               <span className="route-metric-number">{pendingKm}</span>

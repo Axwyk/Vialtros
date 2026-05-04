@@ -19,7 +19,7 @@
 .tracking-layout {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
   overflow: hidden;
   background: #f0f6ff;
   font-family: var(--sidebar-font);

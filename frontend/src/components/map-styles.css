@@ -556,16 +556,17 @@
   top: 14px;
   right: 14px;
   z-index: 500;
-  background: rgba(255, 255, 255, 0.96);
+  background: rgba(255, 255, 255, 0.97);
   border-radius: 12px;
-  padding: 8px 14px 8px 12px;
+  padding: 10px 16px 10px 12px;
   border: 1px solid rgba(226, 232, 240, 0.9);
-  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.10);
+  border-left: 3px solid #2563eb;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   transition: opacity 0.3s ease;
   font-family: inherit;
-  min-width: 72px;
+  min-width: 78px;
 }
 
 .floating-eta-hidden {
@@ -576,11 +577,11 @@
 .floating-eta-label {
   display: block;
   font-size: 9px;
-  font-weight: 700;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: #94a3b8;
-  margin-bottom: 1px;
+  letter-spacing: 0.12em;
+  color: #2563eb;
+  margin-bottom: 3px;
 }
 
 .floating-eta-main {
@@ -590,42 +591,48 @@
 }
 
 .floating-eta-number {
-  font-size: 26px;
+  font-size: 30px;
   font-weight: 800;
   color: #0f172a;
   line-height: 1;
-  letter-spacing: -1px;
+  letter-spacing: -1.5px;
   font-family: inherit;
 }
 
 .floating-eta-unit {
-  font-size: 12px;
-  font-weight: 600;
-  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+  color: #475569;
   letter-spacing: 0;
 }
 
 .floating-eta-updated {
-  font-size: 9px;
-  color: #94a3b8;
-  margin-top: 3px;
+  font-size: 10px;
+  color: #64748b;
+  margin-top: 5px;
+  padding-top: 4px;
+  border-top: 1px solid #f1f5f9;
   font-family: inherit;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 /* Panel de métricas */
 .route-metrics-panel {
   position: absolute;
   bottom: 14px;
-  right: 14px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 500;
-  background: rgba(255, 255, 255, 0.96);
+  background: rgba(255, 255, 255, 0.97);
   border-radius: 12px;
-  padding: 7px 14px;
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.10);
+  padding: 9px 18px;
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   font-family: inherit;
+  white-space: nowrap;
 }
 
 .route-metrics-grid {
@@ -638,8 +645,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1px;
-  padding: 0 12px;
+  gap: 2px;
+  padding: 0 13px;
 }
 
 .route-metric-tile:first-child {
@@ -659,11 +666,20 @@
 
 .route-metric-label {
   font-size: 9px;
-  font-weight: 700;
+  font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: #94a3b8;
 }
+
+/* Color por tipo de métrica — paleta azul de la app */
+.route-metric-tile--planif .route-metric-label { color: #2563eb; }
+.route-metric-tile--recorr .route-metric-label { color: #2563eb; }
+.route-metric-tile--pend   .route-metric-label { color: #2563eb; }
+
+.route-metric-tile--planif .route-metric-number { color: #0f172a; }
+.route-metric-tile--recorr .route-metric-number { color: #0f172a; }
+.route-metric-tile--pend   .route-metric-number { color: #0f172a; }
 
 .route-metric-value {
   display: flex;
@@ -672,7 +688,7 @@
 }
 
 .route-metric-number {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
   color: #0f172a;
   letter-spacing: -0.3px;

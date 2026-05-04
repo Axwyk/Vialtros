@@ -74,9 +74,9 @@ function App() {
   return (
     <Router>
       
-      <div className="bg-gray-100 min-h-screen">
+      <div className="bg-gray-100 h-screen flex flex-col overflow-hidden">
         {isAuth && (
-          <nav className="bg-blue-800 text-white px-8 py-3.5 flex justify-between items-center shadow-lg sticky top-0 z-20">
+          <nav className="bg-blue-800 text-white px-8 py-3.5 flex justify-between items-center shadow-lg flex-shrink-0 z-20">
             <Link to="/dashboard" className="flex items-center">
   <Logo variant="light" iconSize={36} />
 </Link>
@@ -102,6 +102,7 @@ function App() {
             </button>
           </nav>
         )}
+        <div className="flex-1 min-h-0 overflow-auto">
         <Routes>
           <Route
   path="/activity"
@@ -201,6 +202,7 @@ function App() {
             element={<Navigate to={isAuth ? "/dashboard" : "/"} />}
           />
         </Routes>
+        </div>
       </div>
     </Router>
   );
