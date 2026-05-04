@@ -38,7 +38,7 @@ USO BÁSICO DE GIT
   o para todo:
   git add .
 - Haz un commit con un mensaje claro:
-  git commit -m "Descripción corta y clara del cambio"
+  git commit -m "Descrigpción corta y clara del cambio"
 
 7. ¿Cómo subir tus cambios al repositorio?
 - Empuja tu rama al repositorio remoto:
@@ -162,3 +162,6 @@ Guía Rápida: De tu Rama a la rama principal
 5. Subir al repositorio remoto
     Envías el resultado de la fusión a la nube (GitHub/GitLab):
     git push origin master
+
+6. Hola
+7.asda

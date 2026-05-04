@@ -28,6 +28,10 @@ import {
   isLocalAccessEnabled,
 } from "./services/auth";
 import ActivityPage from "./pages/ActivityPage";
+import Footer from "./components/Footer";
+import PrivacyPage from "./pages/PrivacyPage";
+import TermsPage from "./pages/TermsPage";
+import SupportPage from "./pages/SupportPage";
 
 function App() {
   const [isAuth, setIsAuth] = useState(() => {
@@ -73,13 +77,12 @@ function App() {
 
   return (
     <Router>
-      
-      <div className="bg-gray-100 min-h-screen">
+      <div className="bg-gray-100 h-screen flex flex-col overflow-hidden">
         {isAuth && (
-          <nav className="bg-blue-800 text-white px-8 py-3.5 flex justify-between items-center shadow-lg sticky top-0 z-20">
+          <nav className="bg-blue-800 text-white px-8 py-3.5 flex justify-between items-center shadow-lg flex-shrink-0 z-20">
             <Link to="/dashboard" className="flex items-center">
-  <Logo variant="light" iconSize={36} />
-</Link>
+              <Logo variant="light" iconSize={36} />
+            </Link>
             <button
               onClick={handleLogout}
               className="flex items-center gap-2 text-sm font-medium text-white-500 hover:text-red-600 transition px-3 py-2 rounded-lg hover:bg-red-50"
@@ -102,105 +105,111 @@ function App() {
             </button>
           </nav>
         )}
-        <Routes>
-          <Route
-  path="/activity"
-  element={
-    <PrivateRoute>
-      <ActivityPage />
-    </PrivateRoute>
-  }
-/>
-          <Route
-            path="/login"
-            element={<LoginPage onLogin={() => setIsAuth(true)} />}
-          />
-          <Route path="/" element={<LandingPage />} />
-          <Route
-            path="/dashboard"
-            element={
-              <PrivateRoute>
-                <DashboardPage role={role} onLogout={handleLogout} />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/tracking"
-            element={
-              <PrivateRoute>
-                <TrackingPage />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/tracking/:routeId"
-            element={
-              <PrivateRoute>
-                <TrackingPage />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/admin/users"
-            element={
-              <PrivateRoute>
-                <AdminUsersPage role={role} onLogout={handleLogout} />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/admin/drivers"
-            element={
-              <PrivateRoute>
-                <AdminDriversPage role={role} onLogout={handleLogout} />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/admin/routes"
-            element={
-              <PrivateRoute>
-                <AdminRoutesPage role={role} onLogout={handleLogout} />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/admin/passengers"
-            element={
-              <PrivateRoute>
-                <AdminPassengersPage role={role} onLogout={handleLogout} />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/user/route"
-            element={
-              <PrivateRoute>
-                <UserRoutePage role={role} onLogout={handleLogout} />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/driver/routes"
-            element={
-              <PrivateRoute>
-                <DriverRoutesPage onLogout={handleLogout} />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/driver/location"
-            element={
-              <PrivateRoute>
-                <DriverLocationPage role={role} />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="*"
-            element={<Navigate to={isAuth ? "/dashboard" : "/"} />}
-          />
-        </Routes>
+        <div className="flex-1 min-h-0 overflow-auto">
+          <Routes>
+            <Route
+              path="/activity"
+              element={
+                <PrivateRoute>
+                  <ActivityPage />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/login"
+              element={<LoginPage onLogin={() => setIsAuth(true)} />}
+            />
+            <Route path="/" element={<LandingPage />} />
+            <Route
+              path="/dashboard"
+              element={
+                <PrivateRoute>
+                  <DashboardPage role={role} onLogout={handleLogout} />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/tracking"
+              element={
+                <PrivateRoute>
+                  <TrackingPage />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/tracking/:routeId"
+              element={
+                <PrivateRoute>
+                  <TrackingPage />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/users"
+              element={
+                <PrivateRoute>
+                  <AdminUsersPage role={role} onLogout={handleLogout} />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/drivers"
+              element={
+                <PrivateRoute>
+                  <AdminDriversPage role={role} onLogout={handleLogout} />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/routes"
+              element={
+                <PrivateRoute>
+                  <AdminRoutesPage role={role} onLogout={handleLogout} />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/passengers"
+              element={
+                <PrivateRoute>
+                  <AdminPassengersPage role={role} onLogout={handleLogout} />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/user/route"
+              element={
+                <PrivateRoute>
+                  <UserRoutePage role={role} onLogout={handleLogout} />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/driver/routes"
+              element={
+                <PrivateRoute>
+                  <DriverRoutesPage onLogout={handleLogout} />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/driver/location"
+              element={
+                <PrivateRoute>
+                  <DriverLocationPage role={role} />
+                </PrivateRoute>
+              }
+            />
+            <Route path="/privacy" element={<PrivacyPage />} />
+            <Route path="/terms" element={<TermsPage />} />
+            <Route path="/support" element={<SupportPage />} />
+            <Route
+              path="*"
+              element={<Navigate to={isAuth ? "/dashboard" : "/"} />}
+            />
+          </Routes>
+          <Footer />
+        </div>
       </div>
     </Router>
   );

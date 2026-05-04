@@ -486,6 +486,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const [nextRouteCountdown, setNextRouteCountdown] = useState(null);
   const [guidedRouteLoading, setGuidedRouteLoading] = useState(false);
   const [guidedRouteRunning, setGuidedRouteRunning] = useState(false);
+  const [gpsOverlayVisible, setGpsOverlayVisible] = useState(false);
   const [guidedRouteError, setGuidedRouteError] = useState("");
   const [guidedRouteDisplayPath, setGuidedRouteDisplayPath] = useState([]);
   const [navigationSteps, setNavigationSteps] = useState(null);
@@ -565,6 +566,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     guidedRouteIndexRef.current = 0;
     setGuidedRouteLoading(false);
     setGuidedRouteRunning(false);
+    setGpsOverlayVisible(false);
     setGuidedRouteError("");
     setNavigationSteps(null);
   }, [selectedRouteId]);
@@ -987,6 +989,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   useEffect(() => {
     routeEndNotifiedRef.current = false;
     notifiedStopsRef.current = new Set();
+    earlyNotifStopsRef.current = new Set();
     setNextRouteCountdown(null);
     setStopNotification(null);
     if (nextRouteCountdownRef.current) {
@@ -1898,8 +1901,12 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     guidedRouteIndexRef.current = 0;
     setGuidedRouteLoading(false);
     setGuidedRouteRunning(false);
+    setGpsOverlayVisible(false);
     setNavigationSteps(null);
   };
+
+  // Solo oculta el overlay GPS sin detener la ruta
+  const hideGpsOverlay = () => setGpsOverlayVisible(false);
 
   const pushGuidedTrackingPoint = async (point) => {
     const timestamp = new Date().toISOString();
@@ -2083,6 +2090,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       guidedRouteIndexRef.current = 0;
       setGuidedRouteDisplayPath([exactRoute[0]]);
       setGuidedRouteRunning(true);
+      setGpsOverlayVisible(true);
       setGuidedRouteLoading(false);
       routeEndNotifiedRef.current = false;
       void runGuidedRouteStep();
@@ -2253,6 +2261,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const [stopNotification, setStopNotification] = useState(null);
   const stopNotifTimerRef = useRef(null);
   const notifiedStopsRef = useRef(new Set());
+  const earlyNotifStopsRef = useRef(new Set());
 
   useEffect(() => {
     if (nearDestination && !arrivalNotifiedRef.current) {
@@ -2276,18 +2285,36 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     const vLng = Number(vehiclePosition.longitude);
     if (!Number.isFinite(vLat) || !Number.isFinite(vLng)) return undefined;
 
+    const EARLY_KM = 2.0;   // ~5 min a 24 km/h
     const APPROACH_KM = 0.25;
     const ARRIVING_KM = 0.07;
 
     for (const stop of displayIntermediateStops) {
-      if (!stop.coords || notifiedStopsRef.current.has(stop.id)) continue;
+      if (!stop.coords) continue;
       const [sLat, sLng] = stop.coords;
       if (!Number.isFinite(sLat) || !Number.isFinite(sLng)) continue;
       const d = distanceKm(vLat, vLng, sLat, sLng);
-      if (d <= APPROACH_KM) {
+
+      // Alerta anticipada: ~5 minutos antes
+      if (
+        d <= EARLY_KM &&
+        d > APPROACH_KM &&
+        !earlyNotifStopsRef.current.has(stop.id) &&
+        !notifiedStopsRef.current.has(stop.id)
+      ) {
+        earlyNotifStopsRef.current.add(stop.id);
+        const etaMin = Math.max(1, Math.round((d / GUIDED_ROUTE_SPEED_KMH) * 60));
+        setStopNotification({ label: stop.label, etaMin, arriving: false, early: true });
+        if (stopNotifTimerRef.current) clearTimeout(stopNotifTimerRef.current);
+        stopNotifTimerRef.current = setTimeout(() => setStopNotification(null), 15000);
+        break;
+      }
+
+      // Alerta de llegada: entrando a la parada
+      if (d <= APPROACH_KM && !notifiedStopsRef.current.has(stop.id)) {
         notifiedStopsRef.current.add(stop.id);
         const arriving = d <= ARRIVING_KM;
-        const etaMin = arriving ? null : Math.max(1, Math.round((d / 25) * 60));
+        const etaMin = arriving ? null : Math.max(1, Math.round((d / GUIDED_ROUTE_SPEED_KMH) * 60));
         setStopNotification({ label: stop.label, etaMin, arriving });
         if (stopNotifTimerRef.current) clearTimeout(stopNotifTimerRef.current);
         stopNotifTimerRef.current = setTimeout(() => setStopNotification(null), 7000);
@@ -2320,14 +2347,18 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       )}
 
       {guidedRouteRunning && stopNotification && (
-        <div className="gps-stop-notif" role="alert" aria-live="polite">
-          <div className="gps-stop-notif-icon">🚏</div>
+        <div className={`gps-stop-notif${stopNotification.early ? " gps-stop-notif-early" : ""}`} role="alert" aria-live="polite">
+          <div className="gps-stop-notif-icon">
+            {stopNotification.early ? (
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#1a56db" opacity="0.15"/><path d="M12 6v6l4 2" stroke="#1a56db" strokeWidth="2" strokeLinecap="round"/><circle cx="12" cy="12" r="9" stroke="#1a56db" strokeWidth="1.5" fill="none"/></svg>
+            ) : "🚏"}
+          </div>
           <div className="gps-stop-notif-body">
             <span className="gps-stop-notif-type">
-              {stopNotification.arriving ? "Llegando a parada" : "Próxima parada"}
+              {stopNotification.arriving ? "Llegando a parada" : stopNotification.early ? `En ${stopNotification.etaMin} min` : "Próxima parada"}
             </span>
             <span className="gps-stop-notif-label">{stopNotification.label}</span>
-            {stopNotification.etaMin !== null && (
+            {!stopNotification.arriving && !stopNotification.early && stopNotification.etaMin !== null && (
               <span className="gps-stop-notif-eta">
                 ~{stopNotification.etaMin} min · {eta !== null ? `destino en ${eta} min` : ""}
               </span>
@@ -2580,6 +2611,16 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                 <div className="gps-mode-banner">
                   <span className="gps-mode-dot" />
                   <span>Modo GPS activo</span>
+                  {!gpsOverlayVisible && (
+                    <button
+                      type="button"
+                      className="gps-reenter-btn"
+                      onClick={() => setGpsOverlayVisible(true)}
+                      aria-label="Volver al GPS"
+                    >
+                      Ver GPS
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -2803,9 +2844,10 @@ export default function TrackingPage({ routeId: routeIdProp }) {
               highlightedRouteIds={isAdminView ? highlightedAdminRouteIds : []}
               eta={eta}
               etaUpdated={etaUpdated}
-              gpsMode={guidedRouteRunning}
+              gpsMode={guidedRouteRunning && gpsOverlayVisible}
               navigationSteps={navigationSteps}
-              onExitGps={canManageGuidedRoute ? stopGuidedRoute : null}
+              nearDestination={nearDestination}
+              onExitGps={canManageGuidedRoute ? hideGpsOverlay : null}
             />
           </div>
         </main>
