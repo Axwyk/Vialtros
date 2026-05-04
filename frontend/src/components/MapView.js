@@ -44,18 +44,32 @@ const GOOGLE_MAPS_OPTIONS = {
   styles: GOOGLE_MAPS_STYLES,
 };
 
+// Modo navegación GPS: mapa claro simplificado, sin POIs distractores
+const GPS_NAV_STYLES = [
+  { featureType: "poi", stylers: [{ visibility: "off" }] },
+  { featureType: "transit", stylers: [{ visibility: "off" }] },
+  { featureType: "administrative.neighborhood", stylers: [{ visibility: "off" }] },
+  { featureType: "road", elementType: "labels.icon", stylers: [{ visibility: "off" }] },
+  { featureType: "landscape", elementType: "geometry", stylers: [{ color: "#f2f1ec" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#b3d4e8" }] },
+];
+
+// Modo noche GPS: mapa oscuro estilo conducción nocturna
 const GPS_NIGHT_STYLES = [
-  { featureType: "all", elementType: "geometry", stylers: [{ color: "#1a2035" }] },
-  { featureType: "all", elementType: "labels.text.stroke", stylers: [{ color: "#1a2035" }] },
-  { featureType: "all", elementType: "labels.text.fill", stylers: [{ color: "#8fa8c4" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#2a3550" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#344468" }] },
-  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#243048" }] },
-  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#14213d" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0d1829" }] },
-  { featureType: "landscape", elementType: "geometry", stylers: [{ color: "#161e30" }] },
-  { featureType: "poi", elementType: "geometry", stylers: [{ color: "#1d2640" }] },
-  { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#283a5c" }] },
+  { featureType: "all", elementType: "geometry", stylers: [{ color: "#1a1a2e" }] },
+  { featureType: "all", elementType: "labels.text.fill", stylers: [{ color: "#a0aec0" }] },
+  { featureType: "all", elementType: "labels.text.stroke", stylers: [{ color: "#1a1a2e", weight: 3 }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#2d3748" }] },
+  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#2c3e6b" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#1e3a5f" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#0f1f3d" }] },
+  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#94a3b8" }] },
+  { featureType: "poi", stylers: [{ visibility: "off" }] },
+  { featureType: "transit", stylers: [{ visibility: "off" }] },
+  { featureType: "administrative.neighborhood", stylers: [{ visibility: "off" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0d1b2e" }] },
+  { featureType: "landscape", elementType: "geometry", stylers: [{ color: "#16213e" }] },
+  { featureType: "landscape.man_made", elementType: "geometry", stylers: [{ color: "#1e2535" }] },
 ];
 
 function formatDistance(meters) {
@@ -65,60 +79,72 @@ function formatDistance(meters) {
 }
 
 function getArrowSvg(modifier, type) {
+  const C = "#1a56db"; // color principal para fondo blanco
+  // Ícono de llegada — pin de destino
   if (type === "arrive") {
     return (
       <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="20" cy="20" r="11" fill="#ffffff" />
-        <circle cx="20" cy="20" r="5" fill="#0f172a" />
+        <path d="M20 4C15.03 4 11 8.03 11 13c0 7.25 9 20 9 20s9-12.75 9-20c0-4.97-4.03-9-9-9z" fill={C}/>
+        <circle cx="20" cy="13" r="4" fill="#ffffff"/>
       </svg>
     );
   }
   const mod = (modifier || "straight").toLowerCase();
+
+  // Giro a la izquierda — flecha curva izquierda
   if (mod === "left" || mod === "sharp left") {
     return (
       <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M5 20L17 9v7h18v8H17v7z" fill="#ffffff" />
+        <rect x="17" y="18" width="6" height="16" rx="3" fill={C}/>
+        <path d="M20 18C20 12 10 12 10 18" stroke={C} strokeWidth="5.5" strokeLinecap="round" fill="none"/>
+        <path d="M5 14l6-5 1 10z" fill={C}/>
       </svg>
     );
   }
+  // Giro a la derecha — flecha curva derecha
   if (mod === "right" || mod === "sharp right") {
     return (
       <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M35 20L23 9v7H5v8h18v7z" fill="#ffffff" />
+        <rect x="17" y="18" width="6" height="16" rx="3" fill={C}/>
+        <path d="M20 18C20 12 30 12 30 18" stroke={C} strokeWidth="5.5" strokeLinecap="round" fill="none"/>
+        <path d="M35 14l-6-5-1 10z" fill={C}/>
       </svg>
     );
   }
+  // Giro leve a la izquierda
   if (mod === "slight left") {
     return (
       <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <g transform="rotate(-30, 20, 20)">
-          <path d="M20 5L9 19h6v16h10V19h6z" fill="#ffffff" />
-        </g>
+        <rect x="17" y="18" width="6" height="16" rx="3" fill={C}/>
+        <path d="M20 18C20 14 14 11 10 13" stroke={C} strokeWidth="5" strokeLinecap="round" fill="none"/>
+        <path d="M5 9l6 1-1 8z" fill={C}/>
       </svg>
     );
   }
+  // Giro leve a la derecha
   if (mod === "slight right") {
     return (
       <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <g transform="rotate(30, 20, 20)">
-          <path d="M20 5L9 19h6v16h10V19h6z" fill="#ffffff" />
-        </g>
+        <rect x="17" y="18" width="6" height="16" rx="3" fill={C}/>
+        <path d="M20 18C20 14 26 11 30 13" stroke={C} strokeWidth="5" strokeLinecap="round" fill="none"/>
+        <path d="M35 9l-6 1 1 8z" fill={C}/>
       </svg>
     );
   }
+  // Media vuelta
   if (mod === "uturn") {
     return (
       <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="6" y="6" width="20" height="6" rx="3" fill="#ffffff" />
-        <rect x="6" y="6" width="6" height="22" rx="3" fill="#ffffff" />
-        <rect x="20" y="6" width="6" height="16" rx="3" fill="#ffffff" />
-        <path d="M14 34l-8-10h16z" fill="#ffffff" />
+        <path d="M26 34V18a6 6 0 0 0-12 0v2" stroke={C} strokeWidth="5.5" strokeLinecap="round" fill="none"/>
+        <path d="M9 24l5-6 5 6" fill={C}/>
       </svg>
     );
   }
+  // Continuar recto — flecha arriba estándar
   return (
     <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M20 5L9 19h6v16h10V19h6z" fill="#ffffff" />
+      <rect x="17" y="16" width="6" height="20" rx="3" fill={C}/>
+      <path d="M20 4L9 17h22z" fill={C}/>
     </svg>
   );
 }
@@ -137,6 +163,59 @@ function buildVoiceInstruction(step) {
   if (step?.type === "arrive") return step.name ? `llegando al destino en ${step.name}` : "ha llegado al destino";
   const action = dirMap[(step?.modifier || "").toLowerCase()] || "continúe";
   return step?.name ? `${action} en ${step.name}` : action;
+}
+
+function buildInstructionText(step) {
+  const dirMap = {
+    "left": "Gira a la izquierda",
+    "sharp left": "Gira a la izquierda",
+    "slight left": "Mantente a la izquierda",
+    "right": "Gira a la derecha",
+    "sharp right": "Gira a la derecha",
+    "slight right": "Mantente a la derecha",
+    "straight": "Continúa recto",
+    "uturn": "Da un giro en U",
+  };
+  if (step?.type === "arrive") return "Llegaste al destino";
+  return dirMap[(step?.modifier || "").toLowerCase()] || "Continúa recto";
+}
+
+function getSmallArrowSvg(modifier, type) {
+  if (type === "arrive") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: 14, height: 14 }}>
+        <circle cx="12" cy="12" r="6" fill="#94a3b8" />
+      </svg>
+    );
+  }
+  const mod = (modifier || "straight").toLowerCase();
+  if (mod === "left" || mod === "sharp left" || mod === "slight left") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: 14, height: 14 }}>
+        <path d="M3 12L10 6v4h11v4H10v4z" fill="#94a3b8" />
+      </svg>
+    );
+  }
+  if (mod === "right" || mod === "sharp right" || mod === "slight right") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: 14, height: 14 }}>
+        <path d="M21 12L14 6v4H3v4h11v4z" fill="#94a3b8" />
+      </svg>
+    );
+  }
+  if (mod === "uturn") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: 14, height: 14 }}>
+        <path d="M4 15l4-4-4-4" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round"/>
+        <path d="M8 11h8a4 4 0 0 0 0-8H8" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round"/>
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: 14, height: 14 }}>
+      <path d="M12 3L6 11h4v10h4V11h4z" fill="#94a3b8" />
+    </svg>
+  );
 }
 
 function projectPointOnSegment(point, start, end) {
@@ -329,6 +408,7 @@ export default function MapView({
   pois = [],
   gpsMode = false,
   navigationSteps = null,
+  nearDestination = false,
   onExitGps = null,
 }) {
   const { isLoaded: mapsApiLoaded } = useJsApiLoader({
@@ -339,6 +419,18 @@ export default function MapView({
   const [displayPois, setDisplayPois] = useState(Array.isArray(pois) ? pois : []);
   const [animatedVehiclePoint, setAnimatedVehiclePoint] = useState(null);
   const [mapRef, setMapRef] = useState(null);
+  const [currentTime, setCurrentTime] = useState(() => {
+    const now = new Date();
+    return now.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" });
+  });
+  const [gpsMuted, setGpsMuted] = useState(false);
+  const [gpsMenuOpen, setGpsMenuOpen] = useState(false);
+  const [gpsNightMode, setGpsNightMode] = useState(false);
+  const gpsMutedRef = useRef(false);
+  const [gpsToast, setGpsToast] = useState(null);
+  const gpsToastTimerRef = useRef(null);
+  const prevGpsModeRef = useRef(false);
+  const lastToastStepKeyRef = useRef(null);
 
   const animationFrameRef = useRef(null);
   const animationStartRef = useRef(0);
@@ -352,6 +444,14 @@ export default function MapView({
   const containerRef = useRef(null);
   const spokenWarningsRef = useRef(new Set());
   const lastSpokenStepKeyRef = useRef(null);
+
+  // Cerrar menú GPS al hacer click fuera
+  useEffect(() => {
+    if (!gpsMenuOpen) return undefined;
+    const close = () => setGpsMenuOpen(false);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [gpsMenuOpen]);
 
   useEffect(() => {
     if (Array.isArray(pois) && pois.length > 0) {
@@ -676,17 +776,17 @@ out center;`;
     if (!mapRef || !effectiveVehiclePoint || focusAllVehicles || !hasLiveTrackings) return;
     const [lat, lng] = effectiveVehiclePoint;
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-    const targetZoom = gpsMode ? 19 : 17;
+    const targetZoom = 17;
     if (firstFollowRef.current) {
       firstFollowRef.current = false;
       mapRef.setCenter({ lat, lng });
       mapRef.setZoom(targetZoom);
-      if (gpsMode) mapRef.setHeading(primaryVehicleRotationRef.current);
+      if (gpsMode) mapRef.setHeading(primaryVehicleRotationRef.current + 90);
       return;
     }
     mapRef.panTo({ lat, lng });
     if ((mapRef.getZoom() || 0) < targetZoom) mapRef.setZoom(targetZoom);
-    if (gpsMode) mapRef.setHeading(primaryVehicleRotationRef.current);
+    if (gpsMode) mapRef.setHeading(primaryVehicleRotationRef.current + 90);
   }, [mapRef, effectiveVehiclePoint, focusAllVehicles, hasLiveTrackings, gpsMode]);
 
   // Calcula distancia total de una línea de coordenadas [lat,lng] en kilómetros
@@ -715,36 +815,67 @@ out center;`;
   const traveledKm = Math.round((traveledLine?.length > 1 ? lineDistanceKm(traveledLine) : 0) * 10) / 10;
   const pendingKm = Math.round(Math.max(0, plannedKm - traveledKm) * 10) / 10;
 
-  // Aplica estilos noche/día imperativamnente para no pasar un objeto nuevo como prop
-  // a <GoogleMap>, lo que detonaba re-renders infinitos en OverlayView
+  // Aplica estilos: en modo GPS usa mapa claro sin distracciones (como Google Maps nav)
   useEffect(() => {
     if (!mapRef) return;
+    let styles;
+    if (gpsMode) {
+      styles = gpsNightMode ? GPS_NIGHT_STYLES : GPS_NAV_STYLES;
+    } else {
+      styles = GOOGLE_MAPS_STYLES;
+    }
     mapRef.setOptions({
-      styles: gpsMode ? GPS_NIGHT_STYLES : GOOGLE_MAPS_STYLES,
+      styles,
       tilt: gpsMode ? 45 : 0,
       zoomControl: !gpsMode,
+      mapTypeControl: false,
+      streetViewControl: false,
+      fullscreenControl: false,
     });
-  }, [mapRef, gpsMode]);
+    if (!gpsMode) mapRef.setHeading(0);
+  }, [mapRef, gpsMode, gpsNightMode]);
 
   const nextStep = useMemo(() => {
     if (!gpsMode || !Array.isArray(navigationSteps) || !vehiclePoint) return null;
     const [vLat, vLng] = vehiclePoint;
+
+    // Función haversine rápida en metros
+    const distM = (lat1, lng1, lat2, lng2) => {
+      const toRad = (v) => (v * Math.PI) / 180;
+      const dLat = toRad(lat2 - lat1);
+      const dLng = toRad(lng2 - lng1);
+      const a = Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+      return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    };
+
+    // Encontrar el paso más cercano que esté ADELANTE (dentro de 2500 m),
+    // preferiendo el más próximo al vehículo (aún no superado).
     let closest = null;
     let minDist = Infinity;
-    for (const step of navigationSteps) {
-      const dLat = step.location[0] - vLat;
-      const dLng = step.location[1] - vLng;
-      const distM = Math.sqrt(dLat * dLat + dLng * dLng) * 111000;
-      if (distM < minDist && distM < 3000) {
-        minDist = distM;
-        closest = { ...step, distanceAway: distM };
+    for (let i = 0; i < navigationSteps.length; i++) {
+      const step = navigationSteps[i];
+      const d = distM(vLat, vLng, step.location[0], step.location[1]);
+      if (d < minDist && d < 2500) {
+        minDist = d;
+        closest = { ...step, distanceAway: Math.round(d) };
       }
     }
     return closest;
   }, [gpsMode, navigationSteps, vehiclePoint]);
 
+  const afterNextStep = useMemo(() => {
+    if (!nextStep || !Array.isArray(navigationSteps)) return null;
+    const idx = navigationSteps.findIndex(
+      (s) => s.location[0] === nextStep.location[0] && s.location[1] === nextStep.location[1],
+    );
+    if (idx < 0 || idx >= navigationSteps.length - 1) return null;
+    return navigationSteps[idx + 1];
+  }, [nextStep, navigationSteps]);
+
   useEffect(() => {
     if (!gpsMode || !nextStep || !window.speechSynthesis) return;
+    if (gpsMutedRef.current) return;
     const stepKey = `${nextStep.location[0].toFixed(5)},${nextStep.location[1].toFixed(5)}`;
     const dist = nextStep.distanceAway;
 
@@ -770,6 +901,39 @@ out center;`;
       spokenWarningsRef.current.add(`${stepKey}-now`);
     }
   }, [nextStep, gpsMode]);
+
+  // Toast: notificación al iniciar GPS
+  useEffect(() => {
+    if (gpsMode && !prevGpsModeRef.current) {
+      setGpsToast({ type: "start", text: "Navegación iniciada", sub: destinationName || "En ruta al destino" });
+      if (gpsToastTimerRef.current) clearTimeout(gpsToastTimerRef.current);
+      gpsToastTimerRef.current = setTimeout(() => setGpsToast(null), 4000);
+      lastToastStepKeyRef.current = null;
+    }
+    if (!gpsMode) lastToastStepKeyRef.current = null;
+    prevGpsModeRef.current = gpsMode;
+  }, [gpsMode, destinationName]);
+
+  // Toast: notificación al cambiar de paso (giro / nueva calle)
+  useEffect(() => {
+    if (!gpsMode || !nextStep) return;
+    const stepKey = `${nextStep.location[0].toFixed(5)},${nextStep.location[1].toFixed(5)}`;
+    if (lastToastStepKeyRef.current === null) { lastToastStepKeyRef.current = stepKey; return; }
+    if (lastToastStepKeyRef.current === stepKey) return;
+    lastToastStepKeyRef.current = stepKey;
+    const text = buildInstructionText(nextStep);
+    setGpsToast({ type: "turn", text, sub: nextStep.name || "", modifier: nextStep.modifier, stepType: nextStep.type });
+    if (gpsToastTimerRef.current) clearTimeout(gpsToastTimerRef.current);
+    gpsToastTimerRef.current = setTimeout(() => setGpsToast(null), 5000);
+  }, [gpsMode, nextStep]);
+
+  // Toast: notificación al acercarse al destino
+  useEffect(() => {
+    if (!gpsMode || !nearDestination) return;
+    setGpsToast({ type: "arrive", text: "Llegando al destino", sub: destinationName || "" });
+    if (gpsToastTimerRef.current) clearTimeout(gpsToastTimerRef.current);
+    gpsToastTimerRef.current = setTimeout(() => setGpsToast(null), 8000);
+  }, [gpsMode, nearDestination, destinationName]);
 
   useEffect(() => {
     if (!Array.isArray(vehiclePoint)) return undefined;
@@ -842,6 +1006,15 @@ out center;`;
     [],
   );
 
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      setCurrentTime(now.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" }));
+    };
+    const interval = setInterval(tick, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div
       ref={containerRef}
@@ -894,15 +1067,11 @@ out center;`;
             <>
               <Polyline
                 path={toLatLngArray(plannedLine)}
-                options={{ strokeColor: "#FFFFFF", strokeWeight: 14, strokeOpacity: 0.52, geodesic: true }}
+                options={{ strokeColor: "#FFFFFF", strokeWeight: gpsMode ? 20 : 14, strokeOpacity: gpsMode ? 0.7 : 0.52, geodesic: true }}
               />
               <Polyline
                 path={toLatLngArray(plannedLine)}
-                options={{ strokeColor: CORPORATE_ROUTE_COLOR, strokeWeight: 8, strokeOpacity: 0.98, geodesic: true }}
-              />
-              <Polyline
-                path={toLatLngArray(plannedLine)}
-                options={{ strokeColor: "#93c5fd", strokeWeight: 3, strokeOpacity: 0.45, geodesic: true }}
+                options={{ strokeColor: gpsMode ? "#1a56db" : CORPORATE_ROUTE_COLOR, strokeWeight: gpsMode ? 14 : 8, strokeOpacity: 0.98, geodesic: true }}
               />
             </>
           )}
@@ -912,15 +1081,11 @@ out center;`;
             <>
               <Polyline
                 path={toLatLngArray(remainingLine)}
-                options={{ strokeColor: "#FFFFFF", strokeWeight: 14, strokeOpacity: 0.5, geodesic: true }}
+                options={{ strokeColor: "#FFFFFF", strokeWeight: gpsMode ? 20 : 14, strokeOpacity: gpsMode ? 0.7 : 0.5, geodesic: true }}
               />
               <Polyline
                 path={toLatLngArray(remainingLine)}
-                options={{ strokeColor: "#3B82F6", strokeWeight: 8, strokeOpacity: 0.98, geodesic: true }}
-              />
-              <Polyline
-                path={toLatLngArray(remainingLine)}
-                options={{ strokeColor: "#bfdbfe", strokeWeight: 3, strokeOpacity: 0.4, geodesic: true }}
+                options={{ strokeColor: "#1a56db", strokeWeight: gpsMode ? 14 : 8, strokeOpacity: 1.0, geodesic: true }}
               />
             </>
           )}
@@ -980,15 +1145,18 @@ out center;`;
                 position={{ lat: primaryVehicle.latitude, lng: primaryVehicle.longitude }}
                 mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
               >
-                <div style={{ transform: "translate(-50%, -50%)", pointerEvents: "none" }}>
+                  <div style={{ transform: "translate(-50%, -50%)", pointerEvents: "none" }}>
                   <div
                     className="vt-gps-nav-arrow"
-                    style={{ transform: `rotate(${primaryVehicleRotation}deg)` }}
+                    style={{ transform: `rotate(${primaryVehicleRotation + 90}deg)` }}
                   >
-                    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <circle cx="32" cy="32" r="30" fill="rgba(8,14,28,0.93)" stroke="#3b82f6" strokeWidth="2.5"/>
-                      <path d="M32 10 L46 52 L32 42 L18 52 Z" fill="#3b82f6"/>
-                      <path d="M32 13 L44 50 L32 40 L20 50 Z" fill="white" fillOpacity="0.16"/>
+                    <svg viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      {/* Sombra / halo azul difuso */}
+                      <circle cx="28" cy="28" r="27" fill="rgba(26,86,219,0.18)"/>
+                      {/* Flecha azul estilo Google Maps — triángulo sólido apuntando al norte */}
+                      <path d="M28 6 L44 46 L28 37 L12 46 Z" fill="#1a56db"/>
+                      {/* Borde blanco fino para contraste */}
+                      <path d="M28 6 L44 46 L28 37 L12 46 Z" fill="none" stroke="white" strokeWidth="2" strokeLinejoin="round"/>
                     </svg>
                   </div>
                 </div>
@@ -1066,7 +1234,7 @@ out center;`;
           })}
 
           {/* ---- POIs ---- */}
-          {Array.isArray(displayPois) &&
+          {!gpsMode && Array.isArray(displayPois) &&
             displayPois.map((p) => {
               const lat = Number(p.lat);
               const lon = Number(p.lon);
@@ -1111,56 +1279,229 @@ out center;`;
       )}
 
 
-      {/* ---- HUD GPS modo noche ---- */}
-      {gpsMode && (
-        <>
-          <div className="nav-hud-top" aria-live="polite">
-            <div className="nav-hud-arrow">
-              {getArrowSvg(nextStep?.modifier, nextStep?.type)}
+      {/* ---- HUD GPS — overlays flotantes estilo Google Maps ---- */}
+      {gpsMode && (() => {
+        const arrivalTime = (() => {
+          if (eta === null) return "--";
+          const d = new Date(Date.now() + Number(eta) * 60000);
+          return d.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
+        })();
+        return (
+          <>
+            {/* Banner superior izquierdo — instrucción de giro */}
+            <div className="gps-overlay-top" aria-live="polite">
+              <div className="gps-overlay-icon">
+                {getArrowSvg(nextStep?.modifier, nextStep?.type)}
+              </div>
+              <div className="gps-overlay-info">
+                <div className="gps-overlay-top-row">
+                  <span className="gps-overlay-distance">
+                    {nextStep ? formatDistance(nextStep.distanceAway) : "En ruta"}
+                  </span>
+                  {onExitGps && (
+                    <button className="gps-overlay-exit-btn" onClick={onExitGps} aria-label="Salir del GPS">
+                      <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="16" height="16">
+                        <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/>
+                      </svg>
+                    </button>
+                  )}
+                </div>
+                {(nextStep?.name || (!nextStep && destinationName)) && (
+                  <span className="gps-overlay-street">
+                    {nextStep?.name || destinationName}
+                  </span>
+                )}
+                {afterNextStep && (
+                  <span className="gps-overlay-after">
+                    <svg viewBox="0 0 16 16" fill="none" width="11" height="11">
+                      <path d="M5 13V7a3 3 0 016 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" fill="none"/>
+                      <path d="M8 3l3 3-3 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    {buildInstructionText(afterNextStep)}
+                    {afterNextStep.name ? ` · ${afterNextStep.name}` : ""}
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="nav-hud-text">
-              {nextStep ? (
-                <>
-                  <span className="nav-hud-distance">{formatDistance(nextStep.distanceAway)}</span>
-                  {nextStep.name && <span className="nav-hud-street">{nextStep.name}</span>}
-                </>
-              ) : (
-                <span className="nav-hud-distance">En ruta</span>
-              )}
-            </div>
-            {eta !== null && (
-              <div className="nav-hud-eta-badge">
-                <span className="nav-hud-eta-value">{eta}</span>
-                <span className="nav-hud-eta-unit">min</span>
+
+            {/* Toast GPS: inicio / giro / llegada */}
+            {gpsToast && (
+              <div className={`gps-toast gps-toast-${gpsToast.type}`} role="status" aria-live="polite"
+                onClick={() => setGpsToast(null)}>
+                <div className="gps-toast-icon">
+                  {gpsToast.type === "turn" && (
+                    <div style={{ width: 32, height: 32 }}>
+                      {getArrowSvg(gpsToast.modifier, gpsToast.stepType)}
+                    </div>
+                  )}
+                  {gpsToast.type === "start" && (
+                    <svg viewBox="0 0 24 24" fill="none" width="28" height="28">
+                      <circle cx="12" cy="12" r="10" fill="#1a56db" opacity="0.15"/>
+                      <path d="M10 8l6 4-6 4V8z" fill="#1a56db"/>
+                    </svg>
+                  )}
+                  {gpsToast.type === "arrive" && (
+                    <svg viewBox="0 0 24 24" fill="none" width="28" height="28">
+                      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#1a56db"/>
+                      <circle cx="12" cy="9" r="3" fill="white"/>
+                    </svg>
+                  )}
+                </div>
+                <div className="gps-toast-body">
+                  <span className="gps-toast-text">{gpsToast.text}</span>
+                  {gpsToast.sub && <span className="gps-toast-sub">{gpsToast.sub}</span>}
+                </div>
               </div>
             )}
-            {onExitGps && (
-              <button className="nav-hud-exit-btn" onClick={onExitGps} aria-label="Salir del GPS">
-                <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-              </button>
-            )}
-          </div>
 
-          <div className="nav-hud-bottom">
-            <div className="nav-hud-stat">
-              <span className={`nav-hud-stat-value nav-hud-stat-green`}>{eta !== null ? `${eta}` : "--"}</span>
-              <span className="nav-hud-stat-label">min ETA</span>
+            {/* Banner inferior — resumen flotante */}
+            <div className="gps-overlay-bottom" aria-live="polite">
+              <div className="gps-overlay-col gps-overlay-col-eta">
+                <span className="gps-overlay-eta-num">{eta !== null ? eta : "--"}</span>
+                <span className="gps-overlay-label-sm">min</span>
+              </div>
+              <div className="gps-overlay-sep" aria-hidden="true" />
+              <div className="gps-overlay-col gps-overlay-col-dist">
+                <span className="gps-overlay-dist-num">{pendingKm} km</span>
+                <span className="gps-overlay-label-sm">km restantes</span>
+                <span className="gps-overlay-arrival">{arrivalTime}</span>
+              </div>
+              <div className="gps-overlay-sep" aria-hidden="true" />
+              <div className="gps-overlay-col gps-overlay-col-actions">
+                {/* Cancelar navegación */}
+                <button
+                  className="gps-action-btn gps-action-btn-cancel"
+                  onClick={onExitGps || undefined}
+                  aria-label="Cancelar navegación"
+                  title="Cancelar navegación"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+                    <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+                  </svg>
+                </button>
+
+                {/* Silenciar / activar voz */}
+                <button
+                  className={`gps-action-btn${gpsMuted ? " gps-action-btn-muted" : ""}`}
+                  onClick={() => {
+                    const next = !gpsMuted;
+                    setGpsMuted(next);
+                    gpsMutedRef.current = next;
+                    if (next && window.speechSynthesis) window.speechSynthesis.cancel();
+                  }}
+                  aria-label={gpsMuted ? "Activar voz" : "Silenciar voz"}
+                  title={gpsMuted ? "Activar voz" : "Silenciar voz"}
+                >
+                  {gpsMuted ? (
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+                      <path d="M11 5L6 9H2v6h4l5 4V5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <line x1="23" y1="9" x2="17" y2="15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                      <line x1="17" y1="9" x2="23" y2="15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+                      <path d="M11 5L6 9H2v6h4l5 4V5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M15.54 8.46a5 5 0 010 7.07" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                      <path d="M19.07 4.93a10 10 0 010 14.14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                    </svg>
+                  )}
+                </button>
+
+                {/* Más opciones ⋮ */}
+                <div className="gps-menu-wrapper">
+                  <button
+                    className={`gps-action-btn${gpsMenuOpen ? " gps-action-btn-active" : ""}`}
+                    onClick={(e) => { e.stopPropagation(); setGpsMenuOpen((v) => !v); }}
+                    aria-label="Más opciones"
+                    title="Más opciones"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+                      <circle cx="12" cy="5" r="1.5" fill="currentColor"/>
+                      <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
+                      <circle cx="12" cy="19" r="1.5" fill="currentColor"/>
+                    </svg>
+                  </button>
+                  {gpsMenuOpen && (
+                    <div className="gps-menu-popup" role="menu" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        className="gps-menu-item"
+                        role="menuitem"
+                        onClick={() => {
+                          setGpsMenuOpen(false);
+                          if (mapRef && primaryVehicle) {
+                            mapRef.panTo({ lat: primaryVehicle.latitude, lng: primaryVehicle.longitude });
+                            mapRef.setZoom(17);
+                          }
+                        }}
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" width="17" height="17">
+                          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="currentColor"/>
+                        </svg>
+                        Centrar en vehículo
+                      </button>
+                      <button
+                        className="gps-menu-item"
+                        role="menuitem"
+                        onClick={() => {
+                          setGpsMenuOpen(false);
+                          const next = !gpsMuted;
+                          setGpsMuted(next);
+                          gpsMutedRef.current = next;
+                          if (next && window.speechSynthesis) window.speechSynthesis.cancel();
+                        }}
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" width="17" height="17">
+                          <path d="M11 5L6 9H2v6h4l5 4V5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          {gpsMuted
+                            ? <><line x1="23" y1="9" x2="17" y2="15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><line x1="17" y1="9" x2="23" y2="15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></>
+                            : <path d="M15.54 8.46a5 5 0 010 7.07" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                          }
+                        </svg>
+                        {gpsMuted ? "Activar voz" : "Silenciar voz"}
+                      </button>
+                      <div className="gps-menu-divider" />
+                      <button
+                        className="gps-menu-item"
+                        role="menuitem"
+                        onClick={() => {
+                          setGpsMenuOpen(false);
+                          setGpsNightMode((v) => !v);
+                        }}
+                      >
+                        {gpsNightMode ? (
+                          <svg viewBox="0 0 24 24" fill="none" width="17" height="17">
+                            <circle cx="12" cy="12" r="4" fill="currentColor"/>
+                            <path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                          </svg>
+                        ) : (
+                          <svg viewBox="0 0 24 24" fill="none" width="17" height="17">
+                            <path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z" fill="currentColor"/>
+                          </svg>
+                        )}
+                        {gpsNightMode ? "Modo claro" : "Modo noche"}
+                      </button>
+                      <div className="gps-menu-divider" />
+                      <button
+                        className="gps-menu-item gps-menu-item-danger"
+                        role="menuitem"
+                        onClick={() => {
+                          setGpsMenuOpen(false);
+                          if (onExitGps) onExitGps();
+                        }}
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" width="17" height="17">
+                          <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/>
+                        </svg>
+                        Salir del GPS
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-            <div className="nav-hud-divider" />
-            <div className="nav-hud-stat">
-              <span className="nav-hud-stat-value nav-hud-stat-blue">{pendingKm}</span>
-              <span className="nav-hud-stat-label">km restantes</span>
-            </div>
-            <div className="nav-hud-divider" />
-            <div className="nav-hud-stat">
-              <span className="nav-hud-stat-value">{traveledKm}</span>
-              <span className="nav-hud-stat-label">km recorr.</span>
-            </div>
-          </div>
-        </>
-      )}
+          </>
+        );
+      })()}
 
       {/* ---- Panel flotante ETA ---- */}
       {!gpsMode && (
@@ -1185,7 +1526,7 @@ out center;`;
       {!gpsMode && (
       <div className="route-metrics-panel">
         <div className="route-metrics-grid">
-          <div className="route-metric-tile">
+          <div className="route-metric-tile route-metric-tile--planif">
             <span className="route-metric-label">Planif.</span>
             <div className="route-metric-value">
               <span className="route-metric-number">{plannedKm}</span>
@@ -1193,7 +1534,7 @@ out center;`;
             </div>
           </div>
           <div className="route-metric-divider" />
-          <div className="route-metric-tile">
+          <div className="route-metric-tile route-metric-tile--recorr">
             <span className="route-metric-label">Recorr.</span>
             <div className="route-metric-value">
               <span className="route-metric-number">{traveledKm}</span>
@@ -1201,7 +1542,7 @@ out center;`;
             </div>
           </div>
           <div className="route-metric-divider" />
-          <div className="route-metric-tile">
+          <div className="route-metric-tile route-metric-tile--pend">
             <span className="route-metric-label">Pend.</span>
             <div className="route-metric-value">
               <span className="route-metric-number">{pendingKm}</span>
