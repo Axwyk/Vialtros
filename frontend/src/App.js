@@ -105,7 +105,8 @@ function App() {
             </button>
           </nav>
         )}
-        <div className="flex-1 min-h-0 overflow-auto">
+        <div className="flex-1 min-h-0 overflow-auto flex flex-col">
+          <div className="flex-1">
           <Routes>
             <Route
               path="/activity"
@@ -208,6 +209,7 @@ function App() {
               element={<Navigate to={isAuth ? "/dashboard" : "/"} />}
             />
           </Routes>
+          </div>
           <Footer />
         </div>
       </div>
