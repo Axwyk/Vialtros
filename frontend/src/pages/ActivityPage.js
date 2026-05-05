@@ -3,6 +3,25 @@ import { Link } from "react-router-dom";
 import { getRecentActivity } from "../services/dashboard";
 import { CheckCircle } from "lucide-react";
 
+
+function getActivityStyle(title = "") {
+  const text = title.toLowerCase();
+
+  if (text.includes("usuario")) {
+    return "bg-blue-100 text-blue-700";
+  }
+
+  if (text.includes("ruta")) {
+    return "bg-emerald-100 text-emerald-700";
+  }
+
+  if (text.includes("tracking")) {
+    return "bg-purple-100 text-purple-700";
+  }
+
+  return "bg-slate-100 text-slate-700";
+}
+
 export default function ActivityPage() {
   const [activities, setActivities] = useState([]);
 
@@ -64,7 +83,11 @@ export default function ActivityPage() {
                   className="flex items-start justify-between gap-4 px-6 py-5 hover:bg-slate-50"
                 >
                   <div className="flex gap-4">
-  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+  <div
+  className={`flex h-10 w-10 items-center justify-center rounded-full ${getActivityStyle(
+    item.title || item.action || ""
+  )}`}
+>
   <svg
     width="20"
     height="20"
