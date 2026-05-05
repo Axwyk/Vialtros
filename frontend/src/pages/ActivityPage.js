@@ -68,19 +68,7 @@ export default function ActivityPage() {
 
   useEffect(() => {
     getRecentActivity()
-      .then(() =>
-  setActivities([
-    { title: "Usuario creado", time: "Hace 2 min" },
-    { title: "Ruta actualizada", time: "Hace 5 min" },
-    { title: "Tracking iniciado", time: "Hace 10 min" }
-  ])
-
-  
-
-  
-)
-
-
+      .then((data) => setActivities(Array.isArray(data) ? data : []))
       .catch(() => setActivities([]));
   }, []);
 
