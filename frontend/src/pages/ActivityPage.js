@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getRecentActivity } from "../services/dashboard";
+import { CheckCircle } from "lucide-react";
 
 export default function ActivityPage() {
   const [activities, setActivities] = useState([]);
@@ -63,21 +64,32 @@ export default function ActivityPage() {
                   className="flex items-start justify-between gap-4 px-6 py-5 hover:bg-slate-50"
                 >
                   <div className="flex gap-4">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-                      ✓
-                    </div>
+  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M20 6L9 17l-5-5" />
+  </svg>
+</div>
 
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-900">
-                        {item.title || item.action || "Actividad registrada"}
-                      </h3>
-                      <p className="mt-1 text-sm text-slate-500">
-                        {item.description ||
-                          item.detail ||
-                          "Movimiento del sistema"}
-                      </p>
-                    </div>
-                  </div>
+  <div>
+    <h3 className="text-sm font-bold text-slate-900">
+      {item.title || item.action || "Actividad registrada"}
+    </h3>
+    <p className="mt-1 text-sm text-slate-500">
+      {item.description ||
+        item.detail ||
+        "Movimiento del sistema"}
+    </p>
+  </div>
+</div>
 
                   <span className="whitespace-nowrap text-xs font-medium text-slate-400">
                     {item.time || item.created_at || "Reciente"}
