@@ -96,7 +96,7 @@ export default function ActivityPage() {
           </Link>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-md">
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-lg">
           <div className="border-b border-slate-100 px-6 py-4">
             <h2 className="text-base font-bold text-slate-900">
               Movimientos recientes
