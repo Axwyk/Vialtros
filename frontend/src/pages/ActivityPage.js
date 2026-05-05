@@ -129,7 +129,7 @@ export default function ActivityPage() {
 </div>
 
   <div>
-    <h3 className="text-sm font-bold text-slate-900">
+    <h3 className="text-base font-semibold text-slate-900">
       {item.title || item.action || "Actividad registrada"}
     </h3>
     <p className="mt-1 text-sm text-slate-500">
