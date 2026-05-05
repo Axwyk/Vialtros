@@ -117,7 +117,9 @@ export default function ActivityPage() {
 </div>
 
                   <span className="whitespace-nowrap text-xs font-medium text-slate-400">
-                    {item.time || item.created_at || "Reciente"}
+                    {item.created_at
+  ? new Date(item.created_at).toLocaleString()
+  : item.time || "Reciente"}
                   </span>
                 </div>
               ))
