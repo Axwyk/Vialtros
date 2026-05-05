@@ -132,7 +132,7 @@ export default function ActivityPage() {
     <h3 className="text-base font-semibold text-slate-900">
       {item.title || item.action || "Actividad registrada"}
     </h3>
-    <p className="mt-1 text-sm text-slate-500">
+    <p className="mt-1 text-sm text-slate-600 leading-relaxed">
       {item.description ||
         item.detail ||
         "Movimiento del sistema"}
