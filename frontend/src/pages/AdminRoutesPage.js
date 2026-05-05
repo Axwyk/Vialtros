@@ -184,49 +184,69 @@ export default function AdminRoutesPage({ role, onLogout }) {
     setSaving(true);
     setFormError("");
     try {
-      // Always resolve + snap coordinates to road for maximum precision
-      let originLat = form.origin_lat;
-      let originLng = form.origin_lng;
-      let destLat = form.destination_lat;
-      let destLng = form.destination_lng;
+      const originHadCoords =
+        form.origin_lat != null && form.origin_lng != null;
+      const destHadCoords =
+        form.destination_lat != null && form.destination_lng != null;
 
-      if (originLat == null || originLng == null) {
-        const resolved = await geocodeAddress(form.origin.trim()).catch(
-          () => null,
-        );
-        if (Array.isArray(resolved)) {
-          originLat = resolved[0];
-          originLng = resolved[1];
-        }
-      }
-      if (destLat == null || destLng == null) {
-        const resolved = await geocodeAddress(form.destination.trim()).catch(
-          () => null,
-        );
-        if (Array.isArray(resolved)) {
-          destLat = resolved[0];
-          destLng = resolved[1];
-        }
-      }
+      // Geocodificar en paralelo solo los campos sin coordenadas
+      const [originResolved, destResolved] = await Promise.all([
+        originHadCoords
+          ? null
+          : geocodeAddress(form.origin.trim()).catch(() => null),
+        destHadCoords
+          ? null
+          : geocodeAddress(form.destination.trim()).catch(() => null),
+      ]);
 
-      // Snap to nearest road for sub-meter precision
-      if (Number.isFinite(originLat) && Number.isFinite(originLng)) {
-        const snapped = await snapPointToRoad([originLat, originLng]).catch(
-          () => null,
-        );
-        if (Array.isArray(snapped)) {
-          originLat = snapped[0];
-          originLng = snapped[1];
-        }
+      let originLat = originHadCoords
+        ? form.origin_lat
+        : Array.isArray(originResolved)
+          ? originResolved[0]
+          : null;
+      let originLng = originHadCoords
+        ? form.origin_lng
+        : Array.isArray(originResolved)
+          ? originResolved[1]
+          : null;
+      let destLat = destHadCoords
+        ? form.destination_lat
+        : Array.isArray(destResolved)
+          ? destResolved[0]
+          : null;
+      let destLng = destHadCoords
+        ? form.destination_lng
+        : Array.isArray(destResolved)
+          ? destResolved[1]
+          : null;
+
+      // Snap solo si las coords se obtuvieron por geocoding (no por sugerencia)
+      // Se ejecutan en paralelo
+      const needSnapOrigin =
+        !originHadCoords &&
+        Number.isFinite(originLat) &&
+        Number.isFinite(originLng);
+      const needSnapDest =
+        !destHadCoords &&
+        Number.isFinite(destLat) &&
+        Number.isFinite(destLng);
+
+      const [snappedOrigin, snappedDest] = await Promise.all([
+        needSnapOrigin
+          ? snapPointToRoad([originLat, originLng]).catch(() => null)
+          : null,
+        needSnapDest
+          ? snapPointToRoad([destLat, destLng]).catch(() => null)
+          : null,
+      ]);
+
+      if (Array.isArray(snappedOrigin)) {
+        originLat = snappedOrigin[0];
+        originLng = snappedOrigin[1];
       }
-      if (Number.isFinite(destLat) && Number.isFinite(destLng)) {
-        const snapped = await snapPointToRoad([destLat, destLng]).catch(
-          () => null,
-        );
-        if (Array.isArray(snapped)) {
-          destLat = snapped[0];
-          destLng = snapped[1];
-        }
+      if (Array.isArray(snappedDest)) {
+        destLat = snappedDest[0];
+        destLng = snappedDest[1];
       }
 
       const payload = {

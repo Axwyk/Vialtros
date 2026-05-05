@@ -1,5 +1,5 @@
 // App principal con rutas protegidas y flujo de login/logout
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { getCurrentUser } from "./services/auth";
 import {
   BrowserRouter as Router,
@@ -33,6 +33,8 @@ import PrivacyPage from "./pages/PrivacyPage";
 import TermsPage from "./pages/TermsPage";
 import SupportPage from "./pages/SupportPage";
 import ProfileScreen from "./pages/ProfileScreen";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 
 function App() {
   const [isAuth, setIsAuth] = useState(() => {
@@ -62,6 +64,8 @@ function App() {
       localStorage.removeItem("role");
     }
   }, [isAuth]);
+
+  const handleLogin = useCallback(() => setIsAuth(true), []);
 
   const handleLogout = () => {
     clearSession();
@@ -119,7 +123,7 @@ function App() {
             />
             <Route
               path="/login"
-              element={<LoginPage onLogin={() => setIsAuth(true)} />}
+              element={<LoginPage onLogin={handleLogin} />}
             />
             <Route path="/" element={<LandingPage />} />
             <Route
@@ -206,6 +210,8 @@ function App() {
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/support" element={<SupportPage />} />
             <Route path="/profile" element={<ProfileScreen />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
             <Route
               path="*"
               element={<Navigate to={isAuth ? "/dashboard" : "/"} />}
