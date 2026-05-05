@@ -77,7 +77,9 @@ export default function ActivityPage() {
                 No hay actividad registrada.
               </p>
             ) : (
-              activities.map((item, index) => (
+              [...activities]
+  .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+  .map((item, index) => (
                 <div
                   key={index}
                   className="flex items-start justify-between gap-4 px-6 py-5 hover:bg-slate-50"
