@@ -1,8 +1,43 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getRecentActivity } from "../services/dashboard";
-import { CheckCircle } from "lucide-react";
 
+
+function getIcon(type = "") {
+  const text = type.toLowerCase();
+
+  if (text.includes("usuario")) {
+    return (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4 20c2-4 14-4 16 0" />
+      </svg>
+    );
+  }
+
+  if (text.includes("ruta")) {
+    return (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M3 17l6-6 4 4 8-8" />
+      </svg>
+    );
+  }
+
+  if (text.includes("tracking")) {
+    return (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M12 2C8 2 5 5 5 9c0 5 7 13 7 13s7-8 7-13c0-4-3-7-7-7z" />
+        <circle cx="12" cy="9" r="2" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="5" />
+    </svg>
+  );
+}
 
 function getActivityStyle(title = "") {
   const text = title.toLowerCase();
@@ -90,18 +125,7 @@ export default function ActivityPage() {
     item.title || item.action || ""
   )}`}
 >
-  <svg
-    width="20"
-    height="20"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M20 6L9 17l-5-5" />
-  </svg>
+  {getIcon(item.title || item.action || "")}
 </div>
 
   <div>
