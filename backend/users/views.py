@@ -1,8 +1,14 @@
+import logging
+
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.conf import settings
+from django.core.mail import send_mail
 from django.utils import timezone
 from rest_framework import viewsets, permissions, status
+
+logger = logging.getLogger(__name__)
+from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework.response import Response
 from rest_framework.decorators import action
@@ -12,7 +18,7 @@ from .serializers import (
     RouteSerializer, TrackingSerializer, TrackingIngestSerializer,
     DriverSerializer, PassengerSerializer, build_route_intermediate_stops,
 )
-from .models import Route, Tracking, Driver, Passenger
+from .models import Route, Tracking, Driver, Passenger, PasswordResetToken
 from .permissions import IsAdmin, IsDriver, IsPassenger
 
 User = get_user_model()
@@ -732,4 +738,137 @@ class TrackingViewSet(viewsets.ModelViewSet):
 
         self._broadcast_tracking(response_payload)
         return Response(response_payload, status=status.HTTP_201_CREATED)
+
+
+class ForgotPasswordView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = (request.data.get('email') or '').strip()
+        GENERIC_RESPONSE = Response(
+            {'message': 'Si el correo está registrado, recibirás las instrucciones en unos minutos.'}
+        )
+
+        if not email:
+            return GENERIC_RESPONSE
+
+        User = get_user_model()
+        try:
+            user = User.objects.get(email__iexact=email)
+        except User.DoesNotExist:
+            return GENERIC_RESPONSE
+
+        # Invalidar tokens anteriores del usuario
+        PasswordResetToken.objects.filter(user=user, used=False).update(used=True)
+
+        token_obj = PasswordResetToken(user=user)
+        token_obj.save()
+
+        reset_link = f"{settings.FRONTEND_URL}/reset-password/{token_obj.token}"
+
+        html_body = f"""
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="100%" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+        <tr>
+          <td style="background:linear-gradient(135deg,#1E40AF 0%,#2563EB 55%,#3B82F6 100%);padding:32px;text-align:center;">
+            <span style="font-size:28px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">Vialtros</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:40px 40px 32px;">
+            <h1 style="margin:0 0 12px;font-size:22px;font-weight:700;color:#111827;">Recupera tu contraseña</h1>
+            <p style="margin:0 0 28px;font-size:15px;color:#6b7280;line-height:1.6;">
+              Recibimos una solicitud para restablecer la contraseña de tu cuenta en Vialtros.
+              Haz clic en el botón para continuar.
+            </p>
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr><td align="center">
+                <a href="{reset_link}"
+                   style="display:inline-block;background:#2563EB;color:#ffffff;text-decoration:none;
+                          font-size:15px;font-weight:600;padding:14px 32px;border-radius:10px;
+                          box-shadow:0 4px 12px rgba(37,99,235,0.35);">
+                  Restablecer contraseña
+                </a>
+              </td></tr>
+            </table>
+            <p style="margin:28px 0 0;font-size:13px;color:#9ca3af;line-height:1.6;text-align:center;">
+              Este enlace expira en <strong>1 hora</strong>.<br>
+              Si no solicitaste este cambio, ignora este mensaje.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:20px 40px;border-top:1px solid #f3f4f6;text-align:center;">
+            <p style="margin:0;font-size:12px;color:#d1d5db;">© 2026 Vialtros. Todos los derechos reservados.</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>
+"""
+        text_body = (
+            f"Recupera tu contraseña — Vialtros\n\n"
+            f"Recibimos una solicitud para restablecer la contraseña de tu cuenta.\n\n"
+            f"Haz clic en este enlace para continuar (expira en 1 hora):\n{reset_link}\n\n"
+            f"Si no solicitaste este cambio, ignora este mensaje.\n\n"
+            f"© 2026 Vialtros"
+        )
+
+        try:
+            send_mail(
+                subject='Recupera tu contraseña — Vialtros',
+                message=text_body,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[user.email],
+                html_message=html_body,
+                fail_silently=False,
+            )
+        except Exception:
+            pass
+
+        return GENERIC_RESPONSE
+
+
+class ResetPasswordView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        token_str = (request.data.get('token') or '').strip()
+        new_password = (request.data.get('new_password') or '').strip()
+
+        if not token_str or not new_password:
+            return Response(
+                {'error': 'Token y nueva contraseña son requeridos.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            token_obj = PasswordResetToken.objects.select_related('user').get(token=token_str)
+        except PasswordResetToken.DoesNotExist:
+            return Response(
+                {'error': 'Token inválido o expirado.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not token_obj.is_valid():
+            return Response(
+                {'error': 'Token inválido o expirado.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = token_obj.user
+        user.set_password(new_password)
+        user.save()
+
+        token_obj.used = True
+        token_obj.save()
+
+        return Response({'message': 'Contraseña actualizada correctamente.'})
 

@@ -1,6 +1,6 @@
 // Página de login con JWT
 import React, { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { LogoIcon } from "../components/Logo";
 import api from "../services/api";
 import {
@@ -83,6 +83,8 @@ export default function LoginPage({ onLogin }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const resetSuccess = searchParams.get("reset") === "success";
 
   const finishLogin = useCallback(
     (nextUsername) => {
@@ -233,6 +235,26 @@ export default function LoginPage({ onLogin }) {
         </div>
 
         <div className="w-full max-w-md">
+          {resetSuccess && (
+            <div className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 text-sm rounded-xl px-4 py-3 mb-6">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="flex-shrink-0"
+              >
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                <polyline points="22 4 12 14.01 9 11.01" />
+              </svg>
+              Contraseña actualizada correctamente. Inicia sesión.
+            </div>
+          )}
+
           <h2 className="text-2xl font-bold text-gray-900 mb-1">
             Iniciar sesión en Vialtros
           </h2>
@@ -349,6 +371,15 @@ export default function LoginPage({ onLogin }) {
               )}
             </button>
           </form>
+
+          <div className="text-center mt-4">
+            <Link
+              to="/forgot-password"
+              className="text-sm text-blue-600 hover:text-blue-700 transition"
+            >
+              ¿Olvidaste tu contraseña?
+            </Link>
+          </div>
         </div>
       </div>
     </div>

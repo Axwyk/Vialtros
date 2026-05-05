@@ -544,6 +544,7 @@ async function valhallaRoute(from, to, timeoutMs = 15000) {
       costing: "auto",
       costing_options: VALHALLA_COSTING_OPTIONS,
       directions_options: { units: "km" },
+      directions_type: "maneuvers",
     };
 
     const data = await fetchPostJson(`${VALHALLA_BASE}/route`, body, timeoutMs);
@@ -553,16 +554,62 @@ async function valhallaRoute(from, to, timeoutMs = 15000) {
     const coordinates = decodePolyline6(leg.shape);
     if (coordinates.length < 2) return null;
 
+    // Extraer maniobras de Valhalla como pasos de navegación
+    const steps = valhallaManeuversToSteps(leg.maneuvers || [], coordinates);
+
     const result = {
       coordinates,
       duration: leg.summary?.time || 0,
       distance: (leg.summary?.length || 0) * 1000, // km→m
+      steps: steps.length > 0 ? steps : null,
     };
 
     routeCache.set(cacheKey, result);
     savePersistentRouteCache();
     return result;
   });
+}
+
+// Convierte tipos de maniobra Valhalla a modifier OSRM-compatible
+function valhallaTypeToModifier(type) {
+  // Valhalla maneuver types: https://valhalla.github.io/valhalla/api/turn-by-turn/api-reference/
+  switch (type) {
+    case 2: return "right";       // StartRight
+    case 3: return "left";        // StartLeft
+    case 9: return "slight right"; // SlightRight
+    case 10: return "right";      // Right
+    case 11: return "sharp right"; // SharpRight
+    case 12: return "uturn";      // UTurnRight
+    case 13: return "uturn";      // UTurnLeft
+    case 14: return "sharp left";  // SharpLeft
+    case 15: return "left";       // Left
+    case 16: return "slight left"; // SlightLeft
+    case 4: case 5: case 6: return "arrive"; // Destination variants
+    default: return "straight";
+  }
+}
+
+function valhallaManeuversToSteps(maneuvers, coordinates) {
+  return maneuvers
+    .filter((m) => {
+      // Excluir maniobrAs de inicio, destino y "continue straight" sin nombre
+      if (m.type === 1 || m.type === 4 || m.type === 5 || m.type === 6) return false;
+      if (m.type === 8 && !m.street_names?.length) return false; // Continue sin calle
+      return true;
+    })
+    .map((m) => {
+      const idx = m.begin_shape_index ?? 0;
+      const point = coordinates[Math.min(idx, coordinates.length - 1)] || coordinates[0];
+      const modifier = valhallaTypeToModifier(m.type);
+      const streetName = (m.street_names || [])[0] || "";
+      return {
+        location: [point[0], point[1]],
+        distance: (m.length || 0) * 1000, // km → m
+        name: streetName,
+        type: modifier === "arrive" ? "arrive" : "turn",
+        modifier,
+      };
+    });
 }
 
 // Valhalla snap to nearest road — serialized
@@ -660,6 +707,7 @@ async function valhallaRouteWaypoints(waypoints, timeoutMs = 15000) {
       costing: "auto",
       costing_options: VALHALLA_COSTING_OPTIONS,
       directions_options: { units: "km" },
+      directions_type: "maneuvers",
     };
     // First and last must be 'break'
     body.locations[0].type = "break";
@@ -682,10 +730,22 @@ async function valhallaRouteWaypoints(waypoints, timeoutMs = 15000) {
       (s, l) => s + (l.summary?.length || 0),
       0,
     );
+    const allSteps = data.trip.legs.flatMap((leg, legIdx) => {
+      const legCoords = decodePolyline6(leg.shape || "");
+      const offset = data.trip.legs.slice(0, legIdx).reduce(
+        (s, l) => s + decodePolyline6(l.shape || "").length,
+        0,
+      );
+      return valhallaManeuversToSteps(leg.maneuvers || [], legCoords).map((s) => ({
+        ...s,
+        _coordOffset: offset,
+      }));
+    });
     return {
       coordinates: allCoords,
       duration: totalTime,
       distance: totalDist * 1000,
+      steps: allSteps.length > 0 ? allSteps : null,
     };
   });
 }

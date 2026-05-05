@@ -1,3 +1,5 @@
+import secrets
+
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
@@ -46,3 +48,19 @@ class Tracking(models.Model):
 	longitude = models.FloatField()
 	speed_kmh = models.FloatField(null=True, blank=True)
 	timestamp = models.DateTimeField(default=timezone.now)
+
+
+class PasswordResetToken(models.Model):
+	user = models.ForeignKey('User', on_delete=models.CASCADE)
+	token = models.CharField(max_length=64, unique=True)
+	created_at = models.DateTimeField(auto_now_add=True)
+	used = models.BooleanField(default=False)
+
+	def save(self, *args, **kwargs):
+		if not self.token:
+			self.token = secrets.token_urlsafe(32)
+		super().save(*args, **kwargs)
+
+	def is_valid(self):
+		age = timezone.now() - self.created_at
+		return not self.used and age.total_seconds() < 3600

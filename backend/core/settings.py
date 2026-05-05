@@ -195,9 +195,25 @@ else:
 import ssl as _ssl
 _strict = getattr(_ssl, "VERIFY_X509_STRICT", None)
 if _strict:
-    _ssl.SSLContext.verify_flags  # acceso para confirmar disponibilidad
-    _original_create = _ssl.create_default_context.__wrapped__ if hasattr(_ssl.create_default_context, "__wrapped__") else None
+    _original_create_default_context = _ssl.create_default_context
 
+    def _patched_create_default_context(*args, **kwargs):
+        ctx = _original_create_default_context(*args, **kwargs)
+        ctx.verify_flags &= ~_strict
+        return ctx
+
+    _ssl.create_default_context = _patched_create_default_context
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_USE_SSL = False
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL = f'Vialtros <{os.environ.get("EMAIL_HOST_USER", "")}>'
+EMAIL_TIMEOUT = 10
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
     def _patched_create_default_context(*args, **kwargs):
         ctx = _ssl._create_default_https_context(*args, **kwargs)
         ctx.verify_flags &= ~_strict

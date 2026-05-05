@@ -38,4 +38,12 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+export function requestPasswordReset(email) {
+  return api.post('/auth/forgot-password/', { email });
+}
+
+export function resetPassword(token, newPassword) {
+  return api.post('/auth/reset-password/', { token, new_password: newPassword });
+}
+
 export default api;

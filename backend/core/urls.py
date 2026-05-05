@@ -17,7 +17,7 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework import routers
-from users.views import UserViewSet, DriverViewSet, PassengerViewSet, RouteViewSet, TrackingViewSet
+from users.views import UserViewSet, DriverViewSet, PassengerViewSet, RouteViewSet, TrackingViewSet, ForgotPasswordView, ResetPasswordView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 router = routers.DefaultRouter()
@@ -32,4 +32,6 @@ urlpatterns = [
     path('api/', include(router.urls)),
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/auth/forgot-password/', ForgotPasswordView.as_view(), name='forgot_password'),
+    path('api/auth/reset-password/', ResetPasswordView.as_view(), name='reset_password'),
 ]
