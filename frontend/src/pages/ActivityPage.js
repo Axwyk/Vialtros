@@ -117,7 +117,7 @@ export default function ActivityPage() {
   .map((item, index) => (
                 <div
                   key={index}
-                  className="flex items-start justify-between gap-4 px-6 py-5 hover:bg-slate-50 transition-all duration-200"
+                  className="flex items-start justify-between gap-4 px-6 py-6 hover:bg-slate-50 transition-all duration-200"
                 >
                   <div className="flex gap-4">
   <div
