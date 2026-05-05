@@ -3,10 +3,14 @@ import { Link } from "react-router-dom";
 import { getRecentActivity } from "../services/dashboard";
 
 
+
 function getIcon(type = "") {
   const text = type.toLowerCase();
 
   if (text.includes("usuario")) {
+
+    
+
     return (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <circle cx="12" cy="8" r="4" />
@@ -60,6 +64,8 @@ function getActivityStyle(title = "") {
 export default function ActivityPage() {
   const [activities, setActivities] = useState([]);
 
+  const [search, setSearch] = useState("");
+
   useEffect(() => {
     getRecentActivity()
       .then(() =>
@@ -68,9 +74,20 @@ export default function ActivityPage() {
     { title: "Ruta actualizada", time: "Hace 5 min" },
     { title: "Tracking iniciado", time: "Hace 10 min" }
   ])
+
+  
+
+  
 )
+
+
       .catch(() => setActivities([]));
   }, []);
+
+  const filteredActivities = activities.filter((item) => {
+    const text = `${item.title || ""} ${item.action || ""} ${item.description || ""} ${item.detail || ""}`.toLowerCase();
+    return text.includes(search.toLowerCase());
+  });
 
   return (
     <div className="min-h-screen bg-slate-100 px-6 py-8">
@@ -96,6 +113,14 @@ export default function ActivityPage() {
           </Link>
         </div>
 
+        <input
+  type="text"
+  placeholder="Buscar actividad..."
+  value={search}
+  onChange={(e) => setSearch(e.target.value)}
+  className="mb-4 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm"
+/>
+
         <div className="rounded-2xl border border-slate-200 bg-white shadow-lg">
           <div className="border-b border-slate-100 px-6 py-4">
             <h2 className="text-base font-bold text-slate-900">
@@ -112,7 +137,7 @@ export default function ActivityPage() {
                 No hay actividad registrada.
               </p>
             ) : (
-              [...activities]
+              [...filteredActivities]
   .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
   .map((item, index) => (
                 <div
@@ -153,4 +178,6 @@ export default function ActivityPage() {
       </div>
     </div>
   );
+
+  
 }
