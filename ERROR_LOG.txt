@@ -1,0 +1,197 @@
+====================================================
+  VIALTROS -- LOG DE ERRORES Y SOLUCIONES
+====================================================
+
+[ERROR #001] - 27 de Abril de 2026
+────────────────────────────────────────────────────
+FECHA: 27/04/2026 - 12:34 PM
+UBICACIÓN: frontend/src/components/dashboard/Sidebar.js:65
+TIPO: React Warning
+
+DESCRIPCIÓN:
+Encountered two children with the same key, /dashboard. Keys should be unique 
+so that components maintain their identity across updates. Non-unique keys may 
+cause children to be duplicated and/or omitted — the behavior is unsupported 
+and could change in a future version.
+
+CAUSA:
+Dos elementos de navegación tenían la misma propiedad 'key' ({/dashboard}):
+- "Inicio" apuntaba a: /dashboard
+- "Tracking" (deshabilitado) también apuntaba a: /dashboard
+
+React requiere keys únicas en listas renderizadas para mantener la identidad 
+de los componentes.
+
+SOLUCIÓN:
+✓ Cambiar key={item.to} por key={index} en el .map() de navItems
+✓ Archivo: frontend/src/components/dashboard/Sidebar.js (línea 65)
+✓ Cambio: .map((item) => {...}) → .map((item, index) => {...})
+✓ Cambio: key={item.to} → key={index}
+
+RESULTADO: ✓ RESUELTO
+El componente ahora renderiza sin warnings.
+
+────────────────────────────────────────────────────
+
+[ERROR #002] - 27 de Abril de 2026
+────────────────────────────────────────────────────
+FECHA: 27/04/2026 - 14:15 PM
+UBICACIÓN: Frontend Console (DevTools) - Múltiples endpoints
+TIPO: HTTP 401 Unauthorized
+
+DESCRIPCIÓN:
+Errores 401 (Unauthorized) en las siguientes peticiones:
+  - GET http://localhost:8000/api/monitoring/ [401]
+  - GET http://localhost:8000/api/routes/ [401]
+  - GET http://localhost:8000/api/tracking/ [401]
+  - GET http://localhost:8000/api/users/ [401]
+  - Múltiples endpoints devolvieron 401
+
+CAUSA RAÍZ:
+El interceptor de axios (frontend/src/services/api.js) tenía un bug lógico:
+- Cuando REACT_APP_ALLOW_LOCAL_ACCESS=true (modo dev local):
+  - Se usaba un token ficticio ("local-dev-access")
+  - NO se agregaba el header Authorization a las peticiones
+  - El backend rechazaba las peticiones sin token válido
+  
+Lógica defectuosa en el interceptor:
+```
+if (token && isLocalAccessEnabled() && isLocalAccessToken(token)) {
+  // FALTA: agregar Authorization header aquí
+  return config;  // ← Se retornaba sin header
+}
+```
+
+SOLUCIÓN:
+✓ Fix #1: Corregir interceptor en frontend/src/services/api.js
+  - Agregar Authorization header incluso para tokens locales
+  - Línea a cambiar: Dentro del bloque isLocalAccessToken()
+
+✓ Fix #2: Deshabilitar modo local-access en desarrollo
+  - Crear archivo frontend/.env con REACT_APP_ALLOW_LOCAL_ACCESS=false
+  - Esto obliga a usar JWT real desde el backend
+
+✓ Fix #3: Crear usuario admin en la BD
+  - Ejecutar: python manage.py shell
+  - Crear superuser: admin / admin123
+  - Esto genera un JWT válido al hacer login
+
+✓ Fix #4: Crear archivo backend/.env
+  - DJANGO_SECRET_KEY=django-insecure-dev-only-change-in-production
+  - DJANGO_DEBUG=True
+  - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
+  - CORS_ALLOW_ALL_ORIGINS=True
+
+ARCHIVOS MODIFICADOS:
+  1. frontend/src/services/api.js
+  2. frontend/.env (creado)
+  3. backend/.env (creado)
+  4. Backend database (usuario admin creado)
+
+RESULTADO: ✓ RESUELTO
+Las peticiones API ahora incluyen Authorization header válido.
+El login con admin/admin123 genera un JWT que permite acceso a endpoints.
+
+PASOS PARA REPRODUCIR:
+1. Reiniciar frontend (npm start en carpeta frontend/)
+2. Ir a login page
+3. Usar credenciales: admin / admin123
+4. Verificar en DevTools que no hay errores 401
+
+────────────────────────────────────────────────────
+
+[ERROR #004] - 5 de Mayo de 2026
+────────────────────────────────────────────────────
+FECHA: 05/05/2026
+UBICACIÓN: run_vialtros.bat, backend/start_backend.bat
+TIPO: Entorno Virtual / Script Batch
+
+DESCRIPCIÓN:
+Error al ejecutar run_vialtros.bat:
+  - El script no encontraba las dependencias de Python
+  - ModuleNotFoundError: No module named 'django'
+  - El entorno virtual no se activaba correctamente
+
+MENSAJES DE ERROR:
+  1. "No se encontro el entorno virtual en .venv"
+  2. "Can't open file 'C:\\...\\manage.py': [Errno 2]"
+  3. "ImportError: Couldn't import Django. Are you sure it's installed?"
+
+CAUSA RAÍZ:
+1. El script start_backend.bat no activaba correctamente el venv
+   - Usaba "%VENV_PYTHON% manage.py" directamente
+   - Sin activar el entorno virtual primero
+   - Las dependencias no estaban en el PATH
+
+2. La ruta al entorno virtual era incorrecta:
+   - Esperaba: backend\..\..\.venv (incorrecto - sube dos niveles)
+   - Debería ser: backend\.venv (dentro del mismo directorio)
+
+3. run_vialtros.bat no verificaba que las dependencias estuvieran instaladas
+
+SOLUCIÓN APLICADA:
+✓ Fix #1: Corregir start_backend.bat
+  - Usar call "%~dp0.venv\Scripts\activate.bat" para activar el venv
+  - Cambiar ruta de "..\.venv" a ".venv" (relativa correcta)
+  - Ejecutar migrate antes de runserver para asegurar BD preparada
+
+✓ Fix #2: Mejorar run_vialtros.bat
+  - Agregar verificación de directorios (backend/, frontend/)
+  - Agregar timeout entre inicio de backend y frontend
+  - Mostrar URLs de acceso y credenciales por defecto
+  - Mejor formato de mensajes
+
+✓ Fix #3: Crear entorno virtual manualmente (ejecutado)
+  - python -m venv backend\.venv
+  - pip install -r backend\requirements.txt
+
+ARCHIVOS MODIFICADOS:
+  1. backend/start_backend.bat (corregido)
+  2. run_vialtros.bat (mejorado)
+  3. backend/.venv/ (creado manualmente)
+
+RESULTADO: ✓ RESUELTO
+El script run_vialtros.bat ahora:
+  - Activa correctamente el entorno virtual
+  - Instala migraciones automáticamente
+  - Inicia Backend en http://localhost:8000
+  - Inicia Frontend en http://localhost:3000
+  - Muestra credenciales de acceso
+
+PASOS PARA REPRODUCIR EL ERROR RESUELTO:
+1. Ejecutar: run_vialtros.bat
+2. Debería abrir dos ventanas automáticamente
+3. Backend mostrar: "Starting development server..."
+4. Frontend mostrar: "Compiled successfully!"
+5. Acceso disponible en http://localhost:3000
+
+NOTAS TÉCNICAS:
+- El entorno virtual DEBE estar en backend/.venv
+- Las dependencias se instalan una sola vez
+- Para reinstalar dependencias: pip install --upgrade -r requirements.txt
+- Para resetear DB: del backend\db.sqlite3
+
+────────────────────────────────────────────────────
+
+────────────────────────────────────────────────────
+
+HISTORIAL DE CAMBIOS
+════════════════════════════════════════════════════
+
+27/04/2026 - 12:34 PM
+  ✓ Fix duplicate key warning en Sidebar.js
+  
+27/04/2026 - 14:15 PM
+  ✓ Fix 401 errors en API interceptor
+  ✓ Crear archivos .env
+  ✓ Crear usuario admin en BD
+
+====================================================
+ESTADÍSTICAS
+════════════════════════════════════════════════════
+Total Errores Documentados: 4
+Resueltos: 3 ✓
+Pendientes: 1 ⏳
+Fecha de Actualización: 05/05/2026
+
+====================================================

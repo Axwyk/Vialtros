@@ -18,9 +18,11 @@ jobs:
           node-version: 20
 
       - name: Instalar dependencias
+        working-directory: frontend
         run: npm install
 
       - name: Build del proyecto
+        working-directory: frontend
         run: npm run build
 
       - name: Limpiar carpeta (sin borrar .htaccess)
