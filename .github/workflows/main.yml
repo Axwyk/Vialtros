@@ -45,7 +45,6 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           port: 22
-          source: "frontend/dist/*"
+          source: "frontend/build/*"
           target: "/var/www/ds1/vialtros"
-          strip_components: 2
           rm: false
