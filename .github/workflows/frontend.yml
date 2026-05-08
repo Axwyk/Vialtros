@@ -28,7 +28,7 @@ jobs:
           GENERATE_SOURCEMAP: false
         run: npm run build
 
-      - name: Limpiar carpeta (sin borrar .htaccess)
+      - name: Limpiar solo frontend
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.HOST }}
@@ -36,7 +36,10 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: 22
           script: |
-            find /var/www/ds1/vialtros -mindepth 1 ! -name '.htaccess' -exec rm -rf {} +
+            find /var/www/ds1/vialtros -mindepth 1 \
+            ! -name '.htaccess' \
+            ! -name 'api' \
+            -exec rm -rf {} +
 
       - name: Desplegar al VPS vía SCP
         uses: appleboy/scp-action@v0.1.7
