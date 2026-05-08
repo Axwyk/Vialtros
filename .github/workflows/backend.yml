@@ -1,0 +1,47 @@
+name: Deploy Backend - Vialtros
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy-backend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Copiar backend al VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HOST }}  
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          port: 22
+          source: "backend/*"
+          target: "/var/www/vialtros-backend"
+          rm: false
+
+      - name: Instalar dependencias y reiniciar backend
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          port: 22
+          script: |
+            cd /var/www/vialtros-backend/backend
+
+            python3 -m venv .venv
+
+            source .venv/bin/activate
+
+            pip install -r requirements.txt
+
+            python manage.py migrate
+
+            python manage.py collectstatic --noinput
+
+            sudo systemctl restart daphne
