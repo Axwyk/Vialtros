@@ -37,8 +37,8 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: 22
           script: |
-            mkdir -p /var/www/ds1/vialtros/frontend
-            rm -rf /var/www/ds1/vialtros/frontend/*
+            mkdir -p /var/www/ds1/Vialtros/frontend
+            rm -rf /var/www/ds1/Vialtros/frontend/*
 
       - name: Desplegar frontend al VPS
         uses: appleboy/scp-action@v0.1.7
@@ -48,6 +48,6 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: 22
           source: "frontend/build/*"
-          target: "/var/www/ds1/vialtros/frontend"
+          target: "/var/www/ds1/Vialtros/frontend"
           strip_components: 2
           rm: false

@@ -21,7 +21,7 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: 22
           source: "backend/*"
-          target: "/var/www/ds1/vialtros/api"
+          target: "/var/www/ds1/Vialtros/api"
           strip_components: 1
           rm: false
 
@@ -33,7 +33,7 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: 22
           script: |
-            cd /var/www/ds1/vialtros/api
+            cd /var/www/ds1/Vialtros/api
 
             # Crear entorno virtual si no existe
             if [ ! -d ".venv" ]; then
