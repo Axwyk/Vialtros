@@ -20,8 +20,9 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           port: 22
-          source: "backend/**"
+          source: "backend/*"
           target: "/var/www/ds1/vialtros/api"
+          strip_components: 1
           rm: false
 
       - name: Configurar backend Django
@@ -32,7 +33,7 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: 22
           script: |
-            cd /var/www/ds1/vialtros/api/backend
+            cd /var/www/ds1/vialtros/api
 
             # Crear entorno virtual si no existe
             if [ ! -d ".venv" ]; then
