@@ -49,4 +49,5 @@ jobs:
           port: 22
           source: "frontend/build/*"
           target: "/var/www/ds1/vialtros/frontend"
+          strip_components: 2
           rm: false
