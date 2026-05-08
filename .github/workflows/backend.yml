@@ -20,7 +20,7 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           port: 22
-          source: "backend/*"
+          source: "backend/**"
           target: "/var/www/ds1/vialtros/api"
           rm: false
 
@@ -57,4 +57,4 @@ jobs:
             sudo systemctl restart daphne
 
             echo "Backend desplegado correctamente"
-            
+          
