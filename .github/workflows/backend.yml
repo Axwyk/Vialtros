@@ -47,7 +47,7 @@ jobs:
             # Instalar dependencias
             pip install -r requirements.txt
 
-            # Migraciones
+            # Aplicar migraciones
             python manage.py migrate
 
             # Archivos estáticos
@@ -57,4 +57,3 @@ jobs:
             sudo systemctl restart daphne
 
             echo "Backend desplegado correctamente"
-          
