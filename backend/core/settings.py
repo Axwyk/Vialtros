@@ -30,7 +30,7 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-dev-only-chang
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', 'vialtros.ds1.com,www.vialtros.ds1.com').split(',')
 
 
 # Application definition
@@ -101,7 +101,10 @@ DATABASES = {
         'HOST': os.environ.get('DB_HOST', ''),
         'PORT': os.environ.get('DB_PORT', ''),
         # Solo para PostgreSQL: client_encoding
-        'OPTIONS': {'client_encoding': 'UTF8'} if os.environ.get('DB_ENGINE') == 'django.db.backends.postgresql' else {},
+        'OPTIONS': {
+            'client_encoding': 'UTF8',
+            'sslmode': 'require',
+        } if os.environ.get('DB_ENGINE') == 'django.db.backends.postgresql' else {},
     }
 }
 
@@ -142,6 +145,8 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_DIRS = []
 
 # Django REST Framework config
 # Django REST Framework config

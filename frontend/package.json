@@ -2,7 +2,6 @@
   "name": "frontend",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://axwyk.github.io/Vialtros",
   "proxy": "http://localhost:8000",
   "dependencies": {
     "@react-google-maps/api": "^2.20.6",

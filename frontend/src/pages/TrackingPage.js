@@ -1398,7 +1398,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       cancelled = true;
       clearTimeout(timerId);
     };
-  }, [guidedRouteDisplayPath, guidedRouteRunning, liveRouteHistory]);
+  }, [guidedRouteDisplayPath, , liveRouteHistory]);
 
   const statusBadge = useMemo(() => {
     const badges = {
