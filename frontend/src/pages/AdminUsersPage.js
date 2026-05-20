@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import Sidebar from "../components/dashboard/Sidebar";
 import Modal from "../components/Modal";
 import { icons } from "../components/dashboard/icons";
@@ -47,18 +47,40 @@ export default function AdminUsersPage({ role, onLogout }) {
   const [sortDir, setSortDir] = useState("asc");
   const [selected, setSelected] = useState(new Set());
   const [confirmBulk, setConfirmBulk] = useState(false);
+  const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const debounceRef = useRef(null);
 
-  const load = useCallback(() => {
-    setLoading(true);
-    getUsers()
-      .then(setUsers)
-      .catch(() => setError("No se pudo cargar la lista de usuarios"))
-      .finally(() => setLoading(false));
-  }, []);
+  const load = useCallback(
+    (searchVal, dateFromVal, dateToVal) => {
+      setLoading(true);
+      const params = {};
+      if (searchVal) params.search = searchVal;
+      if (dateFromVal) params.date_from = dateFromVal;
+      if (dateToVal) params.date_to = dateToVal;
+      getUsers(params)
+        .then(setUsers)
+        .catch(() => setError("No se pudo cargar la lista de usuarios"))
+        .finally(() => setLoading(false));
+    },
+    [],
+  );
 
   useEffect(() => {
-    load();
+    load("", "", "");
   }, [load]);
+
+  const handleSearchChange = (e) => {
+    const val = e.target.value;
+    setSearch(val);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => load(val, dateFrom, dateTo), 350);
+  };
+
+  const handleDateChange = (from, to) => {
+    load(search, from, to);
+  };
 
   const openCreate = () => {
     setForm(EMPTY_FORM);
@@ -100,7 +122,7 @@ export default function AdminUsersPage({ role, onLogout }) {
         await updateUser(modal.id, payload);
       }
       setModal(null);
-      load();
+      load(search, dateFrom, dateTo);
     } catch (e) {
       const detail = e?.response?.data;
       setFormError(
@@ -116,7 +138,7 @@ export default function AdminUsersPage({ role, onLogout }) {
   const handleDelete = async () => {
     await deleteUser(confirmId);
     setConfirmId(null);
-    load();
+    load(search, dateFrom, dateTo);
   };
 
   const toggleSort = (col) => {
@@ -151,7 +173,7 @@ export default function AdminUsersPage({ role, onLogout }) {
     await Promise.all([...selected].map((id) => deleteUser(id)));
     setSelected(new Set());
     setConfirmBulk(false);
-    load();
+    load(search, dateFrom, dateTo);
   };
 
   return (
@@ -173,6 +195,59 @@ export default function AdminUsersPage({ role, onLogout }) {
             {icons.addUser({ size: 15 })}
             Nuevo usuario
           </button>
+        </div>
+
+        {/* Filtros */}
+        <div className="flex flex-wrap items-end gap-3 mb-5">
+          <div className="relative flex-1 min-w-[200px]">
+            <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-gray-400">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            </span>
+            <input
+              type="text"
+              placeholder="Buscar por nombre, email..."
+              value={search}
+              onChange={handleSearchChange}
+              className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-gray-500 whitespace-nowrap">Desde</label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => {
+                setDateFrom(e.target.value);
+                handleDateChange(e.target.value, dateTo);
+              }}
+              className="rounded-lg border border-gray-200 text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-gray-500 whitespace-nowrap">Hasta</label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => {
+                setDateTo(e.target.value);
+                handleDateChange(dateFrom, e.target.value);
+              }}
+              className="rounded-lg border border-gray-200 text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
+            />
+          </div>
+          {(search || dateFrom || dateTo) && (
+            <button
+              onClick={() => {
+                setSearch("");
+                setDateFrom("");
+                setDateTo("");
+                load("", "", "");
+              }}
+              className="text-xs text-gray-400 hover:text-gray-600 underline whitespace-nowrap"
+            >
+              Limpiar filtros
+            </button>
+          )}
         </div>
 
         {/* Selección múltiple */}

@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import React from "react";
 import { GoogleMap, useJsApiLoader, Polyline, OverlayView } from "@react-google-maps/api";
+import { FaUniversity, FaSchool, FaHospital, FaGasPump, FaTree, FaShoppingBag, FaMapMarkerAlt } from "react-icons/fa";
 import "./map-styles.css";
 
 // ---------------------------------------------------------------------------
@@ -359,19 +360,19 @@ function getPointAtDistance(path, distance) {
   return path[path.length - 1];
 }
 
-function getPoiEmoji(tags = {}) {
+function getPoiIcon(tags = {}) {
   const amenity = (tags.amenity || "").toLowerCase();
   const shop = (tags.shop || "").toLowerCase();
   const leisure = (tags.leisure || "").toLowerCase();
 
-  if (amenity === "university") return "🎓";
-  if (amenity === "school") return "🏫";
-  if (amenity === "hospital") return "🏥";
-  if (amenity === "fuel") return "⛽";
-  if (leisure === "park") return "🌳";
-  if (shop && /mall|supermarket|department_store/.test(shop)) return "🛍️";
+  if (amenity === "university") return <FaUniversity />;
+  if (amenity === "school") return <FaSchool />;
+  if (amenity === "hospital") return <FaHospital />;
+  if (amenity === "fuel") return <FaGasPump />;
+  if (leisure === "park") return <FaTree />;
+  if (shop && /mall|supermarket|department_store/.test(shop)) return <FaShoppingBag />;
 
-  return "📍";
+  return <FaMapMarkerAlt />;
 }
 
 /**
@@ -1246,7 +1247,7 @@ out center;`;
                   mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
                 >
                   <div style={{ transform: "translate(-50%, -50%)", pointerEvents: "none" }}>
-                    <div className="vt-poi-marker">{getPoiEmoji(p.tags || {})}</div>
+                    <div className="vt-poi-marker">{getPoiIcon(p.tags || {})}</div>
                   </div>
                 </OverlayView>
               );

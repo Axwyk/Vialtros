@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
 import Sidebar from "../components/dashboard/Sidebar";
 import Modal from "../components/Modal";
@@ -53,9 +53,13 @@ export default function AdminRoutesPage({ role, onLogout }) {
   const [destinationSuggestionsEnabled, setDestinationSuggestionsEnabled] =
     useState(false);
 
-  const load = useCallback(() => {
+  const [search, setSearch] = useState("");
+  const debounceRef = useRef(null);
+
+  const load = useCallback((searchVal) => {
     setLoading(true);
-    Promise.all([getRoutes(), getDrivers(), getPassengers()])
+    const params = searchVal ? { search: searchVal } : {};
+    Promise.all([getRoutes(params), getDrivers(), getPassengers()])
       .then(([r, d, p]) => {
         setRoutes(r);
         setDrivers(d);
@@ -66,8 +70,15 @@ export default function AdminRoutesPage({ role, onLogout }) {
   }, []);
 
   useEffect(() => {
-    load();
+    load("");
   }, [load]);
+
+  const handleSearchChange = (e) => {
+    const val = e.target.value;
+    setSearch(val);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => load(val), 350);
+  };
 
   const openCreate = () => {
     setForm(EMPTY_FORM);
@@ -261,7 +272,7 @@ export default function AdminRoutesPage({ role, onLogout }) {
       if (modal === "create") await createRoute(payload);
       else await updateRoute(modal.id, payload);
       setModal(null);
-      load();
+      load(search);
     } catch (e) {
       const d = e?.response?.data;
       setFormError(
@@ -275,7 +286,7 @@ export default function AdminRoutesPage({ role, onLogout }) {
   const handleDelete = async () => {
     await deleteRoute(confirmId);
     setConfirmId(null);
-    load();
+    load(search);
   };
 
   const toggleSort = (col) => {
@@ -332,6 +343,30 @@ export default function AdminRoutesPage({ role, onLogout }) {
             {icons.routes({ size: 15 })}
             Nueva ruta
           </button>
+        </div>
+
+        {/* Filtros */}
+        <div className="flex flex-wrap items-center gap-3 mb-5">
+          <div className="relative flex-1 min-w-[200px]">
+            <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-gray-400">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            </span>
+            <input
+              type="text"
+              placeholder="Buscar por nombre, origen, destino..."
+              value={search}
+              onChange={handleSearchChange}
+              className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
+            />
+          </div>
+          {search && (
+            <button
+              onClick={() => { setSearch(""); load(""); }}
+              className="text-xs text-gray-400 hover:text-gray-600 underline whitespace-nowrap"
+            >
+              Limpiar
+            </button>
+          )}
         </div>
 
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">

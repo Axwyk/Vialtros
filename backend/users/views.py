@@ -6,6 +6,7 @@ from django.conf import settings
 from django.core.mail import send_mail
 from django.utils import timezone
 from rest_framework import viewsets, permissions, status
+from rest_framework.filters import SearchFilter
 
 logger = logging.getLogger(__name__)
 from rest_framework.views import APIView
@@ -393,6 +394,18 @@ def build_admin_monitoring_summary(routes):
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all().order_by('id')
     permission_classes = [IsAdmin]
+    filter_backends = [SearchFilter]
+    search_fields = ['username', 'email', 'first_name', 'last_name']
+
+    def get_queryset(self):
+        qs = User.objects.all().order_by('id')
+        date_from = self.request.query_params.get('date_from')
+        date_to = self.request.query_params.get('date_to')
+        if date_from:
+            qs = qs.filter(date_joined__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(date_joined__date__lte=date_to)
+        return qs
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -523,18 +536,24 @@ class DriverViewSet(viewsets.ModelViewSet):
     queryset = Driver.objects.select_related('user').all().order_by('id')
     serializer_class = DriverSerializer
     permission_classes = [IsAdmin]
+    filter_backends = [SearchFilter]
+    search_fields = ['user__username', 'user__email', 'license_number']
 
 
 class PassengerViewSet(viewsets.ModelViewSet):
     queryset = Passenger.objects.select_related('user').all().order_by('id')
     serializer_class = PassengerSerializer
     permission_classes = [IsAdmin]
+    filter_backends = [SearchFilter]
+    search_fields = ['user__username', 'user__email', 'phone', 'pickup_address']
 
 
 class RouteViewSet(viewsets.ModelViewSet):
     queryset = Route.objects.select_related('driver__user').prefetch_related('passengers__user').all().order_by('id')
     serializer_class = RouteSerializer
     permission_classes = [IsAdmin]
+    filter_backends = [SearchFilter]
+    search_fields = ['name', 'origin', 'destination']
 
     def get_queryset(self):
         return Route.objects.select_related('driver__user').prefetch_related('passengers__user').all().order_by('id')
