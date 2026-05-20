@@ -30,7 +30,7 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-dev-only-chang
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', 'vialtros.ds1.com,www.vialtros.ds1.com', '2.24.72.3').split(',')
+ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', 'vialtros.ds1.com,www.vialtros.ds1.com,2.24.72.3,localhost,127.0.0.1').split(',')
 
 
 # Application definition
@@ -94,17 +94,15 @@ ASGI_APPLICATION = 'core.asgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': os.environ.get('DB_ENGINE', 'django.db.backends.sqlite3'),
-        'NAME': os.environ.get('DB_NAME', os.path.join(BASE_DIR, 'db.sqlite3')),
-        'USER': os.environ.get('DB_USER', ''),
-        'PASSWORD': os.environ.get('DB_PASSWORD', ''),
-        'HOST': os.environ.get('DB_HOST', ''),
-        'PORT': os.environ.get('DB_PORT', ''),
-        # Solo para PostgreSQL: client_encoding
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'neondb',
+        'USER': 'neondb_owner',
+        'PASSWORD': 'npg_xD5aF7juWrHc',
+        'HOST': 'ep-lucky-poetry-ap6otfso-pooler.c-7.us-east-1.aws.neon.tech',
+        'PORT': '5432',
         'OPTIONS': {
-            'client_encoding': 'UTF8',
             'sslmode': 'require',
-        } if os.environ.get('DB_ENGINE') == 'django.db.backends.postgresql' else {},
+        }
     }
 }
 
@@ -145,7 +143,14 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+if DEBUG:
+    # En desarrollo local, dejamos que Django busque el CSS automáticamente
+    STATIC_ROOT = None
+else:
+    # En producción (nube), se guardan en carpetas fijas
+    STATIC_ROOT = BASE_DIR / 'staticfiles'
+
 STATICFILES_DIRS = []
 
 # Django REST Framework config
