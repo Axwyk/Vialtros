@@ -29,18 +29,7 @@ jobs:
           GENERATE_SOURCEMAP: false
         run: npm run build
 
-      - name: Limpiar carpeta frontend
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_KEY }}
-          port: 22
-          script: |
-            mkdir -p /var/www/ds1/Vialtros/frontend
-            rm -rf /var/www/ds1/Vialtros/frontend/*
-
-      - name: Desplegar frontend al VPS
+      - name: Subir frontend a carpeta temporal
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.HOST }}
@@ -48,6 +37,25 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: 22
           source: "frontend/build/*"
-          target: "/var/www/ds1/Vialtros/frontend"
+          target: "/tmp/vialtros_frontend"
           strip_components: 2
           rm: false
+          overwrite: true
+
+      - name: Instalar frontend en VPS
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          port: 22
+          script: |
+            DEPLOY_USER=$(id -un)
+
+            sudo mkdir -p /var/www/ds1/Vialtros/frontend
+            sudo chown -R "$DEPLOY_USER:$DEPLOY_USER" /var/www/ds1/Vialtros/frontend
+            rm -rf /var/www/ds1/Vialtros/frontend/*
+            cp -rf /tmp/vialtros_frontend/. /var/www/ds1/Vialtros/frontend/
+            rm -rf /tmp/vialtros_frontend
+
+            echo "Frontend desplegado correctamente"

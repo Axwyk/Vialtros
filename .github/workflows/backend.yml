@@ -13,7 +13,7 @@ jobs:
       - name: Checkout código
         uses: actions/checkout@v4
 
-      - name: Copiar backend al VPS
+      - name: Subir backend a carpeta temporal
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.HOST }}
@@ -21,9 +21,10 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: 22
           source: "backend/*"
-          target: "/var/www/ds1/Vialtros/api"
+          target: "/tmp/vialtros_api"
           strip_components: 1
           rm: false
+          overwrite: true
 
       - name: Configurar backend Django
         uses: appleboy/ssh-action@v1.0.0
@@ -33,6 +34,14 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: 22
           script: |
+            DEPLOY_USER=$(id -un)
+
+            # Mover archivos al destino final con permisos elevados
+            sudo mkdir -p /var/www/ds1/Vialtros/api
+            sudo cp -rf /tmp/vialtros_api/. /var/www/ds1/Vialtros/api/
+            sudo chown -R "$DEPLOY_USER:$DEPLOY_USER" /var/www/ds1/Vialtros/api
+            rm -rf /tmp/vialtros_api
+
             cd /var/www/ds1/Vialtros/api
 
             # Crear entorno virtual si no existe
@@ -42,19 +51,10 @@ jobs:
 
             source .venv/bin/activate
 
-            # Actualizar pip
             pip install --upgrade pip
-
-            # Instalar dependencias
             pip install -r requirements.txt
-
-            # Aplicar migraciones
             python manage.py migrate
-
-            # Archivos estáticos
             python manage.py collectstatic --noinput
-
-            # Reiniciar Daphne
             sudo systemctl restart daphne
 
             echo "Backend desplegado correctamente"
