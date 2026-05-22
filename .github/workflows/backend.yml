@@ -58,8 +58,3 @@ jobs:
             sudo systemctl restart daphne
 
             echo "Backend desplegado correctamente"
-            echo "Reiniciando servidor Gunicorn..."
-            pkill -f gunicorn || true
-            nohup gunicorn core.wsgi:application --bind 127.0.0.1:8000 > gunicorn.log 2>&1 &
-
-            echo "Backend desplegado y corriendo en el puerto 8000 correctamente"
