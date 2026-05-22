@@ -45,11 +45,11 @@ jobs:
             cd /var/www/ds1/Vialtros/api
 
             # Crear entorno virtual si no existe
-            if [ ! -d ".venv" ]; then
-              python3 -m venv .venv
+            if [ ! -d "venv" ]; then
+              python3 -m venv venv
             fi
 
-            source .venv/bin/activate
+            source venv/bin/activate
 
             pip install --upgrade pip
             pip install -r requirements.txt
@@ -58,3 +58,8 @@ jobs:
             sudo systemctl restart daphne
 
             echo "Backend desplegado correctamente"
+            echo "Reiniciando servidor Gunicorn..."
+            pkill -f gunicorn || true
+            nohup gunicorn core.wsgi:application --bind 127.0.0.1:8000 > gunicorn.log 2>&1 &
+
+            echo "Backend desplegado y corriendo en el puerto 8000 correctamente"
