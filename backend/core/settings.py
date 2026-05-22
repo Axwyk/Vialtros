@@ -30,7 +30,7 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-dev-only-chang
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'False'
 
-ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', 'vialtros.ds1.com,www.vialtros.ds1.com,2.24.72.3,localhost,127.0.0.1,http://vialtros.ds1.eleueleo.com/,vialtros.ds1.eleueleo.com').split(',')
+ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', 'www.vialtros.ds1.eleueleo.com,vialtros.ds1.eleueleo.com').split(',')
 
 
 # Application definition
