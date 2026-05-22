@@ -1,5 +1,7 @@
 # Modelos de Datos — Vialtros
 
+> **Última actualización:** 21 de mayo de 2026
+
 Todos los modelos se encuentran en `backend/users/models.py`.
 
 ---

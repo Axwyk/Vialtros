@@ -1,5 +1,7 @@
 # Arquitectura del Sistema — Vialtros
 
+> **Última actualización:** 21 de mayo de 2026
+
 ## Visión General
 
 Vialtros es una plataforma SaaS de gestión de rutas con seguimiento en tiempo real. El sistema sigue una arquitectura cliente-servidor desacoplada:

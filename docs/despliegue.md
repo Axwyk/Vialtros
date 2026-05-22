@@ -256,6 +256,88 @@ La carga de datos de prueba ya no está automatizada con `poblar_demo`. Usa el p
 
 ---
 
+## CI/CD con GitHub Actions
+
+Se proporciona un pipeline automatizado para desplegar el backend en un servidor remoto.
+
+### Configuración de Secrets en GitHub
+
+En los settings del repositorio (`Settings > Secrets and variables > Actions`), agregar:
+
+```
+HOST              = IP o dominio del servidor
+USERNAME          = Usuario SSH para conectarse
+SSH_KEY           = Contenido de la clave privada (~/.ssh/id_rsa)
+```
+
+### Workflow: `.github/workflows/backend.yml`
+
+**Triggers:** Se ejecuta automáticamente cuando hay `push` a `master`
+
+**Pasos:**
+1. Checkout del código
+2. Copia archivos backend al servidor (SCP)
+3. Configura entorno virtual y dependencias
+4. Aplica migraciones
+5. Reinicia servicio con systemd o supervisor
+
+**Archivo backend.yml:**
+```yaml
+name: Deploy Backend - Vialtros
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy-backend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Copiar backend al servidor
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          source: "backend/*"
+          target: "/tmp/vialtros_api"
+          strip_components: 1
+
+      - name: Deploy y reiniciar
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd /var/www/vialtros/api
+            source venv/bin/activate
+            pip install -r requirements.txt
+            python manage.py migrate
+            # Reiniciar servicio (ajustar según configuración)
+            sudo systemctl restart vialtros-api
+```
+
+### Agregar frontend a CI/CD
+
+Para desplegar el frontend automáticamente, agregar un step adicional en el workflow:
+
+```yaml
+- name: Build y deploy frontend
+  run: |
+    cd frontend
+    npm install
+    npm run build
+    # Copiar build/ al servidor
+```
+
+---
+
 ## Checklist antes de producción
 
 - [ ] `DEBUG = False`

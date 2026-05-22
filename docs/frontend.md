@@ -1,5 +1,7 @@
 # Frontend — Vialtros
 
+> **Última actualización:** 21 de mayo de 2026
+
 ## Estructura general
 
 ```text

@@ -1,18 +1,15 @@
-# Vialtros
+# Vialtros — Plataforma SaaS de Gestión de Rutas 🚗
 
-Reuniones: Miercoles, Jueves y Domingo - 12:00 pm
+**Versión:** 1.0-beta | **Última actualización:** 21 de mayo de 2026
 
-link: <https://meet.google.com/yfp-zmkq-buk>
+> Plataforma moderna de gestión de rutas con seguimiento GPS en tiempo real, roles diferenciados y panel administrativo profesional.
 
-Trello: <https://trello.com/b/Uu3eBPav/vialtros>
+## Enlaces útiles
 
-## Vialtros
-
-Reuniones: Miercoles, Jueves y Domingo - 12:00 pm
-
-link: https://meet.google.com/yfp-zmkq-buk
-
-Trello: https://trello.com/b/Uu3eBPav/vialtros
+- 📍 **Repositorio:** [github.com/Axwyk/Vialtros](https://github.com/Axwyk/Vialtros)
+- 📋 **Trello:** [Vialtros board](https://trello.com/b/Uu3eBPav/vialtros)
+- 🤝 **Reuniones:** Miércoles, Jueves y Domingo — 12:00 pm
+- 📞 **Meet:** [meet.google.com/yfp-zmkq-buk](https://meet.google.com/yfp-zmkq-buk)
 
 Plataforma SaaS de gestión de rutas con seguimiento GPS en tiempo real, roles diferenciados y panel administrativo profesional.
 
@@ -25,79 +22,152 @@ Plataforma SaaS de gestión de rutas con seguimiento GPS en tiempo real, roles d
 - ✓ Interfaz moderna con Tailwind CSS y diseño split-screen
 - ✓ Iconografía SVG profesional (sin dependencias externas)
 
-## Estado actual
+## 📊 Estado actual
 
-Proyecto en desarrollo activo — **V1 con funcionalidades core completadas**. Ver [`estado_proyecto.txt`](estado_proyecto.txt) para detalles de implementado vs pendiente.
+**V1 con funcionalidades core completadas.** El proyecto incluye:
+- ✅ Autenticación JWT con roles (Admin, Driver, User)
+- ✅ Backend con API REST y WebSockets en tiempo real
+- ✅ Frontend SaaS moderno con React 19 y Tailwind CSS
+- ✅ Panel administrativo completo (CRUD de usuarios, conductores, rutas)
+- ✅ CI/CD Pipeline (GitHub Actions + Deploy automático)
+- 🔄 Sistema de notificaciones (en desarrollo)
+- 🔄 Mejoras en mapas y tracking (en progreso)
 
-## Inicio rápido
+Ver [**estado_proyecto.txt**](estado_proyecto.txt) para detalles completos de funcionalidades implementadas, pendientes y bugs resueltos.
 
-En Windows, usa el script único de arranque:
+## 🚀 Inicio rápido
 
-```bat
-run_vialtros.bat
+### Windows (recomendado)
+
+Desde la raíz del proyecto, ejecuta el script de arranque:
+
+```powershell
+.\run_vialtros.bat
 ```
 
-Esto abre el backend en `http://localhost:8000` y el frontend en `http://localhost:3000`.
-
-### Repositorio Git
-
-- <https://github.com/Axwyk/Vialtros>
+Esto inicia automáticamente:
+- **Backend:** http://localhost:8000
+- **Frontend:** http://localhost:3000
 
 ### Credenciales de acceso
 
-- Usuario: `admin`
-- Contraseña: `admin123`
+```
+Usuario: admin
+Contraseña: admin123
+```
+
+### Instalación manual (desarrollo)
+
+Ver [**docs/despliegue.md**](docs/despliegue.md) para instalación paso a paso.
 
 
-## Stack Tecnológico
 
-| Componente | Tecnología |
+
+## 🛠️ Stack Tecnológico
+
+| Capa | Tecnología |
 | --- | --- |
-| **Backend** | Django 4+ · Django REST Framework · Channels · SimpleJWT |
-| **Frontend** | React 19 · Tailwind CSS · React Router v7 · Leaflet |
-| **BD** | SQLite (dev) / PostgreSQL (producción) |
-| **WebSockets** | Daphne + Django Channels |
-| **Autenticación** | JWT con refresh token · Permisos por rol |
+| **Backend** | Django 4+ · Django REST Framework · Channels · daphne |
+| **Frontend** | React 19 · Tailwind CSS · React Router v7 · Lucide Icons |
+| **Base de Datos** | SQLite (desarrollo) / PostgreSQL (producción) |
+| **Real-time** | Django Channels + Redis (opcional) |
+| **Autenticación** | SimpleJWT · Permisos por rol |
+| **DevOps** | GitHub Actions · SSH Deploy |
 
-## Roles y Permisos
+## 👥 Roles y Permisos
 
-| Rol | Permisos |
-| --- | --- |
-| **Admin** | CRUD usuarios/conductores/rutas, acceso panel administrativo |
-| **Driver** | Ve sus rutas asignadas, marca estado de pasajeros |
-| **User** | Visualiza ubicación en tiempo real del vehículo |
+| Rol | Permisos | Acceso |
+| --- | --- | --- |
+| **Admin** | CRUD completo (usuarios/conductores/rutas) | `/admin/*` |
+| **Driver** | Ver rutas asignadas, marcar pasajeros recogidos | `/driver/routes` |
+| **User** (Pasajero) | Visualizar ubicación en tiempo real | `/user/route` |
 
-## Estructura del Proyecto
+## 📁 Estructura del Proyecto
 
 ```text
 Vialtros/
 ├── backend/
-│   ├── core/              # Configuración Django (settings, urls, asgi)
-│   ├── users/             # Modelos User/Driver/Passenger, serializers, viewsets
-│   ├── routes/            # Modelo Route y endpoints
-│   ├── tracking/          # WebSocket consumer, Tracking model
+│   ├── core/              # Configuración (settings, urls, asgi, cors)
+│   ├── users/             # Modelos, serializers, viewsets
+│   ├── routes/            # Rutas, modelos, endpoints
+│   ├── tracking/          # Consumers WebSocket, modelo Tracking
+│   ├── .venv/             # Entorno virtual Python
+│   ├── db.sqlite3         # Base de datos (desarrollo)
 │   ├── manage.py
-│   └── requirements.txt
+│   ├── requirements.txt   # Dependencias Python
+│   └── start_backend.bat  # Script arranque backend
+│
 ├── frontend/
-│   ├── public/            # index.html + favicon.svg
+│   ├── public/            # HTML estático, favicon
+│   ├── build/             # Output compilado (React build)
 │   ├── src/
 │   │   ├── pages/         # LoginPage, DashboardPage, AdminPages
-│   │   ├── components/    # Logo, Modal, MapView, Sidebar, etc.
+│   │   ├── components/    # Logo, Modal, Navbar, Sidebar, etc.
 │   │   └── services/      # api.js, auth.js, admin.js, ws.js
-│   ├── package.json
-│   └── tailwind.config.js
-├── docs/                  # Documentación técnica
-├── estado_proyecto.txt    # Funcionalidades listas y pendientes
-└── README.md
+│   ├── node_modules/      # Dependencias npm
+│   ├── package.json       # Dependencias JavaScript
+│   └── tailwind.config.js # Config Tailwind CSS
+│
+├── .github/
+│   └── workflows/         # CI/CD (GitHub Actions)
+│       └── backend.yml    # Deploy automático backend
+│
+├── docs/                  # 📖 Documentación técnica
+│   ├── README.md          # Índice de documentación
+│   ├── arquitectura.md    # Stack, diagrama, seguridad
+│   ├── modelos.md         # BD, serializers, permisos
+│   ├── api.md             # Referencia de endpoints
+│   ├── frontend.md        # Páginas, componentes, env
+│   └── despliegue.md      # Instalación, producción, CI/CD
+│
+├── estado_proyecto.txt    # ✅ Checklist de features
+├── README.md              # Este archivo
+├── package.json           # Dependencias proyecto (npm)
+└── run_vialtros.bat       # 🚀 Script arranque rápido
 ```
 
-## Instalación y Despliegue
+## 📦 Requisitos
 
-### Requisitos
+- **Python** 3.10+ (backend)
+- **Node.js** 18+ (frontend)
+- **PostgreSQL** (recomendado para producción)
+- **Git** (para clonar repositorio)
 
-- Python 3.10+
-- Node.js 18+
-- PostgreSQL (recomendado para producción)
+## 📖 Documentación
+
+Para guías detalladas, consulta la carpeta [**docs/**](docs/):
+
+- [**arquitectura.md**](docs/arquitectura.md) — Stack, diagrama del sistema, flujo de autenticación
+- [**modelos.md**](docs/modelos.md) — Modelos de BD, serializers, permisos
+- [**api.md**](docs/api.md) — Referencia completa de endpoints (REST y WebSocket)
+- [**frontend.md**](docs/frontend.md) — Páginas, componentes, variables de entorno
+- [**despliegue.md**](docs/despliegue.md) — Instalación, configuración de desarrollo/producción, CI/CD
+
+## 🔐 Seguridad
+
+- ✅ Autenticación JWT con refresh token
+- ✅ CORS configurado
+- ✅ Validación de permisos por rol en backend
+- ✅ Passwords hasheados (bcrypt via Django)
+- ⚠️ **Producción:** Cambiar `SECRET_KEY`, activar HTTPS, usar PostgreSQL
+
+## 🐛 Reportar Bugs
+
+En [estado_proyecto.txt](estado_proyecto.txt) encontrarás el histórico de bugs resueltos.
+
+Para reportar nuevos issues, crea un [issue en GitHub](https://github.com/Axwyk/Vialtros/issues).
+
+## 📝 Licencia
+
+Proyecto privado — contacta al equipo para más información.
+
+## 👨‍💻 Equipo
+
+Equipo de desarrollo de Vialtros. Reuniones: Miércoles, Jueves y Domingo a las 12:00 pm.
+
+---
+
+**¿Necesitas ayuda?** Ver [docs/despliegue.md](docs/despliegue.md) o contacta al equipo en Slack.
 
 ### Backend (desarrollo)
 
