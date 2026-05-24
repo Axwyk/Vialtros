@@ -88,8 +88,7 @@ Ver [**docs/despliegue.md**](docs/despliegue.md) para instalación paso a paso.
 Vialtros/
 ├── backend/
 │   ├── core/              # Configuración (settings, urls, asgi, cors)
-│   ├── users/             # Modelos, serializers, viewsets
-│   ├── routes/            # Rutas, modelos, endpoints
+│   ├── users/             # Modelos, serializers, viewsets (incluye rutas)
 │   ├── tracking/          # Consumers WebSocket, modelo Tracking
 │   ├── .venv/             # Entorno virtual Python
 │   ├── db.sqlite3         # Base de datos (desarrollo)
@@ -97,7 +96,7 @@ Vialtros/
 │   ├── requirements.txt   # Dependencias Python
 │   └── start_backend.bat  # Script arranque backend
 │
-├── frontend/
+├── frontend/ (Limpio de archivos de Django huérfanos)
 │   ├── public/            # HTML estático, favicon
 │   ├── build/             # Output compilado (React build)
 │   ├── src/
@@ -173,9 +172,9 @@ Equipo de desarrollo de Vialtros. Reuniones: Miércoles, Jueves y Domingo a las 
 
 ```bash
 cd backend
-python -m venv venv
+python -m venv .venv
 .\.venv\Scripts\activate         # Windows
-# source venv/bin/activate      # Linux/Mac
+# source .venv/bin/activate      # Linux/Mac
 
 pip install -r requirements.txt
 python manage.py migrate

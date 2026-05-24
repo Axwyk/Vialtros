@@ -161,7 +161,4 @@ Guía Rápida: De tu Rama a la rama principal
 
 5. Subir al repositorio remoto
     Envías el resultado de la fusión a la nube (GitHub/GitLab):
-    git push origin master
-
-6. Hola
-7.asda
+    git push origin master

@@ -29,13 +29,13 @@ cd Vialtros
 
 ```bash
 cd backend
-python -m venv venv
+python -m venv .venv
 
 # Windows
-.\venv\Scripts\activate
+.\.venv\Scripts\activate
 
 # Linux / macOS
-source venv/bin/activate
+source .venv/bin/activate
 
 pip install -r requirements.txt
 ```
@@ -117,11 +117,12 @@ SECRET_KEY=<clave-secreta-larga-y-aleatoria>
 DEBUG=False
 ALLOWED_HOSTS=api.vialtros.com,www.vialtros.com
 
-# PostgreSQL
-DB_NAME=vialtros_db
-DB_USER=vialtros_user
+# PostgreSQL / Neon
+DB_ENGINE=django.db.backends.postgresql
+DB_NAME=neondb
+DB_USER=neondb_owner
 DB_PASSWORD=<password>
-DB_HOST=localhost
+DB_HOST=ep-lucky-poetry-ap6otfso-pooler.c-7.us-east-1.aws.neon.tech
 DB_PORT=5432
 
 # Redis (para Django Channels)
@@ -137,17 +138,31 @@ DEBUG = False
 # ALLOWED_HOSTS desde variable de entorno
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',')
 
-# Base de datos PostgreSQL
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('DB_NAME'),
-        'USER': os.environ.get('DB_USER'),
-        'PASSWORD': os.environ.get('DB_PASSWORD'),
-        'HOST': os.environ.get('DB_HOST', 'localhost'),
-        'PORT': os.environ.get('DB_PORT', '5432'),
+# Base de datos (Neon / SQLite fallback)
+DB_ENGINE = os.environ.get('DB_ENGINE', '').strip()
+DB_HOST = os.environ.get('DB_HOST', '').strip()
+
+if DB_ENGINE == 'django.db.backends.postgresql' or DB_HOST:
+    DATABASES = {
+        'default': {
+            'ENGINE': os.environ.get('DB_ENGINE', 'django.db.backends.postgresql'),
+            'NAME': os.environ.get('DB_NAME', 'neondb'),
+            'USER': os.environ.get('DB_USER'),
+            'PASSWORD': os.environ.get('DB_PASSWORD'),
+            'HOST': os.environ.get('DB_HOST'),
+            'PORT': os.environ.get('DB_PORT', '5432'),
+            'OPTIONS': {
+                'sslmode': 'require',
+            }
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 # CORS — solo orígenes de producción
 CORS_ALLOWED_ORIGINS = [
@@ -316,7 +331,7 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           script: |
             cd /var/www/vialtros/api
-            source venv/bin/activate
+            source .venv/bin/activate
             pip install -r requirements.txt
             python manage.py migrate
             # Reiniciar servicio (ajustar según configuración)
@@ -350,4 +365,3 @@ Para desplegar el frontend automáticamente, agregar un step adicional en el wor
 - [ ] Variables de entorno del frontend apuntan a URLs de producción (`https://` y `wss://`)
 - [ ] `npm run build` ejecutado para generar los estáticos
 - [ ] Archivos estáticos Django recolectados: `python manage.py collectstatic`
-

@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 import os
 from pathlib import Path
+# pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -28,7 +29,7 @@ load_dotenv(BASE_DIR / '.env')
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-dev-only-change-in-production')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'False'
+DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', 'www.vialtros.ds1.eleueleo.com,vialtros.ds1.eleueleo.com').split(',')
 
@@ -46,7 +47,6 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     # Apps del proyecto
     'users.apps.UsersConfig',
-    'routes.apps.RoutesConfig',
     'tracking.apps.TrackingConfig',
     # Terceros
     'rest_framework',
@@ -92,19 +92,30 @@ ASGI_APPLICATION = 'core.asgi.application'
 # Usa PostgreSQL si tienes variables de entorno DB_ENGINE=django.db.backends.postgresql, DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT
 # Usa SQLite por defecto si no hay variables de entorno (útil para desarrollo local)
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'neondb',
-        'USER': 'neondb_owner',
-        'PASSWORD': 'npg_xD5aF7juWrHc',
-        'HOST': 'ep-lucky-poetry-ap6otfso-pooler.c-7.us-east-1.aws.neon.tech',
-        'PORT': '5432',
-        'OPTIONS': {
-            'sslmode': 'require',
+DB_ENGINE = os.environ.get('DB_ENGINE', '').strip()
+DB_HOST = os.environ.get('DB_HOST', '').strip()
+
+if DB_ENGINE == 'django.db.backends.postgresql' or DB_HOST:
+    DATABASES = {
+        'default': {
+            'ENGINE': os.environ.get('DB_ENGINE', 'django.db.backends.postgresql'),
+            'NAME': os.environ.get('DB_NAME', 'neondb'),
+            'USER': os.environ.get('DB_USER', ''),
+            'PASSWORD': os.environ.get('DB_PASSWORD', ''),
+            'HOST': os.environ.get('DB_HOST', ''),
+            'PORT': os.environ.get('DB_PORT', '5432'),
+            'OPTIONS': {
+                'sslmode': 'require',
+            }
         }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 # Password validation

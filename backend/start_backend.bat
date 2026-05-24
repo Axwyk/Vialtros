@@ -3,8 +3,14 @@ setlocal enabledelayedexpansion
 
 cd /d "%~dp0"
 
-set "VENV_ACTIVATE=%~dp0venv\Scripts\activate.bat"
-set "VENV_PYTHON=%~dp0venv\Scripts\python.exe"
+set "VENV_ACTIVATE=%~dp0.venv\Scripts\activate.bat"
+set "VENV_PYTHON=%~dp0.venv\Scripts\python.exe"
+
+if not exist "%VENV_ACTIVATE%" (
+  set "VENV_ACTIVATE=%~dp0venv\Scripts\activate.bat"
+  set "VENV_PYTHON=%~dp0venv\Scripts\python.exe"
+)
+
 set "BACKEND_PORT=8000"
 
 call :ensure_port_available %BACKEND_PORT%
