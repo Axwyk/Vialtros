@@ -77,13 +77,15 @@ jobs:
 
           echo "Starting deployment..."
 
-          # Clonar repo si no existe
-          if [ ! -d "$APP_DIR/.git" ]; then
-            echo "Cloning repository..."
-            git clone https://github.com/TU_USUARIO/TU_REPO.git $APP_DIR
-          fi
+          mkdir -p $APP_DIR
 
-          cd $APP_DIR
+          cd $APP_DIR || exit 1
+
+          # Clonar repo si no existe
+          if [ ! -d ".git" ]; then
+            echo "Cloning repository..."
+            git clone https://github.com/Axwyk/Vialtros .
+          fi
 
           echo "Pulling latest changes..."
           git reset --hard
@@ -94,7 +96,7 @@ jobs:
 
           # FRONTEND
           echo "Installing frontend dependencies..."
-          cd frontend
+          cd frontend || exit 1
 
           npm ci
           npm run build
@@ -107,7 +109,7 @@ jobs:
 
           # BACKEND
           echo "Installing backend dependencies..."
-          cd ../api
+          cd ../api || exit 1
 
           source venv/bin/activate
 
