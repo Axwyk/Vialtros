@@ -117,46 +117,8 @@ function getGreeting() {
   return "Buenas noches";
 }
 
-// Función comentada: no se utiliza actualmente
-// function formatDate() {
-//   return new Date().toLocaleDateString("es-ES", {
-//     weekday: "long",
-//     year: "numeric",
-//     month: "long",
-//     day: "numeric",
-//   });
-// }
+// Funciones eliminadas: formatDate, getInitials, getPassengerStatusConfig no se utilizan actualmente
 
-// function getInitials(name) {
-//   if (!name) return "ST";
-//   return name
-//     .split(" ")
-//     .filter(Boolean)
-//     .slice(0, 2)
-//     .map((part) => part[0]?.toUpperCase())
-    .join("");
-}
-
-// Función comentada: no se utiliza actualmente
-// function getPassengerStatusConfig(status) {
-//   const statusMap = {
-    picked: {
-      label: "Recogido",
-      className: "bg-blue-600 text-white border border-blue-600",
-    },
-    not_picked: {
-      label: "Pendiente",
-      className: "bg-blue-50 text-blue-700 border border-blue-200",
-    },
-  };
-
-  return (
-    statusMap[status] || {
-      label: "Sin estado",
-      className: "bg-white text-slate-600 border border-blue-100",
-    }
-  );
-}
 
 function getRoleBadgeConfig(role) {
   return (
@@ -305,6 +267,7 @@ export default function DashboardPage({ role, onLogout }) {
   const [loading, setLoading] = useState(true);
   const [driverRoutes, setDriverRoutes] = useState([]);
   const [driverRoutesLoading, setDriverRoutesLoading] = useState(false);
+  const [driverTrackings, setDriverTrackings] = useState([]);
   const [weeklyActivity, setWeeklyActivity] = useState(EMPTY_WEEKLY_ACTIVITY);
   const [recentActivity, setRecentActivity] = useState([]);
   const [recentActivityLoading, setRecentActivityLoading] = useState(true);

@@ -607,7 +607,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   useEffect(() => {
     if (currentRole !== "driver") return undefined;
     let cancelled = false;
-    setLoadingRoutes(true);
+    // setLoadingRoutes(true); // loadingRoutes fue eliminado
     getDriverAssignedRoutes()
       .then((routes) => {
         if (!cancelled) setDriverRoutes(Array.isArray(routes) ? routes : []);
@@ -1522,12 +1522,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     () => polylineDistanceKm(displayPlannedRoutePolyline),
     [displayPlannedRoutePolyline],
   );
-  const traveledDistanceKm = useMemo(
-    () => polylineDistanceKm(displayTraveledRoutePolyline),
-    [displayTraveledRoutePolyline],
-  );
-  // traveledDistanceKm no se utiliza actualmente
-  void traveledDistanceKm;
+  // Eliminado: traveledDistanceKm no se utiliza actualmente
   const remainingDistanceKm = useMemo(() => {
     if (
       !Array.isArray(displayPlannedRoutePolyline) ||

@@ -176,48 +176,11 @@ function buildInstructionText(step) {
     "straight": "Continúa recto",
     "uturn": "Da un giro en U",
   };
+
   if (step?.type === "arrive") return "Llegaste al destino";
   return dirMap[(step?.modifier || "").toLowerCase()] || "Continúa recto";
 }
 
-// Función comentada: no se utiliza actualmente
-// function getSmallArrowSvg(modifier, type) {
-//   if (type === "arrive") {
-//     return (
-//       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: 14, height: 14 }}>
-//         <circle cx="12" cy="12" r="6" fill="#94a3b8" />
-//       </svg>
-//     );
-  }
-  const mod = (modifier || "straight").toLowerCase();
-  if (mod === "left" || mod === "sharp left" || mod === "slight left") {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: 14, height: 14 }}>
-        <path d="M3 12L10 6v4h11v4H10v4z" fill="#94a3b8" />
-      </svg>
-    );
-  }
-  if (mod === "right" || mod === "sharp right" || mod === "slight right") {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: 14, height: 14 }}>
-        <path d="M21 12L14 6v4H3v4h11v4z" fill="#94a3b8" />
-      </svg>
-    );
-  }
-  if (mod === "uturn") {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: 14, height: 14 }}>
-        <path d="M4 15l4-4-4-4" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round"/>
-        <path d="M8 11h8a4 4 0 0 0 0-8H8" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round"/>
-      </svg>
-    );
-  }
-  return (
-    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: 14, height: 14 }}>
-      <path d="M12 3L6 11h4v10h4V11h4z" fill="#94a3b8" />
-    </svg>
-  );
-}
 
 function projectPointOnSegment(point, start, end) {
   const startX = start[1];
@@ -1004,12 +967,7 @@ out center;`;
   );
 
   useEffect(() => {
-    const tick = () => {
-      const now = new Date();
-      setCurrentTime(now.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" }));
-    };
-    const interval = setInterval(tick, 30000);
-    return () => clearInterval(interval);
+    // Eliminado: currentTime no se utiliza
   }, []);
 
   return (
@@ -1612,5 +1570,3 @@ out center;`;
     </div>
   );
 }
-
-
