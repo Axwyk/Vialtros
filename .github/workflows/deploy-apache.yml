@@ -49,9 +49,9 @@ jobs:
     - name: Prepare backend files
       run: |
         cd backend
-        mkdir -p /tmp/vialtros-deploy/backend
-        cp -r . /tmp/vialtros-deploy/backend/
-        cd /tmp/vialtros-deploy/backend
+        mkdir -p /tmp/vialtros/api
+        cp -r . /tmp/vialtros/api/
+        cd /tmp/vialtros/api
         python manage.py collectstatic --noinput
       env:
         DB_ENGINE: ${{ secrets.DB_ENGINE }}
