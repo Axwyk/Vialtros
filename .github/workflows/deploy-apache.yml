@@ -1,0 +1,125 @@
+name: Deploy to Apache (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+
+    - name: Install Python dependencies
+      run: |
+        cd backend
+        pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Install frontend dependencies
+      run: |
+        cd frontend
+        npm ci
+
+    - name: Build frontend
+      run: |
+        cd frontend
+        npm run build
+
+    - name: Prepare backend files
+      run: |
+        cd backend
+        mkdir -p /tmp/vialtros-deploy/backend
+        cp -r . /tmp/vialtros-deploy/backend/
+        cd /tmp/vialtros-deploy/backend
+        python manage.py collectstatic --noinput
+      env:
+        DB_ENGINE: ${{ secrets.DB_ENGINE }}
+        DB_NAME: ${{ secrets.DB_NAME }}
+        DB_USER: ${{ secrets.DB_USER }}
+        DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        DB_HOST: ${{ secrets.DB_HOST }}
+        DB_PORT: ${{ secrets.DB_PORT }}
+        DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+        DJANGO_DEBUG: 'False'
+        DJANGO_ALLOWED_HOSTS: ${{ secrets.DJANGO_ALLOWED_HOSTS }}
+
+    - name: Deploy via SSH
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        port: ${{ secrets.SERVER_SSH_PORT || '22' }}
+        script: |
+          # Variables
+          APP_DIR="/var/www/ds1/Vialtros"
+          BACKEND_DIR="$APP_DIR/api"
+          FRONTEND_DIR="$APP_DIR/frontend"
+          BACKUP_DIR="/var/www/ds1/backups"
+          
+          # Crear backup
+          echo "Creating backup..."
+          mkdir -p $BACKUP_DIR
+          BACKUP_TIME=$(date +%Y%m%d_%H%M%S)
+          sudo cp -r $APP_DIR $BACKUP_DIR/vialtros_$BACKUP_TIME || true
+          
+          # Git pull
+          echo "Pulling latest code..."
+          cd $APP_DIR
+          sudo git pull origin master
+          
+          # Crear estructura de carpetas si no existe
+          echo "Creating directory structure..."
+          sudo mkdir -p $BACKEND_DIR
+          sudo mkdir -p $FRONTEND_DIR
+          
+          # Backend
+          echo "Installing backend dependencies..."
+          cd $BACKEND_DIR
+          sudo pip install -r requirements.txt
+          
+          # Migrations
+          echo "Running migrations..."
+          sudo python manage.py migrate
+          
+          # Create admin if not exists
+          echo "Ensuring admin user exists..."
+          sudo python manage.py create_admin || true
+          
+          # Collect static
+          echo "Collecting static files..."
+          sudo python manage.py collectstatic --noinput
+          
+          # Frontend
+          echo "Building frontend..."
+          cd $FRONTEND_DIR
+          sudo npm ci
+          sudo npm run build
+          
+          # Reiniciar Django + Apache
+          echo "Restarting services..."
+          sudo systemctl restart vialtros-django
+          sudo systemctl restart apache2
+          
+          echo "Deployment completed successfully!"

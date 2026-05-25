@@ -1,0 +1,39 @@
+[Unit]
+Description=Vialtros Django Application (Gunicorn)
+After=network.target
+Documentation=file:///home/user/vialtros/GUIA_DESPLIEGUE_APACHE.txt
+
+[Service]
+Type=notify
+User=user
+Group=user
+WorkingDirectory=/home/user/vialtros/backend
+Environment="PATH=/home/user/vialtros/backend/venv/bin"
+
+# Comando para ejecutar Gunicorn
+ExecStart=/home/user/vialtros/backend/venv/bin/gunicorn \
+    --config gunicorn_config.py \
+    --access-logfile - \
+    --error-logfile - \
+    --capture-output \
+    core.wsgi:application
+
+# Reiniciar si falla
+Restart=always
+RestartSec=10
+
+# Timeouts
+StartLimitBurst=5
+StartLimitInterval=60s
+
+# Seguridad
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Logs
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vialtros-django
+
+[Install]
+WantedBy=multi-user.target
