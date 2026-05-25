@@ -2195,6 +2195,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     vehiclePosition,
     destinationCoords,
     guidedRouteRunning,
+    navigate,
   ]);
 
   // Transmisión en vivo (conductor) se controla con `sharingWatchIdRef` y `stopSharing`.

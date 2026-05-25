@@ -266,7 +266,6 @@ export default function DashboardPage({ role, onLogout }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [driverRoutes, setDriverRoutes] = useState([]);
-  const [driverRoutesLoading, setDriverRoutesLoading] = useState(false);
   const [driverTrackings, setDriverTrackings] = useState([]);
   const [weeklyActivity, setWeeklyActivity] = useState(EMPTY_WEEKLY_ACTIVITY);
   const [recentActivity, setRecentActivity] = useState([]);
@@ -334,11 +333,10 @@ export default function DashboardPage({ role, onLogout }) {
   useEffect(() => {
     if (role !== "driver") return;
 
-    setDriverRoutesLoading(true);
     getDriverAssignedRoutes()
       .then(setDriverRoutes)
       .catch(() => setDriverRoutes([]))
-      .finally(() => setDriverRoutesLoading(false));
+      .finally(() => {}); // Removed driverRoutesLoading
   }, [role]);
 
   useEffect(() => {
@@ -393,7 +391,7 @@ export default function DashboardPage({ role, onLogout }) {
   // roleBadge se comenta ya que no se utiliza en el componente
   void roleBadge;
   
-  const { quickActions, headlineStats, metricCards, summaryConfig } = useMemo(
+  const { metricCards } = useMemo(
     () =>
       buildDashboardContent({
         role,
