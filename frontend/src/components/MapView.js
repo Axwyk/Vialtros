@@ -29,7 +29,6 @@ const GOOGLE_MAPS_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "";
 const BUENAVENTURA_CENTER = [3.89243, -77.02824];
 const BUENAVENTURA_BOUNDS = { south: 3.84, west: -77.09, north: 3.93, east: -76.99 };
 const CORPORATE_ROUTE_COLOR = "#2563EB";
-const CORPORATE_ROUTE_HALO = "#FFFFFF";
 
 const GOOGLE_MAPS_STYLES = [];
 
@@ -181,13 +180,14 @@ function buildInstructionText(step) {
   return dirMap[(step?.modifier || "").toLowerCase()] || "Continúa recto";
 }
 
-function getSmallArrowSvg(modifier, type) {
-  if (type === "arrive") {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: 14, height: 14 }}>
-        <circle cx="12" cy="12" r="6" fill="#94a3b8" />
-      </svg>
-    );
+// Función comentada: no se utiliza actualmente
+// function getSmallArrowSvg(modifier, type) {
+//   if (type === "arrive") {
+//     return (
+//       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: 14, height: 14 }}>
+//         <circle cx="12" cy="12" r="6" fill="#94a3b8" />
+//       </svg>
+//     );
   }
   const mod = (modifier || "straight").toLowerCase();
   if (mod === "left" || mod === "sharp left" || mod === "slight left") {
@@ -420,10 +420,6 @@ export default function MapView({
   const [displayPois, setDisplayPois] = useState(Array.isArray(pois) ? pois : []);
   const [animatedVehiclePoint, setAnimatedVehiclePoint] = useState(null);
   const [mapRef, setMapRef] = useState(null);
-  const [currentTime, setCurrentTime] = useState(() => {
-    const now = new Date();
-    return now.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" });
-  });
   const [gpsMuted, setGpsMuted] = useState(false);
   const [gpsMenuOpen, setGpsMenuOpen] = useState(false);
   const [gpsNightMode, setGpsNightMode] = useState(false);

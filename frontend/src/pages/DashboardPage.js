@@ -3,7 +3,6 @@ import Sidebar from "../components/dashboard/Sidebar";
 import StatCard from "../components/dashboard/StatCard";
 import HeroCard from "../components/dashboard/HeroCard";
 import ActivityFeed from "../components/dashboard/ActivityFeed";
-import { Link } from "react-router-dom";
 import {
   getDashboardStats,
   getDriverAssignedRoutes,
@@ -118,27 +117,29 @@ function getGreeting() {
   return "Buenas noches";
 }
 
-function formatDate() {
-  return new Date().toLocaleDateString("es-ES", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-}
+// Función comentada: no se utiliza actualmente
+// function formatDate() {
+//   return new Date().toLocaleDateString("es-ES", {
+//     weekday: "long",
+//     year: "numeric",
+//     month: "long",
+//     day: "numeric",
+//   });
+// }
 
-function getInitials(name) {
-  if (!name) return "ST";
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
+// function getInitials(name) {
+//   if (!name) return "ST";
+//   return name
+//     .split(" ")
+//     .filter(Boolean)
+//     .slice(0, 2)
+//     .map((part) => part[0]?.toUpperCase())
     .join("");
 }
 
-function getPassengerStatusConfig(status) {
-  const statusMap = {
+// Función comentada: no se utiliza actualmente
+// function getPassengerStatusConfig(status) {
+//   const statusMap = {
     picked: {
       label: "Recogido",
       className: "bg-blue-600 text-white border border-blue-600",
@@ -304,7 +305,6 @@ export default function DashboardPage({ role, onLogout }) {
   const [loading, setLoading] = useState(true);
   const [driverRoutes, setDriverRoutes] = useState([]);
   const [driverRoutesLoading, setDriverRoutesLoading] = useState(false);
-  const [driverTrackings, setDriverTrackings] = useState([]);
   const [weeklyActivity, setWeeklyActivity] = useState(EMPTY_WEEKLY_ACTIVITY);
   const [recentActivity, setRecentActivity] = useState([]);
   const [recentActivityLoading, setRecentActivityLoading] = useState(true);
@@ -411,6 +411,8 @@ export default function DashboardPage({ role, onLogout }) {
     },
     [refreshDriverTrackingData, refreshRecentActivity, refreshWeeklyActivity],
   );
+  // handleUpdateStatus se comenta ya que no se utiliza en el componente
+  void handleUpdateStatus;
 
   const totalAssignedStudents = driverRoutes.reduce(
     (total, route) =>
@@ -425,6 +427,9 @@ export default function DashboardPage({ role, onLogout }) {
     1,
   );
   const roleBadge = getRoleBadgeConfig(role);
+  // roleBadge se comenta ya que no se utiliza en el componente
+  void roleBadge;
+  
   const { quickActions, headlineStats, metricCards, summaryConfig } = useMemo(
     () =>
       buildDashboardContent({

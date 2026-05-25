@@ -419,7 +419,6 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const currentRole = localStorage.getItem("role") || "user";
   const isAdminView = currentRole === "admin";
   const [driverRoutes, setDriverRoutes] = useState([]);
-  const [loadingRoutes, setLoadingRoutes] = useState(false);
   const [sharing, setSharing] = useState(false);
   const sharingWatchIdRef = useRef(null);
 
@@ -617,7 +616,10 @@ export default function TrackingPage({ routeId: routeIdProp }) {
         if (!cancelled) setDriverRoutes([]);
       })
       .finally(() => {
-        if (!cancelled) setLoadingRoutes(false);
+        if (!cancelled) {
+          // setLoadingRoutes se comenta ya que loadingRoutes fue eliminado
+          // setLoadingRoutes(false);
+        }
       });
 
     return () => {
@@ -1398,7 +1400,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       cancelled = true;
       clearTimeout(timerId);
     };
-  }, [guidedRouteDisplayPath, , liveRouteHistory]);
+  }, [guidedRouteDisplayPath, liveRouteHistory]);
 
   const statusBadge = useMemo(() => {
     const badges = {
@@ -1524,6 +1526,8 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     () => polylineDistanceKm(displayTraveledRoutePolyline),
     [displayTraveledRoutePolyline],
   );
+  // traveledDistanceKm no se utiliza actualmente
+  void traveledDistanceKm;
   const remainingDistanceKm = useMemo(() => {
     if (
       !Array.isArray(displayPlannedRoutePolyline) ||
