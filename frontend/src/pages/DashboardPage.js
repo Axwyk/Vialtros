@@ -6,7 +6,6 @@ import ActivityFeed from "../components/dashboard/ActivityFeed";
 import {
   getDashboardStats,
   getDriverAssignedRoutes,
-  getDriverTrackings,
   getRecentActivity,
   getWeeklyActivity,
 } from "../services/dashboard";
