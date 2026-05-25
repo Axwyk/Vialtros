@@ -70,56 +70,57 @@ jobs:
         host: ${{ secrets.SERVER_HOST }}
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SERVER_SSH_KEY }}
-        port: ${{ secrets.SERVER_SSH_PORT || '22' }}
+        port: ${{ secrets.SERVER_SSH_PORT }}
         script: |
-          # Variables
+
           APP_DIR="/var/www/ds1/Vialtros"
-          BACKEND_DIR="$APP_DIR/api"
-          FRONTEND_DIR="$APP_DIR/frontend"
-          BACKUP_DIR="/var/www/ds1/backups"
-          
-          # Crear backup
-          echo "Creating backup..."
-          mkdir -p $BACKUP_DIR
-          BACKUP_TIME=$(date +%Y%m%d_%H%M%S)
-          sudo cp -r $APP_DIR $BACKUP_DIR/vialtros_$BACKUP_TIME || true
-          
-          # Git pull
-          echo "Pulling latest code..."
+
+          echo "Starting deployment..."
+
+          # Clonar repo si no existe
+          if [ ! -d "$APP_DIR/.git" ]; then
+            echo "Cloning repository..."
+            git clone https://github.com/TU_USUARIO/TU_REPO.git $APP_DIR
+          fi
+
           cd $APP_DIR
-          sudo git pull origin master
-          
-          # Crear estructura de carpetas si no existe
-          echo "Creating directory structure..."
-          sudo mkdir -p $BACKEND_DIR
-          sudo mkdir -p $FRONTEND_DIR
-          
-          # Backend
+
+          echo "Pulling latest changes..."
+          git reset --hard
+          git pull origin master
+
+          echo "Checking frontend structure..."
+          ls -la frontend
+
+          # FRONTEND
+          echo "Installing frontend dependencies..."
+          cd frontend
+
+          npm ci
+          npm run build
+
+          # Verificar build
+          if [ ! -d "build" ]; then
+            echo "Frontend build failed!"
+            exit 1
+          fi
+
+          # BACKEND
           echo "Installing backend dependencies..."
-          cd $BACKEND_DIR
-          sudo pip install -r requirements.txt
-          
-          # Migrations
+          cd ../api
+
+          source venv/bin/activate
+
+          pip install -r requirements.txt
+
           echo "Running migrations..."
-          sudo python manage.py migrate
-          
-          # Create admin if not exists
-          echo "Ensuring admin user exists..."
-          sudo python manage.py create_admin || true
-          
-          # Collect static
+          python manage.py migrate
+
           echo "Collecting static files..."
-          sudo python manage.py collectstatic --noinput
-          
-          # Frontend
-          echo "Building frontend..."
-          cd $FRONTEND_DIR
-          sudo npm ci
-          sudo npm run build
-          
-          # Reiniciar Django + Apache
+          python manage.py collectstatic --noinput
+
           echo "Restarting services..."
           sudo systemctl restart vialtros-django
           sudo systemctl restart apache2
-          
-          echo "Deployment completed successfully!"
+
+          echo "Deployment completed!"
