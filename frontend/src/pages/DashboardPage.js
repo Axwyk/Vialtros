@@ -266,7 +266,6 @@ export default function DashboardPage({ role, onLogout }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [driverRoutes, setDriverRoutes] = useState([]);
-  const [driverTrackings, setDriverTrackings] = useState([]);
   const [weeklyActivity, setWeeklyActivity] = useState(EMPTY_WEEKLY_ACTIVITY);
   const [recentActivity, setRecentActivity] = useState([]);
   const [recentActivityLoading, setRecentActivityLoading] = useState(true);
@@ -311,16 +310,6 @@ export default function DashboardPage({ role, onLogout }) {
     }
   }, []);
 
-  const refreshDriverTrackingData = useCallback(async () => {
-    try {
-      const trackings = await getDriverTrackings();
-      setDriverTrackings(trackings);
-      return trackings;
-    } catch {
-      setDriverTrackings([]);
-      return [];
-    }
-  }, []);
 
   useEffect(() => {
     void refreshWeeklyActivity();
@@ -339,14 +328,7 @@ export default function DashboardPage({ role, onLogout }) {
       .finally(() => {}); // Removed driverRoutesLoading
   }, [role]);
 
-  useEffect(() => {
-    if (role !== "driver") {
-      setDriverTrackings([]);
-      return;
-    }
 
-    void refreshDriverTrackingData();
-  }, [role, refreshDriverTrackingData]);
 
   const handleUpdateStatus = useCallback(
     async (trackingId, routeId, passengerId, newStatus) => {
@@ -362,7 +344,6 @@ export default function DashboardPage({ role, onLogout }) {
         }
 
         await Promise.all([
-          refreshDriverTrackingData(),
           refreshRecentActivity(),
           refreshWeeklyActivity(),
         ]);
@@ -370,7 +351,7 @@ export default function DashboardPage({ role, onLogout }) {
         console.error("Error updating status:", error);
       }
     },
-    [refreshDriverTrackingData, refreshRecentActivity, refreshWeeklyActivity],
+    [refreshRecentActivity, refreshWeeklyActivity],
   );
   // handleUpdateStatus se comenta ya que no se utiliza en el componente
   void handleUpdateStatus;
