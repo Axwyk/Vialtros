@@ -1210,7 +1210,7 @@ out center;`;
           {/* ---- Etiqueta de origen ---- */}
           {toLatLng(originCoords) && (
             <OverlayView position={toLatLng(originCoords)} mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}>
-              <div style={{ transform: "translate(14px, -28px)", pointerEvents: "none" }}>
+              <div style={{ transform: "translate(-50%, calc(-100% - 14px))", pointerEvents: "none" }}>
                 <div className="vt-route-chip vt-route-chip-start">
                   <span className="vt-route-chip-text">{originName || "Origen"}</span>
                   <span className="vt-route-chip-arrow">›</span>
@@ -1222,7 +1222,7 @@ out center;`;
           {/* ---- Etiqueta de destino ---- */}
           {toLatLng(destinationCoords) && (
             <OverlayView position={toLatLng(destinationCoords)} mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}>
-              <div style={{ transform: "translate(calc(-100% - 14px), -28px)", pointerEvents: "none" }}>
+              <div style={{ transform: "translate(-50%, 14px)", pointerEvents: "none" }}>
                 <div className="vt-route-chip vt-route-chip-end">
                   <span className="vt-route-chip-text">{destinationName || "Destino"}</span>
                   <span className="vt-route-chip-arrow">›</span>

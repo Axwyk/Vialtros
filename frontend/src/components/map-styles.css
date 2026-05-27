@@ -550,13 +550,11 @@
 }
 
 .vt-route-chip-start {
-  transform: translate(14px, -28px);
   border-color: rgba(37, 99, 235, 0.24);
   box-shadow: 0 8px 22px rgba(37, 99, 235, 0.2);
 }
 
 .vt-route-chip-end {
-  transform: translate(calc(-100% - 14px), -28px);
   border-color: rgba(79, 70, 229, 0.22);
   box-shadow: 0 8px 22px rgba(79, 70, 229, 0.2);
 }
