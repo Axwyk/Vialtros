@@ -27,20 +27,22 @@ function toLatLngArray(coordsArray) {
 // ---------------------------------------------------------------------------
 const GOOGLE_MAPS_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "";
 const BUENAVENTURA_CENTER = [3.89243, -77.02824];
-const BUENAVENTURA_BOUNDS = { south: 3.84, west: -77.09, north: 3.93, east: -76.99 };
 const CORPORATE_ROUTE_COLOR = "#2563EB";
+
+// Stable reference — must not be defined inside the component
+const GOOGLE_MAPS_LIBRARIES = ["places"];
 
 const GOOGLE_MAPS_STYLES = [];
 
 const GOOGLE_MAPS_OPTIONS = {
-  restriction: { latLngBounds: BUENAVENTURA_BOUNDS, strictBounds: false },
-  disableDefaultUI: false,
-  zoomControl: true,
+  disableDefaultUI: true,
+  zoomControl: false,
   mapTypeControl: false,
   scaleControl: false,
   streetViewControl: false,
   rotateControl: false,
   fullscreenControl: false,
+  gestureHandling: "greedy",
   styles: GOOGLE_MAPS_STYLES,
 };
 
@@ -378,6 +380,7 @@ export default function MapView({
   const { isLoaded: mapsApiLoaded } = useJsApiLoader({
     id: "vialtros-google-map",
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
+    libraries: GOOGLE_MAPS_LIBRARIES,
   });
 
   const [displayPois, setDisplayPois] = useState(Array.isArray(pois) ? pois : []);
@@ -401,9 +404,19 @@ export default function MapView({
   const fittedOnceRef = useRef(false);
   const lastFitLengthRef = useRef(-1);
   const firstFollowRef = useRef(true);
+  const userMovedMapRef = useRef(false);
   const containerRef = useRef(null);
   const spokenWarningsRef = useRef(new Set());
   const lastSpokenStepKeyRef = useRef(null);
+
+  const [clickedPlace, setClickedPlace] = useState(null); // { lat, lng, address, loading }
+  const [locating, setLocating] = useState(false);
+  const [followPaused, setFollowPaused] = useState(false);
+  const suppressListenerRef = useRef(false);
+
+  // Google Maps style controls
+  const [mapType, setMapType] = useState("roadmap");
+  const [showLayers, setShowLayers] = useState(false);
 
   // Cerrar menú GPS al hacer click fuera
   useEffect(() => {
@@ -412,6 +425,24 @@ export default function MapView({
     document.addEventListener("click", close);
     return () => document.removeEventListener("click", close);
   }, [gpsMenuOpen]);
+
+  // Cuando el usuario arrastra o hace zoom, suspende el auto-seguimiento
+  useEffect(() => {
+    if (!mapRef) return undefined;
+    const dragListener = mapRef.addListener("dragstart", () => {
+      userMovedMapRef.current = true;
+      setFollowPaused(true);
+    });
+    const zoomListener = mapRef.addListener("zoom_changed", () => {
+      if (suppressListenerRef.current) return;
+      userMovedMapRef.current = true;
+      setFollowPaused(true);
+    });
+    return () => {
+      dragListener.remove();
+      zoomListener.remove();
+    };
+  }, [mapRef]);
 
   useEffect(() => {
     if (Array.isArray(pois) && pois.length > 0) {
@@ -602,8 +633,6 @@ out center;`;
         ? [
             ...activeVehicleCoords,
             ...routeOverlayCoords,
-            [BUENAVENTURA_BOUNDS.south, BUENAVENTURA_BOUNDS.west],
-            [BUENAVENTURA_BOUNDS.north, BUENAVENTURA_BOUNDS.east],
           ]
         : plannedLine?.length > 1
           ? plannedLine
@@ -648,6 +677,15 @@ out center;`;
 
   const hasLiveTrackings = validPoints.length > 0;
 
+  // Al iniciar un nuevo tracking, re-habilita el auto-seguimiento inicial
+  useEffect(() => {
+    if (hasLiveTrackings) {
+      firstFollowRef.current = true;
+      userMovedMapRef.current = false;
+      setFollowPaused(false);
+    }
+  }, [hasLiveTrackings]);
+
   // Fetch POIs solo una vez por sesión, o si el vehículo se movió más de 500m
   useEffect(() => {
     const coords = Array.isArray(vehiclePoint) ? vehiclePoint : null;
@@ -683,14 +721,18 @@ out center;`;
     );
     if (!valid.length) return;
     if (valid.length === 1) {
+      suppressListenerRef.current = true;
       mapRef.setCenter({ lat: valid[0][0], lng: valid[0][1] });
       mapRef.setZoom(15);
+      suppressListenerRef.current = false;
       fittedOnceRef.current = true;
       return;
     }
     const bounds = new window.google.maps.LatLngBounds();
     valid.forEach(([lat, lng]) => bounds.extend({ lat, lng }));
+    suppressListenerRef.current = true;
     mapRef.fitBounds(bounds, { top: 80, right: 80, bottom: 80, left: 80 });
+    suppressListenerRef.current = false;
     fittedOnceRef.current = true;
   }, [mapRef, fitCoords, focusAllVehicles, hasLiveTrackings]);
 
@@ -739,13 +781,18 @@ out center;`;
     const targetZoom = 17;
     if (firstFollowRef.current) {
       firstFollowRef.current = false;
+      suppressListenerRef.current = true;
       mapRef.setCenter({ lat, lng });
       mapRef.setZoom(targetZoom);
+      suppressListenerRef.current = false;
       if (gpsMode) mapRef.setHeading(primaryVehicleRotationRef.current + 90);
       return;
     }
+    if (userMovedMapRef.current && !gpsMode) return;
     mapRef.panTo({ lat, lng });
+    suppressListenerRef.current = true;
     if ((mapRef.getZoom() || 0) < targetZoom) mapRef.setZoom(targetZoom);
+    suppressListenerRef.current = false;
     if (gpsMode) mapRef.setHeading(primaryVehicleRotationRef.current + 90);
   }, [mapRef, effectiveVehiclePoint, focusAllVehicles, hasLiveTrackings, gpsMode]);
 
@@ -970,6 +1017,60 @@ out center;`;
     // Eliminado: currentTime no se utiliza
   }, []);
 
+  // Sync map type with Google Maps instance
+  useEffect(() => {
+    if (!mapRef) return;
+    mapRef.setMapTypeId(mapType);
+  }, [mapRef, mapType]);
+
+  const handleZoomIn = useCallback(() => {
+    if (!mapRef) return;
+    suppressListenerRef.current = true;
+    mapRef.setZoom((mapRef.getZoom() ?? 14) + 1);
+    suppressListenerRef.current = false;
+  }, [mapRef]);
+
+  const handleZoomOut = useCallback(() => {
+    if (!mapRef) return;
+    suppressListenerRef.current = true;
+    mapRef.setZoom((mapRef.getZoom() ?? 14) - 1);
+    suppressListenerRef.current = false;
+  }, [mapRef]);
+
+  const handleMapClick = useCallback((e) => {
+    if (gpsMode) return;
+    const lat = e.latLng.lat();
+    const lng = e.latLng.lng();
+    setClickedPlace({ lat, lng, address: null, loading: true });
+    if (!window.google?.maps?.Geocoder) {
+      setClickedPlace({ lat, lng, address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`, loading: false });
+      return;
+    }
+    new window.google.maps.Geocoder().geocode({ location: { lat, lng } }, (results, status) => {
+      const address =
+        status === "OK" && results?.[0]
+          ? results[0].formatted_address
+          : `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+      setClickedPlace({ lat, lng, address, loading: false });
+    });
+  }, [gpsMode]);
+
+  const handleLocateMe = useCallback(() => {
+    if (!navigator.geolocation || !mapRef) return;
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        suppressListenerRef.current = true;
+        mapRef.setCenter({ lat: coords.latitude, lng: coords.longitude });
+        mapRef.setZoom(17);
+        suppressListenerRef.current = false;
+        setLocating(false);
+      },
+      () => setLocating(false),
+      { enableHighAccuracy: true, timeout: 8000 },
+    );
+  }, [mapRef]);
+
   return (
     <div
       ref={containerRef}
@@ -986,6 +1087,7 @@ out center;`;
           center={toLatLng(center) || { lat: BUENAVENTURA_CENTER[0], lng: BUENAVENTURA_CENTER[1] }}
           zoom={focusAllVehicles ? 12 : 14}
           onLoad={(map) => setMapRef(map)}
+          onClick={handleMapClick}
           options={GOOGLE_MAPS_OPTIONS}
         >
           {/* ---- Rutas superpuestas (modo admin / focus all) ---- */}
@@ -1230,9 +1332,127 @@ out center;`;
               </div>
             </OverlayView>
           )}
+
+          {/* ---- Popup de dirección al hacer click ---- */}
+          {clickedPlace && toLatLng([clickedPlace.lat, clickedPlace.lng]) && (
+            <OverlayView
+              position={{ lat: clickedPlace.lat, lng: clickedPlace.lng }}
+              mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+            >
+              <div className="map-click-popup">
+                <div className="map-click-popup-header">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z" fill="#2563EB"/>
+                  </svg>
+                  <span className="map-click-popup-coords">
+                    {clickedPlace.lat.toFixed(5)}, {clickedPlace.lng.toFixed(5)}
+                  </span>
+                  <button
+                    className="map-click-popup-close"
+                    onClick={(e) => { e.stopPropagation(); setClickedPlace(null); }}
+                    aria-label="Cerrar"
+                  >×</button>
+                </div>
+                <p className="map-click-popup-address">
+                  {clickedPlace.loading ? "Buscando dirección…" : clickedPlace.address}
+                </p>
+              </div>
+            </OverlayView>
+          )}
         </GoogleMap>
       )}
 
+
+      {/* ---- Controles no-GPS: barra de búsqueda, chips, botones ---- */}
+      {!gpsMode && (
+        <>
+          {/* Columna de controles derecha: volver, ubicación, zoom */}
+          <div className="map-right-controls">
+            {followPaused && vehiclePoint && (
+              <button
+                className="map-refollow-btn"
+                onClick={() => {
+                  userMovedMapRef.current = false;
+                  setFollowPaused(false);
+                  if (mapRef) {
+                    suppressListenerRef.current = true;
+                    mapRef.panTo({ lat: vehiclePoint[0], lng: vehiclePoint[1] });
+                    mapRef.setZoom(17);
+                    suppressListenerRef.current = false;
+                  }
+                }}
+                aria-label="Volver al vehículo"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="currentColor"/>
+                </svg>
+                Volver al vehículo
+              </button>
+            )}
+            <button
+              className={`map-ctrl-btn${locating ? " map-ctrl-btn--loading" : ""}`}
+              onClick={handleLocateMe}
+              disabled={locating}
+              aria-label="Mi ubicación"
+              title="Mi ubicación"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="3" fill="#1a73e8"/>
+                <circle cx="12" cy="12" r="6.5" stroke="#1a73e8" strokeWidth="1.5"/>
+                <line x1="12" y1="2" x2="12" y2="5.2" stroke="#5f6368" strokeWidth="1.8" strokeLinecap="round"/>
+                <line x1="12" y1="18.8" x2="12" y2="22" stroke="#5f6368" strokeWidth="1.8" strokeLinecap="round"/>
+                <line x1="2" y1="12" x2="5.2" y2="12" stroke="#5f6368" strokeWidth="1.8" strokeLinecap="round"/>
+                <line x1="18.8" y1="12" x2="22" y2="12" stroke="#5f6368" strokeWidth="1.8" strokeLinecap="round"/>
+              </svg>
+            </button>
+            <div className="map-zoom-group">
+              <button className="map-ctrl-btn map-ctrl-btn--zoom" onClick={handleZoomIn} aria-label="Acercar" title="Acercar">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                  <path d="M9 3.5v11M3.5 9h11" stroke="#5f6368" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              </button>
+              <div className="map-zoom-sep" />
+              <button className="map-ctrl-btn map-ctrl-btn--zoom" onClick={handleZoomOut} aria-label="Alejar" title="Alejar">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                  <path d="M3.5 9h11" stroke="#5f6368" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Botón Capas — esquina inferior izquierda */}
+          <div className="map-layers-area">
+            <button
+              className={`map-layers-btn${showLayers ? " map-layers-btn--open" : ""}`}
+              onClick={() => setShowLayers((v) => !v)}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M2 17l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Capas
+            </button>
+            {showLayers && (
+              <div className="map-layers-menu">
+                {[
+                  { id: "roadmap", label: "Mapa" },
+                  { id: "hybrid", label: "Satélite" },
+                  { id: "terrain", label: "Terreno" },
+                ].map((t) => (
+                  <button
+                    key={t.id}
+                    className={`map-layers-option${mapType === t.id ? " map-layers-option--active" : ""}`}
+                    onClick={() => { setMapType(t.id); setShowLayers(false); }}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       {/* ---- HUD GPS — overlays flotantes estilo Google Maps ---- */}
       {gpsMode && (() => {
@@ -1383,9 +1603,13 @@ out center;`;
                         role="menuitem"
                         onClick={() => {
                           setGpsMenuOpen(false);
+                          userMovedMapRef.current = false;
+                          setFollowPaused(false);
                           if (mapRef && primaryVehicle) {
+                            suppressListenerRef.current = true;
                             mapRef.panTo({ lat: primaryVehicle.latitude, lng: primaryVehicle.longitude });
                             mapRef.setZoom(17);
+                            suppressListenerRef.current = false;
                           }
                         }}
                       >
