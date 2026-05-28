@@ -43,6 +43,9 @@ jobs:
         run: |
           cd frontend
           npm run build
+        env:
+          REACT_APP_API_URL: ${{ secrets.REACT_APP_API_URL }}
+          REACT_APP_GOOGLE_MAPS_API_KEY: ${{ secrets.REACT_APP_GOOGLE_MAPS_API_KEY }}
 
       # =========================================
       # VALIDACIÓN LOCAL DEL BACKEND
@@ -123,6 +126,8 @@ jobs:
 
             echo "Building frontend..."
 
+            export REACT_APP_API_URL="${{ secrets.REACT_APP_API_URL }}"
+            export REACT_APP_GOOGLE_MAPS_API_KEY="${{ secrets.REACT_APP_GOOGLE_MAPS_API_KEY }}"
             npm run build
 
             # Verificar build
