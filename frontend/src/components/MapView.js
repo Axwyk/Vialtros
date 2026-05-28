@@ -70,12 +70,6 @@ const GPS_NIGHT_STYLES = [
   { featureType: "landscape.man_made", elementType: "geometry", stylers: [{ color: "#1e2535" }] },
 ];
 
-function formatDistance(meters) {
-  if (!Number.isFinite(meters)) return "";
-  if (meters < 1000) return `${Math.round(meters)} m`;
-  return `${(meters / 1000).toFixed(1)} km`;
-}
-
 function getArrowSvg(modifier, type, color = "#1a56db") {
   const C = color;
   // Ícono de llegada — pin de destino
@@ -408,8 +402,7 @@ export default function MapView({
   const lastSpokenStepKeyRef = useRef(null);
 
   const [clickedPlace, setClickedPlace] = useState(null); // { lat, lng, address, loading }
-  const [locating, setLocating] = useState(false);
-  const [followPaused, setFollowPaused] = useState(true);
+  const [, setFollowPaused] = useState(true);
   const suppressListenerRef = useRef(false);
 
 
@@ -858,15 +851,6 @@ out center;`;
     return closest;
   }, [gpsMode, navigationSteps, vehiclePoint]);
 
-  const afterNextStep = useMemo(() => {
-    if (!nextStep || !Array.isArray(navigationSteps)) return null;
-    const idx = navigationSteps.findIndex(
-      (s) => s.location[0] === nextStep.location[0] && s.location[1] === nextStep.location[1],
-    );
-    if (idx < 0 || idx >= navigationSteps.length - 1) return null;
-    return navigationSteps[idx + 1];
-  }, [nextStep, navigationSteps]);
-
   useEffect(() => {
     if (!gpsMode || !nextStep || !window.speechSynthesis) return;
     if (gpsMutedRef.current) return;
@@ -1021,24 +1005,6 @@ out center;`;
       setClickedPlace({ lat, lng, address, loading: false });
     });
   }, [gpsMode]);
-
-  const handleLocateMe = useCallback(() => {
-    if (!navigator.geolocation || !mapRef) return;
-    setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        userMovedMapRef.current = true;
-        setFollowPaused(true);
-        suppressListenerRef.current = true;
-        mapRef.setCenter({ lat: coords.latitude, lng: coords.longitude });
-        mapRef.setZoom(17);
-        suppressListenerRef.current = false;
-        setLocating(false);
-      },
-      () => setLocating(false),
-      { enableHighAccuracy: true, timeout: 8000 },
-    );
-  }, [mapRef]);
 
   const handleZoomIn = useCallback(() => {
     if (!mapRef) return;
