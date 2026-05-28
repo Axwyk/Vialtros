@@ -682,6 +682,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
             : [],
         );
         setAdminAlerts(Array.isArray(summary?.alerts) ? summary.alerts : []);
+        if (wsStatusRef.current !== "live") setIsPollingFallback(true);
       } catch {
         if (!cancelled) {
           setAdminStats(null);
@@ -759,6 +760,9 @@ export default function TrackingPage({ routeId: routeIdProp }) {
         onOpen: () => {
           setWsStatus("live");
           setIsPollingFallback(false);
+        },
+        onReconnecting: () => {
+          setWsStatus("connecting");
         },
         onClose: () => {
           setWsStatus("offline");
@@ -2327,7 +2331,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   return (
     <div className="tracking-layout">
       {/* ---- Toasts globales ---- */}
-      {showRouteFinishedToast && (
+      {!isAdminView && showRouteFinishedToast && (
         <div className="route-finished-toast" role="status" aria-live="polite">
           ✓ Recorrido finalizado
         </div>
@@ -2848,6 +2852,8 @@ export default function TrackingPage({ routeId: routeIdProp }) {
               navigationSteps={navigationSteps}
               nearDestination={nearDestination}
               onExitGps={canManageGuidedRoute ? hideGpsOverlay : null}
+              isAdmin={isAdminView}
+              isDriver={currentRole === "driver"}
             />
           </div>
         </main>

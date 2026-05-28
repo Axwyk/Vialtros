@@ -14,6 +14,7 @@ export function connectAdminMonitoring(onMessage, handlers = {}) {
     onOpen,
     onClose,
     onError,
+    onReconnecting,
     reconnectDelayMs = 2000,
     maxReconnectAttempts = 20,
   } = handlers;
@@ -45,10 +46,13 @@ export function connectAdminMonitoring(onMessage, handlers = {}) {
     };
 
     socket.onclose = () => {
-      if (onClose) onClose();
       if (closedManually) return;
-      if (reconnectAttempts >= maxReconnectAttempts) return;
+      if (reconnectAttempts >= maxReconnectAttempts) {
+        if (onClose) onClose();
+        return;
+      }
       reconnectAttempts += 1;
+      if (onReconnecting) onReconnecting();
       reconnectTimer = setTimeout(connect, reconnectDelayMs);
     };
   };
