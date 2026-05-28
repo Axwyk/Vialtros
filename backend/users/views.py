@@ -412,6 +412,21 @@ class UserViewSet(viewsets.ModelViewSet):
             return UserCreateSerializer
         return UserSerializer
 
+    def destroy(self, request, *args, **kwargs):
+        """Proteger la eliminación del único administrador."""
+        user = self.get_object()
+        
+        # Si es admin y es el único, no permitir eliminar
+        if user.role == 'admin':
+            admin_count = User.objects.filter(role='admin').count()
+            if admin_count == 1:
+                return Response(
+                    {'detail': 'No se puede eliminar el único administrador del sistema.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        return super().destroy(request, *args, **kwargs)
+
     @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
     def me(self, request):
         serializer = UserSerializer(request.user)

@@ -9,7 +9,7 @@ import {
   deleteUser,
 } from "../services/admin";
 
-const ROLES = ["admin", "driver", "user"];
+const ALL_ROLES = ["admin", "driver", "user"];
 const EMPTY_FORM = {
   username: "",
   email: "",
@@ -18,18 +18,25 @@ const EMPTY_FORM = {
   is_active: true,
 };
 
-function Badge({ role }) {
+function Badge({ role, isOnlyAdmin }) {
   const map = {
     admin: "bg-violet-100 text-violet-700",
     driver: "bg-blue-100 text-blue-700",
     user: "bg-gray-100 text-gray-600",
   };
   return (
-    <span
-      className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${map[role] || map.user}`}
-    >
-      {role}
-    </span>
+    <div className="flex items-center gap-2">
+      <span
+        className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${map[role] || map.user}`}
+      >
+        {role}
+      </span>
+      {isOnlyAdmin && (
+        <span title="Único administrador del sistema" className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded text-[10px] font-semibold">
+          ÚNICO
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -51,6 +58,21 @@ export default function AdminUsersPage({ role, onLogout }) {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const debounceRef = useRef(null);
+
+  // Calcular roles disponibles
+  const getAvailableRoles = () => {
+    const adminExists = users.some((u) => u.role === "admin");
+    return adminExists ? ["driver", "user"] : ALL_ROLES;
+  };
+
+  // Determinar si estamos editando al único admin
+  const isEditingOnlyAdmin = () => {
+    if (modal === "create") return false;
+    return (
+      modal.role === "admin" &&
+      users.filter((u) => u.role === "admin").length === 1
+    );
+  };
 
   const load = useCallback(
     (searchVal, dateFromVal, dateToVal) => {
@@ -136,6 +158,18 @@ export default function AdminUsersPage({ role, onLogout }) {
   };
 
   const handleDelete = async () => {
+    const userToDelete = users.find((u) => u.id === confirmId);
+    
+    // Proteger el único administrador
+    if (userToDelete.role === "admin") {
+      const adminCount = users.filter((u) => u.role === "admin").length;
+      if (adminCount === 1) {
+        setFormError("No se puede eliminar el único administrador del sistema");
+        setConfirmId(null);
+        return;
+      }
+    }
+    
     await deleteUser(confirmId);
     setConfirmId(null);
     load(search, dateFrom, dateTo);
@@ -390,7 +424,7 @@ export default function AdminUsersPage({ role, onLogout }) {
                       {u.email || "—"}
                     </td>
                     <td className="px-5 py-3.5">
-                      <Badge role={u.role} />
+                      <Badge role={u.role} isOnlyAdmin={u.role === "admin" && users.filter((x) => x.role === "admin").length === 1} />
                     </td>
                     <td className="px-5 py-3.5">
                       <span
@@ -409,7 +443,13 @@ export default function AdminUsersPage({ role, onLogout }) {
                         </button>
                         <button
                           onClick={() => setConfirmId(u.id)}
-                          className="text-xs text-red-500 hover:text-red-700 font-medium transition"
+                          disabled={u.role === "admin" && users.filter((x) => x.role === "admin").length === 1}
+                          className={`text-xs font-medium transition ${
+                            u.role === "admin" && users.filter((x) => x.role === "admin").length === 1
+                              ? "text-gray-300 cursor-not-allowed"
+                              : "text-red-500 hover:text-red-700"
+                          }`}
+                          title={u.role === "admin" && users.filter((x) => x.role === "admin").length === 1 ? "No se puede eliminar el único administrador" : ""}
                         >
                           Eliminar
                         </button>
@@ -436,6 +476,13 @@ export default function AdminUsersPage({ role, onLogout }) {
           onClose={() => setModal(null)}
         >
           <div className="flex flex-col gap-3">
+            {isEditingOnlyAdmin() && (
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                <p className="text-xs text-gray-700 font-medium">
+                  Este es el único administrador del sistema
+                </p>
+              </div>
+            )}
             <label className="text-sm font-medium text-gray-600">
               Usuario *
               <input
@@ -465,13 +512,19 @@ export default function AdminUsersPage({ role, onLogout }) {
                 onChange={(e) =>
                   setForm((f) => ({ ...f, role: e.target.value }))
                 }
+                disabled={isEditingOnlyAdmin()}
               >
-                {ROLES.map((r) => (
+                {getAvailableRoles().map((r) => (
                   <option key={r} value={r}>
                     {r}
                   </option>
                 ))}
               </select>
+              {isEditingOnlyAdmin() && (
+                <p className="text-xs text-gray-400 mt-1">
+                  No se puede cambiar el rol del único administrador
+                </p>
+              )}
             </label>
             <div className="flex flex-col gap-1">
               <span className="text-sm font-medium text-gray-600">
