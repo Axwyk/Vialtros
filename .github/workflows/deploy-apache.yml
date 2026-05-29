@@ -44,6 +44,7 @@ jobs:
           cd frontend
           npm run build
         env:
+          CI: false
           REACT_APP_API_URL: ${{ secrets.REACT_APP_API_URL }}
           REACT_APP_GOOGLE_MAPS_API_KEY: ${{ secrets.REACT_APP_GOOGLE_MAPS_API_KEY }}
 
@@ -126,6 +127,7 @@ jobs:
 
             echo "Building frontend..."
 
+            export CI=false
             export REACT_APP_API_URL="${{ secrets.REACT_APP_API_URL }}"
             export REACT_APP_GOOGLE_MAPS_API_KEY="${{ secrets.REACT_APP_GOOGLE_MAPS_API_KEY }}"
             npm run build
