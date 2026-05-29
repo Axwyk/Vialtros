@@ -77,3 +77,9 @@ media/
 /run_vialtros.bat
 /Start_Server.bat
 /reiniciar_todo.bat
+
+# ── Textos guia locales (no subir) ─────────────────────────
+textos/RESUMEN_PREPARACION.txt
+textos/GUIA_DESPLIEGUE_APACHE.txt
+textos/CHECKLIST_DESPLIEGUE.txt
+textos/cambios_realizados.txt

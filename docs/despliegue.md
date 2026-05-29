@@ -1,271 +1,210 @@
-# Guía de Despliegue — Vialtros
+# Vialtros - Guía de Despliegue
 
-## Requisitos previos
+## Resumen Rápido
 
-| Herramienta | Versión mínima |
-| --- | --- |
-| Python | 3.10+ |
-| Node.js | 18+ |
-| npm | 9+ |
-| Redis | 6+ (para Django Channels en producción) |
-| PostgreSQL | 14+ (solo producción) |
+El proyecto ha sido preparado para desplegar en Apache con las siguientes características:
 
----
-
-## Configuración de Desarrollo
-
-### 1. Clonar el repositorio
-
-```bash
-git clone https://github.com/Axwyk/Vialtros.git
-cd Vialtros
-```
+✅ **Usuario Admin de Prueba**: usuario `admin`, contraseña `admin123`
+✅ **Base de Datos**: Neon PostgreSQL configurada
+✅ **Backend**: Django + Gunicorn configurado para producción
+✅ **Frontend**: React compilado para producción
+✅ **Servidor Web**: Apache con reverse proxy
+✅ **Automatización**: GitHub Actions workflow para despliegue automático
+✅ **Documentación**: Guía completa paso a paso
 
 ---
 
-### 2. Backend
+## Archivos Importantes
 
-#### Crear entorno virtual e instalar dependencias
-
-```bash
-cd backend
-python -m venv venv
-
-# Windows
-.\venv\Scripts\activate
-
-# Linux / macOS
-source venv/bin/activate
-
-pip install -r requirements.txt
-```
-
-#### Dependencias instaladas (`requirements.txt`)
-
-```txt
-django
-djangorestframework
-djangorestframework-simplejwt
-channels
-channels-redis
-psycopg2-binary
-```
-
-#### Aplicar migraciones y crear superusuario
-
-```bash
-python manage.py migrate
-python manage.py createsuperuser
-```
-
-#### Iniciar servidor de desarrollo
-
-```bash
-# Con Daphne (HTTP + WebSocket)
-daphne core.asgi:application
-
-# O con el servidor de desarrollo estándar (solo HTTP)
-python manage.py runserver
-```
-
-> Por defecto el servidor escucha en `http://localhost:8000`.
+| Archivo | Descripción |
+|---------|------------|
+| **GUIA_DESPLIEGUE_APACHE.txt** | 📖 Guía completa (¡Lee esto!) |
+| **deploy.sh** | 🚀 Script de despliegue local |
+| **quick-setup.sh** | ⚡ Setup rápido en servidor |
+| **.github/workflows/deploy-apache.yml** | 🤖 Workflow automático (GitHub Actions) |
+| **backend/.env** | 🔐 Variables de entorno (Django) |
+| **etc/apache2/vialtros.conf** | ⚙️ Configuración de Apache |
+| **etc/systemd/vialtros-django.service** | 🔧 Service de Systemd para Django |
+| **backend/users/management/commands/create_admin.py** | 👤 Script para crear admin |
 
 ---
 
-### 3. Frontend
+## Inicio Rápido
+
+### Opción 1: Despliegue Local (para pruebas)
 
 ```bash
-cd frontend
-npm install
+# En tu máquina local
+bash deploy.sh development
 ```
 
-#### Variables de entorno
+Esto ejecutará:
+- Instalar dependencias backend
+- Ejecutar migraciones
+- Crear usuario admin
+- Construir frontend
 
-Crear `frontend/.env`:
+### Opción 2: Despliegue en Apache (recomendado)
 
-```env
-REACT_APP_API_URL=http://localhost:8000/api
-REACT_APP_WS_URL=ws://localhost:8000/ws
-```
+**Ver la guía completa: `GUIA_DESPLIEGUE_APACHE.txt`**
 
-#### Iniciar servidor de desarrollo
+En resumen:
 
 ```bash
-npm start
+# En el servidor Apache
+ssh user@ds1.eleueleo.com
+cd vialtros
+bash quick-setup.sh  # Setup automático
+
+# Luego (como sudo)
+sudo cp etc/systemd/vialtros-django.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl start vialtros-django
+sudo cp etc/apache2/vialtros.conf /etc/apache2/sites-available/
+sudo a2ensite vialtros && sudo systemctl restart apache2
 ```
 
-> Por defecto React escucha en `http://localhost:3000`.
+### Opción 3: Despliegue Automático (GitHub Actions)
+
+1. Configura los GitHub Secrets en: https://github.com/Axwyk/Vialtros/settings/secrets/actions
+
+2. Push a la rama `master`:
+   ```bash
+   git add .
+   git commit -m "Prepare deployment"
+   git push origin master
+   ```
+
+3. El workflow se ejecutará automáticamente
+
+Ver sección 4-5 de `GUIA_DESPLIEGUE_APACHE.txt` para instrucciones detalladas.
 
 ---
 
-### 4. Scripts de conveniencia
+## Usuario Administrador
 
-| Script | Descripción |
-| --- | --- |
-| `reiniciar_todo.bat` | Lanza backend (Daphne) y frontend (React) en terminales separadas |
+**Para pruebas:**
+- Usuario: `admin`
+- Contraseña: `admin123`
+
+**Acceso:**
+- Panel de Admin: http://vialtros.ds1.eleueleo.com/admin
+- API: http://vialtros.ds1.eleueleo.com/api
+
+⚠️ **En Producción**: Cambia esta contraseña inmediatamente
 
 ---
 
-## Configuración de Producción
+## Configuración del Servidor
 
-### Backend — Variables de entorno
+### Estructura de Directorios
 
-Usar variables de entorno en lugar de valores hardcoded en `settings.py`:
+```
+/home/user/vialtros/
+├── backend/
+│   ├── venv/                      # Virtual environment
+│   ├── .env                       # Variables de entorno
+│   ├── core/                      # Django settings
+│   ├── users/
+│   ├── tracking/
+│   └── manage.py
+├── frontend/
+│   ├── build/                     # React build (servido por Apache)
+│   └── package.json
+├── .github/
+│   └── workflows/
+│       └── deploy-apache.yml      # GitHub Actions
+└── etc/
+    ├── apache2/
+    │   └── vialtros.conf          # Apache Virtual Host
+    └── systemd/
+        └── vialtros-django.service # Systemd service
+```
 
-```env
-SECRET_KEY=<clave-secreta-larga-y-aleatoria>
-DEBUG=False
-ALLOWED_HOSTS=api.vialtros.com,www.vialtros.com
+### Servicios
 
-# PostgreSQL
-DB_NAME=vialtros_db
-DB_USER=vialtros_user
-DB_PASSWORD=<password>
-DB_HOST=localhost
+| Servicio | Puerto | Descripción |
+|----------|--------|------------|
+| Apache | 80 | Servidor web (frontend + proxy) |
+| Gunicorn | 8000 | Django WSGI server |
+| Neon | Remoto | Base de datos PostgreSQL |
+
+---
+
+## Variables de Entorno
+
+Ubicación: `backend/.env`
+
+```
+DJANGO_SECRET_KEY=...              # Clave secreta de Django
+DJANGO_DEBUG=False                 # SIEMPRE False en producción
+DJANGO_ALLOWED_HOSTS=...           # Dominios permitidos
+
+DB_ENGINE=django.db.backends.postgresql
+DB_NAME=neondb
+DB_USER=neondb_owner
+DB_PASSWORD=...                    # Tu contraseña de Neon
+DB_HOST=...                        # Tu host de Neon
 DB_PORT=5432
 
-# Redis (para Django Channels)
-REDIS_URL=redis://localhost:6379/0
-```
-
-### settings.py — Ajustes para producción
-
-```python
-# Deshabilitar DEBUG
-DEBUG = False
-
-# ALLOWED_HOSTS desde variable de entorno
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',')
-
-# Base de datos PostgreSQL
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('DB_NAME'),
-        'USER': os.environ.get('DB_USER'),
-        'PASSWORD': os.environ.get('DB_PASSWORD'),
-        'HOST': os.environ.get('DB_HOST', 'localhost'),
-        'PORT': os.environ.get('DB_PORT', '5432'),
-    }
-}
-
-# CORS — solo orígenes de producción
-CORS_ALLOWED_ORIGINS = [
-    "https://www.vialtros.com",
-]
-
-# SECRET_KEY desde variable de entorno
-SECRET_KEY = os.environ.get('SECRET_KEY')
+CORS_ALLOWED_ORIGINS=...           # Dominios CORS permitidos
 ```
 
 ---
 
-### Frontend — Build de producción
+## Dominio
 
-```bash
-cd frontend
-npm run build
-```
+Tu aplicación está configurada para funcionar en:
 
-El directorio `frontend/build/` contiene los archivos estáticos para servir con Nginx o similar.
-
-#### Variables de entorno para producción
-
-Crear `frontend/.env.production`:
-
-```env
-REACT_APP_API_URL=https://api.vialtros.com/api
-REACT_APP_WS_URL=wss://api.vialtros.com/ws
-```
+- **Frontend**: http://vialtros.ds1.eleueleo.com
+- **Backend API**: http://vialtros.ds1.eleueleo.com/api
+- **Admin Panel**: http://vialtros.ds1.eleueleo.com/admin
 
 ---
 
-### Redis (Django Channels)
+## Próximos Pasos
 
-En desarrollo se puede usar Redis local:
-
-```bash
-# Instalar Redis (Windows con WSL o Docker)
-docker run -d -p 6379:6379 redis:alpine
-```
-
-En producción configurar `CHANNEL_LAYERS` con la URL de Redis:
-
-```python
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {
-            'hosts': [os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379')],
-        },
-    },
-}
-```
+1. **Lee la guía completa**: `GUIA_DESPLIEGUE_APACHE.txt`
+2. **Configura el servidor**: Sigue la sección 2 de la guía
+3. **Configura GitHub Secrets**: Sección 4 de la guía
+4. **Prueba el despliegue**: Sección 5 o 6 de la guía
+5. **Accede a tu aplicación**: http://vialtros.ds1.eleueleo.com
+6. **Inicia sesión**: admin / admin123
+7. **Cambia la contraseña**: En producción
 
 ---
 
-### Nginx (proxy inverso recomendado)
+## Troubleshooting
 
-Configuración básica para servir frontend + backend:
-
-```nginx
-server {
-    listen 80;
-    server_name vialtros.com www.vialtros.com;
-
-    # Frontend React
-    location / {
-        root /var/www/vialtros/build;
-        try_files $uri /index.html;
-    }
-
-    # API REST
-    location /api/ {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-
-    # WebSocket
-    location /ws/ {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-    }
-}
-```
+Para problemas comunes, ver sección 9: **TROUBLESHOOTING** en `GUIA_DESPLIEGUE_APACHE.txt`
 
 ---
 
-## Panel de Administración Django
+## Información Técnica
 
-Accesible en `/admin/` con las credenciales del superusuario.
+**Stack Tecnológico:**
+- Backend: Django 6.0 + Django REST Framework + WebSockets (Channels)
+- Frontend: React 18 + Axios
+- Base de Datos: PostgreSQL 17 (Neon)
+- Servidor Web: Apache 2.4 + Gunicorn
+- Despliegue: GitHub Actions
 
-**Funcionalidades del admin Django:**
-- Gestión de todos los modelos (User, Driver, Passenger, Route, Tracking)
-- Visualización y edición de registros directamente en la base de datos
-- Solo accesible para usuarios con `is_staff=True`
+**Monitoreo:**
+- Logs de Django: `sudo journalctl -u vialtros-django -f`
+- Logs de Apache: `sudo tail -f /var/log/apache2/vialtros-error.log`
+- GitHub Actions: https://github.com/Axwyk/Vialtros/actions
 
 ---
 
-## Datos de Prueba
+## Contacto / Ayuda
 
-La carga de datos de prueba ya no está automatizada con `poblar_demo`. Usa el panel de administración Django o crea registros a través de la API.
+Para más información, consulta:
+- 📖 `GUIA_DESPLIEGUE_APACHE.txt` (Guía completa)
+- 🔧 `etc/README.md` (Configuraciones de servidor)
+- 🚀 `.github/workflows/deploy-apache.yml` (Workflow automático)
 
 ---
 
-## Checklist antes de producción
-
-- [ ] `DEBUG = False`
-- [ ] `SECRET_KEY` no hardcodeada (variable de entorno)
-- [ ] `ALLOWED_HOSTS` configurado
-- [ ] Base de datos PostgreSQL configurada
-- [ ] Redis activo para Django Channels
-- [ ] CORS configurado solo con orígenes permitidos
-- [ ] HTTPS habilitado (certificado SSL)
-- [ ] Variables de entorno del frontend apuntan a URLs de producción (`https://` y `wss://`)
-- [ ] `npm run build` ejecutado para generar los estáticos
-- [ ] Archivos estáticos Django recolectados: `python manage.py collectstatic`
-
+**Fecha de preparación:** 24 de mayo de 2026
+**Proyecto:** Vialtros
+**Dominio:** vialtros.ds1.eleueleo.com
+**BD:** Neon (hidden-mud-15767585)

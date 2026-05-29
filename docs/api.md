@@ -1,5 +1,7 @@
 # Referencia de API — Vialtros
 
+> **Última actualización:** 21 de mayo de 2026
+
 Base URL: `http://localhost:8000/api/`
 
 Todos los endpoints (salvo `/token/`) requieren JWT en la cabecera:

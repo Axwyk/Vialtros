@@ -24,7 +24,14 @@ def build_route_intermediate_stops(passengers):
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ('id', 'username', 'email', 'role', 'is_active', 'is_staff')
+        fields = ('id', 'username', 'email', 'first_name', 'last_name', 'phone_number', 'role', 'is_active', 'is_staff')
+
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    """Serializer para que el usuario actualice su propio perfil."""
+    class Meta:
+        model = User
+        fields = ('first_name', 'last_name', 'email', 'phone_number')
 
 
 class UserBasicSerializer(serializers.ModelSerializer):
@@ -40,6 +47,42 @@ class UserCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ('id', 'username', 'email', 'role', 'is_active', 'password')
+
+    def validate_role(self, value):
+        """Validar que no se cree más de un administrador."""
+        # En CREATE, no permitir crear otro admin si ya existe uno
+        if self.instance is None and value == 'admin':
+            admin_count = User.objects.filter(role='admin').count()
+            if admin_count > 0:
+                raise serializers.ValidationError(
+                    'Solo puede haber un administrador en el sistema.'
+                )
+        return value
+
+    def validate(self, data):
+        """Validar cambios de rol en UPDATE."""
+        # En UPDATE, proteger el único admin
+        if self.instance is not None:
+            new_role = data.get('role', self.instance.role)
+            old_role = self.instance.role
+            
+            # Si intenta cambiar el rol del único admin
+            if old_role == 'admin' and new_role != 'admin':
+                admin_count = User.objects.filter(role='admin').count()
+                if admin_count == 1:
+                    raise serializers.ValidationError(
+                        'No se puede cambiar el rol del único administrador del sistema.'
+                    )
+            
+            # Si intenta asignar rol admin a otro usuario
+            if new_role == 'admin' and old_role != 'admin':
+                admin_count = User.objects.filter(role='admin').count()
+                if admin_count > 0:
+                    raise serializers.ValidationError(
+                        'Solo puede haber un administrador en el sistema.'
+                    )
+        
+        return data
 
     def create(self, validated_data):
         password = validated_data.pop('password')

@@ -419,7 +419,6 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const currentRole = localStorage.getItem("role") || "user";
   const isAdminView = currentRole === "admin";
   const [driverRoutes, setDriverRoutes] = useState([]);
-  const [loadingRoutes, setLoadingRoutes] = useState(false);
   const [sharing, setSharing] = useState(false);
   const sharingWatchIdRef = useRef(null);
 
@@ -608,7 +607,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   useEffect(() => {
     if (currentRole !== "driver") return undefined;
     let cancelled = false;
-    setLoadingRoutes(true);
+    // setLoadingRoutes(true); // loadingRoutes fue eliminado
     getDriverAssignedRoutes()
       .then((routes) => {
         if (!cancelled) setDriverRoutes(Array.isArray(routes) ? routes : []);
@@ -617,7 +616,10 @@ export default function TrackingPage({ routeId: routeIdProp }) {
         if (!cancelled) setDriverRoutes([]);
       })
       .finally(() => {
-        if (!cancelled) setLoadingRoutes(false);
+        if (!cancelled) {
+          // setLoadingRoutes se comenta ya que loadingRoutes fue eliminado
+          // setLoadingRoutes(false);
+        }
       });
 
     return () => {
@@ -680,6 +682,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
             : [],
         );
         setAdminAlerts(Array.isArray(summary?.alerts) ? summary.alerts : []);
+        if (wsStatusRef.current !== "live") setIsPollingFallback(true);
       } catch {
         if (!cancelled) {
           setAdminStats(null);
@@ -757,6 +760,9 @@ export default function TrackingPage({ routeId: routeIdProp }) {
         onOpen: () => {
           setWsStatus("live");
           setIsPollingFallback(false);
+        },
+        onReconnecting: () => {
+          setWsStatus("connecting");
         },
         onClose: () => {
           setWsStatus("offline");
@@ -1398,7 +1404,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       cancelled = true;
       clearTimeout(timerId);
     };
-  }, [guidedRouteDisplayPath, , liveRouteHistory]);
+  }, [guidedRouteDisplayPath, liveRouteHistory, guidedRouteRunning]);
 
   const statusBadge = useMemo(() => {
     const badges = {
@@ -1520,10 +1526,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     () => polylineDistanceKm(displayPlannedRoutePolyline),
     [displayPlannedRoutePolyline],
   );
-  const traveledDistanceKm = useMemo(
-    () => polylineDistanceKm(displayTraveledRoutePolyline),
-    [displayTraveledRoutePolyline],
-  );
+  // Eliminado: traveledDistanceKm no se utiliza actualmente
   const remainingDistanceKm = useMemo(() => {
     if (
       !Array.isArray(displayPlannedRoutePolyline) ||
@@ -2196,6 +2199,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     vehiclePosition,
     destinationCoords,
     guidedRouteRunning,
+    navigate,
   ]);
 
   // Transmisión en vivo (conductor) se controla con `sharingWatchIdRef` y `stopSharing`.
@@ -2327,7 +2331,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   return (
     <div className="tracking-layout">
       {/* ---- Toasts globales ---- */}
-      {showRouteFinishedToast && (
+      {!isAdminView && showRouteFinishedToast && (
         <div className="route-finished-toast" role="status" aria-live="polite">
           ✓ Recorrido finalizado
         </div>
@@ -2848,6 +2852,8 @@ export default function TrackingPage({ routeId: routeIdProp }) {
               navigationSteps={navigationSteps}
               nearDestination={nearDestination}
               onExitGps={canManageGuidedRoute ? hideGpsOverlay : null}
+              isAdmin={isAdminView}
+              isDriver={currentRole === "driver"}
             />
           </div>
         </main>

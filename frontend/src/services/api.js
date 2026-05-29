@@ -9,8 +9,6 @@ function resolveApiUrl() {
   if (configured) {
     return configured.replace(/\/+$/, "");
   }
-
-  // Por defecto usa misma origin para funcionar en producción y con proxy en desarrollo.
   return "/api";
 }
 
@@ -18,7 +16,7 @@ const api = axios.create({
   baseURL: resolveApiUrl(),
 });
 
-// Interceptor para agregar el token JWT a cada request
+// ---- Request interceptor: adjunta el token a cada llamada ----
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("access");
 
@@ -27,7 +25,6 @@ api.interceptors.request.use((config) => {
       config.headers["X-Tracking-Token"] =
         process.env.REACT_APP_TRACKING_INGEST_TOKEN || LOCAL_DEV_INGEST_TOKEN;
     }
-    // Agregar Authorization header incluso para local dev tokens
     config.headers.Authorization = `Bearer ${token}`;
     return config;
   }
@@ -37,6 +34,83 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
+
+// ---- Response interceptor: refresca el token automáticamente ante 401 ----
+let isRefreshing = false;
+let failedQueue = [];
+
+function processQueue(error, token = null) {
+  failedQueue.forEach(({ resolve, reject }) => {
+    if (error) reject(error);
+    else resolve(token);
+  });
+  failedQueue = [];
+}
+
+function redirectToLogin() {
+  if (!window.location.pathname.includes("/login")) {
+    localStorage.removeItem("access");
+    localStorage.removeItem("refresh");
+    window.location.href = "/login";
+  }
+}
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const original = error.config;
+
+    // Solo actúa en 401 que no sean del propio endpoint de token
+    if (
+      error.response?.status !== 401 ||
+      original._retry ||
+      original.url?.includes("/token/")
+    ) {
+      return Promise.reject(error);
+    }
+
+    // Si ya hay un refresh en curso, encola esta petición
+    if (isRefreshing) {
+      return new Promise((resolve, reject) => {
+        failedQueue.push({ resolve, reject });
+      }).then((token) => {
+        original.headers.Authorization = `Bearer ${token}`;
+        return api(original);
+      });
+    }
+
+    original._retry = true;
+    isRefreshing = true;
+
+    const refreshToken = localStorage.getItem("refresh");
+    if (!refreshToken) {
+      isRefreshing = false;
+      processQueue(error);
+      redirectToLogin();
+      return Promise.reject(error);
+    }
+
+    try {
+      // Usa axios directo para evitar que el interceptor se llame a sí mismo
+      const { data } = await axios.post(
+        `${resolveApiUrl()}/token/refresh/`,
+        { refresh: refreshToken },
+      );
+      localStorage.setItem("access", data.access);
+      if (data.refresh) localStorage.setItem("refresh", data.refresh);
+
+      processQueue(null, data.access);
+      original.headers.Authorization = `Bearer ${data.access}`;
+      return api(original);
+    } catch (refreshError) {
+      processQueue(refreshError);
+      redirectToLogin();
+      return Promise.reject(refreshError);
+    } finally {
+      isRefreshing = false;
+    }
+  },
+);
 
 export function requestPasswordReset(email) {
   return api.post('/auth/forgot-password/', { email });

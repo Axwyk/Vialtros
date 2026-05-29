@@ -3,11 +3,9 @@ import Sidebar from "../components/dashboard/Sidebar";
 import StatCard from "../components/dashboard/StatCard";
 import HeroCard from "../components/dashboard/HeroCard";
 import ActivityFeed from "../components/dashboard/ActivityFeed";
-import { Link } from "react-router-dom";
 import {
   getDashboardStats,
   getDriverAssignedRoutes,
-  getDriverTrackings,
   getRecentActivity,
   getWeeklyActivity,
 } from "../services/dashboard";
@@ -118,44 +116,8 @@ function getGreeting() {
   return "Buenas noches";
 }
 
-function formatDate() {
-  return new Date().toLocaleDateString("es-ES", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-}
+// Funciones eliminadas: formatDate, getInitials, getPassengerStatusConfig no se utilizan actualmente
 
-function getInitials(name) {
-  if (!name) return "ST";
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("");
-}
-
-function getPassengerStatusConfig(status) {
-  const statusMap = {
-    picked: {
-      label: "Recogido",
-      className: "bg-blue-600 text-white border border-blue-600",
-    },
-    not_picked: {
-      label: "Pendiente",
-      className: "bg-blue-50 text-blue-700 border border-blue-200",
-    },
-  };
-
-  return (
-    statusMap[status] || {
-      label: "Sin estado",
-      className: "bg-white text-slate-600 border border-blue-100",
-    }
-  );
-}
 
 function getRoleBadgeConfig(role) {
   return (
@@ -303,8 +265,6 @@ export default function DashboardPage({ role, onLogout }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [driverRoutes, setDriverRoutes] = useState([]);
-  const [driverRoutesLoading, setDriverRoutesLoading] = useState(false);
-  const [driverTrackings, setDriverTrackings] = useState([]);
   const [weeklyActivity, setWeeklyActivity] = useState(EMPTY_WEEKLY_ACTIVITY);
   const [recentActivity, setRecentActivity] = useState([]);
   const [recentActivityLoading, setRecentActivityLoading] = useState(true);
@@ -349,16 +309,6 @@ export default function DashboardPage({ role, onLogout }) {
     }
   }, []);
 
-  const refreshDriverTrackingData = useCallback(async () => {
-    try {
-      const trackings = await getDriverTrackings();
-      setDriverTrackings(trackings);
-      return trackings;
-    } catch {
-      setDriverTrackings([]);
-      return [];
-    }
-  }, []);
 
   useEffect(() => {
     void refreshWeeklyActivity();
@@ -371,21 +321,13 @@ export default function DashboardPage({ role, onLogout }) {
   useEffect(() => {
     if (role !== "driver") return;
 
-    setDriverRoutesLoading(true);
     getDriverAssignedRoutes()
       .then(setDriverRoutes)
       .catch(() => setDriverRoutes([]))
-      .finally(() => setDriverRoutesLoading(false));
+      .finally(() => {}); // Removed driverRoutesLoading
   }, [role]);
 
-  useEffect(() => {
-    if (role !== "driver") {
-      setDriverTrackings([]);
-      return;
-    }
 
-    void refreshDriverTrackingData();
-  }, [role, refreshDriverTrackingData]);
 
   const handleUpdateStatus = useCallback(
     async (trackingId, routeId, passengerId, newStatus) => {
@@ -401,7 +343,6 @@ export default function DashboardPage({ role, onLogout }) {
         }
 
         await Promise.all([
-          refreshDriverTrackingData(),
           refreshRecentActivity(),
           refreshWeeklyActivity(),
         ]);
@@ -409,8 +350,10 @@ export default function DashboardPage({ role, onLogout }) {
         console.error("Error updating status:", error);
       }
     },
-    [refreshDriverTrackingData, refreshRecentActivity, refreshWeeklyActivity],
+    [refreshRecentActivity, refreshWeeklyActivity],
   );
+  // handleUpdateStatus se comenta ya que no se utiliza en el componente
+  void handleUpdateStatus;
 
   const totalAssignedStudents = driverRoutes.reduce(
     (total, route) =>
@@ -425,7 +368,10 @@ export default function DashboardPage({ role, onLogout }) {
     1,
   );
   const roleBadge = getRoleBadgeConfig(role);
-  const { quickActions, headlineStats, metricCards, summaryConfig } = useMemo(
+  // roleBadge se comenta ya que no se utiliza en el componente
+  void roleBadge;
+  
+  const { metricCards } = useMemo(
     () =>
       buildDashboardContent({
         role,

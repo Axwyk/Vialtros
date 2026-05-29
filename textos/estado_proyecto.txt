@@ -1,7 +1,9 @@
 ﻿====================================================
   VIALTROS -- ESTADO DEL PROYECTO
-  Última actualización: 16 de abril de 2026
-  Repositorio configurado y sincronizado con GitHub: https://github.com/Axwyk/Vialtros
+  Última actualización: 21 de mayo de 2026
+  Versión: 1.0-beta
+  Repositorio: https://github.com/Axwyk/Vialtros
+  Estado: En desarrollo activo — V1 con core completado
 ====================================================
 
 
@@ -78,5 +80,31 @@ GENERAL
   15. Tests unitarios backend (models, views, serializers)
   16. Tests frontend (componentes clave)
   17. Configuracion de produccion (ALLOWED_HOSTS, DEBUG=False, CORS, HTTPS)
+  18. CI/CD Pipeline: GitHub Actions configurado para backend (deploy automatico a servidor)
+
+
+=== BUGS RESUELTOS ===
+
+  ✓ [27/04/2026] React Warning - Duplicate keys en Sidebar.js
+    Causa: Dos items con key={item.to} iguales (/dashboard)
+    Solución: Usar key={index} en lugar de key={item.to}
+    Estado: RESUELTO
+
+  ✓ [27/04/2026] HTTP 401 Errors en endpoints de API
+    Causa: Falta de autenticación JWT en peticiones del frontend
+    Solución: Verificar token en localStorage y agregar headers Authorization
+    Estado: RESUELTO
+
+
+=== PRÓXIMAS PRIORIDADES (V1.1) ===
+
+  1. Endpoint para driver marcar pasajeros como recogidos/no recogidos
+  2. Página de rutas del driver (/driver/routes)
+  3. Página de seguimiento del usuario (/user/route)
+  4. Sistema de notificaciones/toasts
+  5. Mapas mejorados con múltiples pasajeros
+  6. Paginación y filtros en listados
+  7. Tests unitarios comprehensive
+  8. Documentación API mejorada (Swagger/OpenAPI)
 
 ====================================================

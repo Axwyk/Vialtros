@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import Sidebar from "../components/dashboard/Sidebar";
 import Modal from "../components/Modal";
 import { icons } from "../components/dashboard/icons";
@@ -38,11 +38,14 @@ export default function AdminPassengersPage({ role, onLogout }) {
   const [confirmId, setConfirmId] = useState(null);
   const [sortCol, setSortCol] = useState(null);
   const [sortDir, setSortDir] = useState("asc");
+  const [search, setSearch] = useState("");
+  const debounceRef = useRef(null);
 
-  const load = useCallback(() => {
+  const load = useCallback((searchVal) => {
     setLoading(true);
+    const params = searchVal ? { search: searchVal } : {};
     Promise.all([
-      getPassengers(),
+      getPassengers(params),
       getUsers(),
       getRoutes(),
       getDriverTrackings(),
@@ -58,8 +61,15 @@ export default function AdminPassengersPage({ role, onLogout }) {
   }, []);
 
   useEffect(() => {
-    load();
+    load("");
   }, [load]);
+
+  const handleSearchChange = (e) => {
+    const val = e.target.value;
+    setSearch(val);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => load(val), 350);
+  };
 
   const getPassengerRoute = (passengerId) =>
     routes.find(
@@ -149,7 +159,7 @@ export default function AdminPassengersPage({ role, onLogout }) {
         await syncPassengerRoute(modal.id, form.routeId);
       }
       setModal(null);
-      load();
+      load(search);
     } catch (e) {
       const d = e?.response?.data;
       setFormError(
@@ -163,7 +173,7 @@ export default function AdminPassengersPage({ role, onLogout }) {
   const handleDelete = async () => {
     await deletePassenger(confirmId);
     setConfirmId(null);
-    load();
+    load(search);
   };
 
   const toggleSort = (col) => {
@@ -212,6 +222,30 @@ export default function AdminPassengersPage({ role, onLogout }) {
             {icons.addUser({ size: 15 })}
             Nuevo estudiante
           </button>
+        </div>
+
+        {/* Filtros */}
+        <div className="flex flex-wrap items-center gap-3 mb-5">
+          <div className="relative flex-1 min-w-[200px]">
+            <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-gray-400">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            </span>
+            <input
+              type="text"
+              placeholder="Buscar por nombre, email, telefono, direccion..."
+              value={search}
+              onChange={handleSearchChange}
+              className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
+            />
+          </div>
+          {search && (
+            <button
+              onClick={() => { setSearch(""); load(""); }}
+              className="text-xs text-gray-400 hover:text-gray-600 underline whitespace-nowrap"
+            >
+              Limpiar
+            </button>
+          )}
         </div>
 
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">

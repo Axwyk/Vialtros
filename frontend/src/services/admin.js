@@ -1,7 +1,8 @@
 import api from "./api";
 
 // ── Usuarios ──────────────────────────────────────────────
-export const getUsers = () => api.get("/users/").then((r) => r.data);
+export const getUsers = (params) =>
+  api.get("/users/", { params }).then((r) => r.data);
 export const getUser = (id) => api.get(`/users/${id}/`).then((r) => r.data);
 export const createUser = (data) =>
   api.post("/users/", data).then((r) => r.data);
@@ -10,7 +11,8 @@ export const updateUser = (id, d) =>
 export const deleteUser = (id) => api.delete(`/users/${id}/`);
 
 // ── Conductores ───────────────────────────────────────────
-export const getDrivers = () => api.get("/drivers/").then((r) => r.data);
+export const getDrivers = (params) =>
+  api.get("/drivers/", { params }).then((r) => r.data);
 export const getDriver = (id) => api.get(`/drivers/${id}/`).then((r) => r.data);
 export const createDriver = (data) =>
   api.post("/drivers/", data).then((r) => r.data);
@@ -19,7 +21,8 @@ export const updateDriver = (id, d) =>
 export const deleteDriver = (id) => api.delete(`/drivers/${id}/`);
 
 // ── Rutas ─────────────────────────────────────────────────
-export const getRoutes = () => api.get("/routes/").then((r) => r.data);
+export const getRoutes = (params) =>
+  api.get("/routes/", { params }).then((r) => r.data);
 export const getRoute = (id) => api.get(`/routes/${id}/`).then((r) => r.data);
 export const getRouteMonitoringSummary = () =>
   api.get("/routes/monitoring-summary/").then((r) => r.data);
@@ -38,7 +41,8 @@ export const removePassengerFromRoute = (routeId, passengerId) =>
     .then((r) => r.data);
 
 // ── Pasajeros ─────────────────────────────────────────────────
-export const getPassengers = () => api.get("/passengers/").then((r) => r.data);
+export const getPassengers = (params) =>
+  api.get("/passengers/", { params }).then((r) => r.data);
 export const createPassenger = (data) =>
   api.post("/passengers/", data).then((r) => r.data);
 export const updatePassenger = (id, d) =>

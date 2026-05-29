@@ -5,6 +5,7 @@ import { icons } from "../components/dashboard/icons";
 import TrackingHero from "../components/tracking/TrackingHero";
 import MapView from "../components/MapView";
 import { getUserAssignedRoute, getDriverTrackings } from "../services/dashboard";
+import { getTrackingsByRoute } from "../services/tracking";
 import { geocodeAddress, getStreetRouteThroughPoints } from "../services/routing";
 import { connectTrackingWS } from "../services/ws";
 
@@ -63,6 +64,8 @@ export default function UserRoutePage({ role, onLogout }) {
   // Live tracking vía WebSocket
   const [livePosition, setLivePosition] = useState(null);
   const [wsStatus, setWsStatus] = useState("disconnected");
+  const [isPollingFallback, setIsPollingFallback] = useState(false);
+  const wsStatusRef = useRef(wsStatus);
 
   // Banners in-app
   const [showNearbyBanner, setShowNearbyBanner] = useState(false);
@@ -91,6 +94,10 @@ export default function UserRoutePage({ role, onLogout }) {
       })
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    wsStatusRef.current = wsStatus;
+  }, [wsStatus]);
 
   // Solicitar permiso de notificaciones
   useEffect(() => {
@@ -158,6 +165,7 @@ export default function UserRoutePage({ role, onLogout }) {
     if (!routeId) return;
 
     setWsStatus("connecting");
+    let opened = false;
 
     const ws = connectTrackingWS(
       routeId,
@@ -167,14 +175,15 @@ export default function UserRoutePage({ role, onLogout }) {
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
         const newPos = { latitude: lat, longitude: lng, speed_kmh: payload?.speed_kmh ?? null };
         setLivePosition(newPos);
+        setIsPollingFallback(false);
         setTrackings((prev) => {
           const next = [...prev, { ...newPos, route: routeId }];
           return next.slice(-60);
         });
       },
       {
-        onOpen: () => setWsStatus("connected"),
-        onClose: () => setWsStatus("disconnected"),
+        onOpen: () => { opened = true; setWsStatus("connected"); },
+        onClose: () => setWsStatus(opened ? "connecting" : "disconnected"),
         onError: () => setWsStatus("disconnected"),
         reconnectDelayMs: 3000,
         maxReconnectAttempts: 30,
@@ -182,6 +191,38 @@ export default function UserRoutePage({ role, onLogout }) {
     );
 
     return () => { ws.close(); };
+  }, [data?.route?.id]);
+
+  // Polling fallback: cuando el WS no está activo, consulta REST cada 5s
+  useEffect(() => {
+    const routeId = data?.route?.id;
+    if (!routeId) return undefined;
+
+    let cancelled = false;
+
+    const poll = async () => {
+      try {
+        const latest = await getTrackingsByRoute(routeId).catch(() => []);
+        if (cancelled || !Array.isArray(latest) || latest.length === 0) return;
+        const normalized = latest.map(normalizeTracking).filter(Boolean);
+        if (normalized.length === 0) return;
+        setTrackings((prev) => {
+          const existing = new Set(prev.map((t) => `${t.latitude},${t.longitude}`));
+          const fresh = normalized.filter((t) => !existing.has(`${t.latitude},${t.longitude}`));
+          return fresh.length > 0 ? [...prev, ...fresh].slice(-60) : prev;
+        });
+        const last = normalized[normalized.length - 1];
+        setLivePosition({ latitude: last.latitude, longitude: last.longitude, speed_kmh: last.speed_kmh ?? null });
+        if (wsStatusRef.current !== "connected") setIsPollingFallback(true);
+      } catch {
+        // ignorar errores transitorios
+      }
+    };
+
+    const intervalMs = wsStatusRef.current === "connected" ? 10000 : 5000;
+    poll();
+    const id = setInterval(poll, intervalMs);
+    return () => { cancelled = true; clearInterval(id); };
   }, [data?.route?.id]);
 
   // Lógica de notificaciones basada en posición en tiempo real
@@ -279,11 +320,13 @@ export default function UserRoutePage({ role, onLogout }) {
   }, [trackings, route?.id]);
 
   const WS_UI = {
-    connecting: { label: "Conectando...", dot: "bg-amber-500 animate-pulse", badge: "bg-amber-100 text-amber-700" },
-    connected:   { label: "En vivo",       dot: "bg-emerald-500 animate-pulse", badge: "bg-emerald-100 text-emerald-700" },
-    disconnected:{ label: "Sin conexión",  dot: "bg-red-400",                   badge: "bg-red-100 text-red-600" },
+    connecting:  { label: "Conectando...",      dot: "bg-amber-500 animate-pulse",   badge: "bg-amber-100 text-amber-700" },
+    connected:   { label: "En vivo",            dot: "bg-emerald-500 animate-pulse", badge: "bg-emerald-100 text-emerald-700" },
+    fallback:    { label: "En vivo (respaldo)", dot: "bg-amber-500",                 badge: "bg-amber-100 text-amber-700" },
+    disconnected:{ label: "Sin conexión",       dot: "bg-red-400",                   badge: "bg-red-100 text-red-600" },
   };
-  const { label: wsLabel, dot: wsDotClass, badge: wsBadgeClass } = WS_UI[wsStatus] ?? WS_UI.disconnected;
+  const wsUiKey = isPollingFallback && wsStatus !== "connected" ? "fallback" : wsStatus;
+  const { label: wsLabel, dot: wsDotClass, badge: wsBadgeClass } = WS_UI[wsUiKey] ?? WS_UI.disconnected;
 
   return (
     <div className="min-h-screen flex bg-gray-50 font-sans">

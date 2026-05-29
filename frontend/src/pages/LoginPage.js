@@ -6,6 +6,8 @@ import api from "../services/api";
 import {
   ensureLocalAccessSession,
   isLocalAccessEnabled,
+  getCurrentUser,
+  saveUserCache,
 } from "../services/auth";
 
 const LOGIN_FEATURES = [
@@ -127,6 +129,8 @@ export default function LoginPage({ onLogin }) {
       });
       localStorage.setItem("access", res.data.access);
       localStorage.setItem("refresh", res.data.refresh);
+      // Pre-cargar datos del usuario en caché para que el perfil cargue instantáneo
+      getCurrentUser().then((u) => { if (u) saveUserCache(u); });
       finishLogin(normalizedUsername);
     } catch (err) {
       if (isLocalAccessEnabled()) {

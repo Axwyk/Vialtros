@@ -61,6 +61,7 @@ export default function DriverLocationPage({ role }) {
   );
   const [lastSentAt, setLastSentAt] = useState("");
   const [lastCoords, setLastCoords] = useState(null);
+  const [gpsAccuracy, setGpsAccuracy] = useState(null);
   const watchIdRef = useRef(null);
   const guidedRouteTimerRef = useRef(null);
   const guidedRoutePointsRef = useRef([]);
@@ -218,6 +219,7 @@ export default function DriverLocationPage({ role }) {
         latitude: payload.latitude,
         longitude: payload.longitude,
         speed_kmh: payload.speed_kmh ?? 0,
+        accuracy: gpsAccuracy,
       });
       setLastSentAt(payload.timestamp);
       setStatusText(
@@ -238,6 +240,17 @@ export default function DriverLocationPage({ role }) {
   };
 
   const postPosition = async (position, routeId) => {
+    const accuracy = position.coords.accuracy;
+    setGpsAccuracy(Math.round(accuracy));
+
+    // Skip readings with poor accuracy — avoids sending GPS noise to the map
+    if (accuracy > 50) {
+      setStatusText(
+        `Precision insuficiente (${Math.round(accuracy)} m). Esperando mejor senal...`,
+      );
+      return false;
+    }
+
     // Snap GPS to nearest road before transmitting
     const rawLat = position.coords.latitude;
     const rawLng = position.coords.longitude;
@@ -538,14 +551,14 @@ export default function DriverLocationPage({ role }) {
             </div>
           </div>
 
-          {lastCoords && (
-            <div className="mt-4 grid gap-4 sm:grid-cols-3">
+          {(lastCoords || gpsAccuracy !== null) && (
+            <div className="mt-4 grid gap-4 sm:grid-cols-4">
               <div className="rounded-3xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-4 shadow-sm shadow-blue-100/40">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
                   Latitud
                 </p>
                 <p className="mt-2 text-lg font-bold text-blue-700">
-                  {lastCoords.latitude.toFixed(6)}
+                  {lastCoords ? lastCoords.latitude.toFixed(6) : "—"}
                 </p>
               </div>
               <div className="rounded-3xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-4 shadow-sm shadow-blue-100/40">
@@ -553,7 +566,7 @@ export default function DriverLocationPage({ role }) {
                   Longitud
                 </p>
                 <p className="mt-2 text-lg font-bold text-blue-700">
-                  {lastCoords.longitude.toFixed(6)}
+                  {lastCoords ? lastCoords.longitude.toFixed(6) : "—"}
                 </p>
               </div>
               <div className="rounded-3xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-4 shadow-sm shadow-blue-100/40">
@@ -561,7 +574,31 @@ export default function DriverLocationPage({ role }) {
                   Velocidad
                 </p>
                 <p className="mt-2 text-lg font-bold text-blue-700">
-                  {Math.round(lastCoords.speed_kmh || 0)} km/h
+                  {lastCoords ? `${Math.round(lastCoords.speed_kmh || 0)} km/h` : "—"}
+                </p>
+              </div>
+              <div
+                className={`rounded-3xl border p-4 shadow-sm ${
+                  gpsAccuracy !== null && gpsAccuracy <= 10
+                    ? "border-emerald-100 bg-gradient-to-br from-emerald-50 to-white shadow-emerald-100/40"
+                    : gpsAccuracy !== null && gpsAccuracy <= 50
+                      ? "border-yellow-100 bg-gradient-to-br from-yellow-50 to-white shadow-yellow-100/40"
+                      : "border-rose-100 bg-gradient-to-br from-rose-50 to-white shadow-rose-100/40"
+                }`}
+              >
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Precision GPS
+                </p>
+                <p
+                  className={`mt-2 text-lg font-bold ${
+                    gpsAccuracy !== null && gpsAccuracy <= 10
+                      ? "text-emerald-700"
+                      : gpsAccuracy !== null && gpsAccuracy <= 50
+                        ? "text-yellow-700"
+                        : "text-rose-700"
+                  }`}
+                >
+                  {gpsAccuracy !== null ? `±${gpsAccuracy} m` : "—"}
                 </p>
               </div>
             </div>

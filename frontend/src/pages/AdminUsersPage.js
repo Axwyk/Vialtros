@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import Sidebar from "../components/dashboard/Sidebar";
 import Modal from "../components/Modal";
 import { icons } from "../components/dashboard/icons";
@@ -9,7 +9,7 @@ import {
   deleteUser,
 } from "../services/admin";
 
-const ROLES = ["admin", "driver", "user"];
+const ALL_ROLES = ["admin", "driver", "user"];
 const EMPTY_FORM = {
   username: "",
   email: "",
@@ -18,18 +18,25 @@ const EMPTY_FORM = {
   is_active: true,
 };
 
-function Badge({ role }) {
+function Badge({ role, isOnlyAdmin }) {
   const map = {
     admin: "bg-violet-100 text-violet-700",
     driver: "bg-blue-100 text-blue-700",
     user: "bg-gray-100 text-gray-600",
   };
   return (
-    <span
-      className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${map[role] || map.user}`}
-    >
-      {role}
-    </span>
+    <div className="flex items-center gap-2">
+      <span
+        className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${map[role] || map.user}`}
+      >
+        {role}
+      </span>
+      {isOnlyAdmin && (
+        <span title="Único administrador del sistema" className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded text-[10px] font-semibold">
+          ÚNICO
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -47,18 +54,55 @@ export default function AdminUsersPage({ role, onLogout }) {
   const [sortDir, setSortDir] = useState("asc");
   const [selected, setSelected] = useState(new Set());
   const [confirmBulk, setConfirmBulk] = useState(false);
+  const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const debounceRef = useRef(null);
 
-  const load = useCallback(() => {
-    setLoading(true);
-    getUsers()
-      .then(setUsers)
-      .catch(() => setError("No se pudo cargar la lista de usuarios"))
-      .finally(() => setLoading(false));
-  }, []);
+  // Calcular roles disponibles
+  const getAvailableRoles = () => {
+    const adminExists = users.some((u) => u.role === "admin");
+    return adminExists ? ["driver", "user"] : ALL_ROLES;
+  };
+
+  // Determinar si estamos editando al único admin
+  const isEditingOnlyAdmin = () => {
+    if (modal === "create") return false;
+    return (
+      modal.role === "admin" &&
+      users.filter((u) => u.role === "admin").length === 1
+    );
+  };
+
+  const load = useCallback(
+    (searchVal, dateFromVal, dateToVal) => {
+      setLoading(true);
+      const params = {};
+      if (searchVal) params.search = searchVal;
+      if (dateFromVal) params.date_from = dateFromVal;
+      if (dateToVal) params.date_to = dateToVal;
+      getUsers(params)
+        .then(setUsers)
+        .catch(() => setError("No se pudo cargar la lista de usuarios"))
+        .finally(() => setLoading(false));
+    },
+    [],
+  );
 
   useEffect(() => {
-    load();
+    load("", "", "");
   }, [load]);
+
+  const handleSearchChange = (e) => {
+    const val = e.target.value;
+    setSearch(val);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => load(val, dateFrom, dateTo), 350);
+  };
+
+  const handleDateChange = (from, to) => {
+    load(search, from, to);
+  };
 
   const openCreate = () => {
     setForm(EMPTY_FORM);
@@ -100,7 +144,7 @@ export default function AdminUsersPage({ role, onLogout }) {
         await updateUser(modal.id, payload);
       }
       setModal(null);
-      load();
+      load(search, dateFrom, dateTo);
     } catch (e) {
       const detail = e?.response?.data;
       setFormError(
@@ -114,9 +158,21 @@ export default function AdminUsersPage({ role, onLogout }) {
   };
 
   const handleDelete = async () => {
+    const userToDelete = users.find((u) => u.id === confirmId);
+    
+    // Proteger el único administrador
+    if (userToDelete.role === "admin") {
+      const adminCount = users.filter((u) => u.role === "admin").length;
+      if (adminCount === 1) {
+        setFormError("No se puede eliminar el único administrador del sistema");
+        setConfirmId(null);
+        return;
+      }
+    }
+    
     await deleteUser(confirmId);
     setConfirmId(null);
-    load();
+    load(search, dateFrom, dateTo);
   };
 
   const toggleSort = (col) => {
@@ -151,7 +207,7 @@ export default function AdminUsersPage({ role, onLogout }) {
     await Promise.all([...selected].map((id) => deleteUser(id)));
     setSelected(new Set());
     setConfirmBulk(false);
-    load();
+    load(search, dateFrom, dateTo);
   };
 
   return (
@@ -173,6 +229,59 @@ export default function AdminUsersPage({ role, onLogout }) {
             {icons.addUser({ size: 15 })}
             Nuevo usuario
           </button>
+        </div>
+
+        {/* Filtros */}
+        <div className="flex flex-wrap items-end gap-3 mb-5">
+          <div className="relative flex-1 min-w-[200px]">
+            <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-gray-400">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            </span>
+            <input
+              type="text"
+              placeholder="Buscar por nombre, email..."
+              value={search}
+              onChange={handleSearchChange}
+              className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-gray-500 whitespace-nowrap">Desde</label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => {
+                setDateFrom(e.target.value);
+                handleDateChange(e.target.value, dateTo);
+              }}
+              className="rounded-lg border border-gray-200 text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-gray-500 whitespace-nowrap">Hasta</label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => {
+                setDateTo(e.target.value);
+                handleDateChange(dateFrom, e.target.value);
+              }}
+              className="rounded-lg border border-gray-200 text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
+            />
+          </div>
+          {(search || dateFrom || dateTo) && (
+            <button
+              onClick={() => {
+                setSearch("");
+                setDateFrom("");
+                setDateTo("");
+                load("", "", "");
+              }}
+              className="text-xs text-gray-400 hover:text-gray-600 underline whitespace-nowrap"
+            >
+              Limpiar filtros
+            </button>
+          )}
         </div>
 
         {/* Selección múltiple */}
@@ -315,7 +424,7 @@ export default function AdminUsersPage({ role, onLogout }) {
                       {u.email || "—"}
                     </td>
                     <td className="px-5 py-3.5">
-                      <Badge role={u.role} />
+                      <Badge role={u.role} isOnlyAdmin={u.role === "admin" && users.filter((x) => x.role === "admin").length === 1} />
                     </td>
                     <td className="px-5 py-3.5">
                       <span
@@ -334,7 +443,13 @@ export default function AdminUsersPage({ role, onLogout }) {
                         </button>
                         <button
                           onClick={() => setConfirmId(u.id)}
-                          className="text-xs text-red-500 hover:text-red-700 font-medium transition"
+                          disabled={u.role === "admin" && users.filter((x) => x.role === "admin").length === 1}
+                          className={`text-xs font-medium transition ${
+                            u.role === "admin" && users.filter((x) => x.role === "admin").length === 1
+                              ? "text-gray-300 cursor-not-allowed"
+                              : "text-red-500 hover:text-red-700"
+                          }`}
+                          title={u.role === "admin" && users.filter((x) => x.role === "admin").length === 1 ? "No se puede eliminar el único administrador" : ""}
                         >
                           Eliminar
                         </button>
@@ -361,6 +476,13 @@ export default function AdminUsersPage({ role, onLogout }) {
           onClose={() => setModal(null)}
         >
           <div className="flex flex-col gap-3">
+            {isEditingOnlyAdmin() && (
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                <p className="text-xs text-gray-700 font-medium">
+                  Este es el único administrador del sistema
+                </p>
+              </div>
+            )}
             <label className="text-sm font-medium text-gray-600">
               Usuario *
               <input
@@ -390,13 +512,19 @@ export default function AdminUsersPage({ role, onLogout }) {
                 onChange={(e) =>
                   setForm((f) => ({ ...f, role: e.target.value }))
                 }
+                disabled={isEditingOnlyAdmin()}
               >
-                {ROLES.map((r) => (
+                {getAvailableRoles().map((r) => (
                   <option key={r} value={r}>
                     {r}
                   </option>
                 ))}
               </select>
+              {isEditingOnlyAdmin() && (
+                <p className="text-xs text-gray-400 mt-1">
+                  No se puede cambiar el rol del único administrador
+                </p>
+              )}
             </label>
             <div className="flex flex-col gap-1">
               <span className="text-sm font-medium text-gray-600">

@@ -42,11 +42,30 @@ function buildLocalUser() {
   };
 }
 
+export function saveUserCache(user) {
+  if (user) localStorage.setItem("cached_user", JSON.stringify(user));
+}
+
+export function getUserCache() {
+  try {
+    const raw = localStorage.getItem("cached_user");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function clearSession() {
   localStorage.removeItem("access");
   localStorage.removeItem("refresh");
   localStorage.removeItem("role");
   localStorage.removeItem("username");
+  localStorage.removeItem("cached_user");
+}
+
+export async function updateCurrentUser(data) {
+  const res = await api.patch("/users/me/", data);
+  return res.data;
 }
 
 export async function getCurrentUser() {

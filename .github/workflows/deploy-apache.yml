@@ -1,0 +1,211 @@
+name: Deploy to Apache (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      # =========================================
+      # VALIDACIÓN LOCAL DEL FRONTEND
+      # =========================================
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm run build
+        env:
+          CI: false
+          REACT_APP_API_URL: ${{ secrets.REACT_APP_API_URL }}
+          REACT_APP_GOOGLE_MAPS_API_KEY: ${{ secrets.REACT_APP_GOOGLE_MAPS_API_KEY }}
+
+      # =========================================
+      # VALIDACIÓN LOCAL DEL BACKEND
+      # =========================================
+
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # =========================================
+      # DEPLOY VPS
+      # =========================================
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_SSH_PORT }}
+
+          script: |
+
+            APP_DIR="/var/www/ds1/Vialtros"
+
+            echo "================================="
+            echo "Starting deployment..."
+            echo "================================="
+
+            mkdir -p $APP_DIR
+
+            cd $APP_DIR || exit 1
+
+            # =========================================
+            # CLONAR REPO SI NO EXISTE
+            # =========================================
+
+            if [ ! -d ".git" ]; then
+              echo "Cloning repository..."
+              git clone https://github.com/Axwyk/Vialtros.git .
+            fi
+
+            # =========================================
+            # ACTUALIZAR REPO
+            # =========================================
+
+            echo "Pulling latest changes..."
+
+            git reset --hard
+            git clean -fd
+
+            git pull origin master
+
+            # =========================================
+            # VERIFICAR ESTRUCTURA
+            # =========================================
+
+            echo "Project structure:"
+            ls -la
+
+            echo "Frontend structure:"
+            ls -la frontend || exit 1
+
+            echo "Backend structure:"
+            ls -la backend || exit 1
+
+            # =========================================
+            # FRONTEND
+            # =========================================
+
+            echo "Installing frontend dependencies..."
+
+            cd frontend || exit 1
+
+            npm ci
+
+            echo "Building frontend..."
+
+            export CI=false
+            export REACT_APP_API_URL="${{ secrets.REACT_APP_API_URL }}"
+            export REACT_APP_GOOGLE_MAPS_API_KEY="${{ secrets.REACT_APP_GOOGLE_MAPS_API_KEY }}"
+            npm run build
+
+            # Verificar build
+            if [ ! -d "build" ]; then
+              echo "Frontend build failed!"
+              exit 1
+            fi
+
+            echo "Frontend build completed!"
+
+            # =========================================
+            # BACKEND
+            # =========================================
+
+            echo "Installing backend dependencies..."
+
+            cd ../backend || exit 1
+
+            # Crear venv si no existe
+            if [ ! -d "venv" ]; then
+              echo "Creating virtual environment..."
+              python3 -m venv venv
+            fi
+
+            source venv/bin/activate
+
+            pip install --upgrade pip
+
+            pip install -r requirements.txt
+
+            # =========================================
+            # VARIABLES DJANGO
+            # =========================================
+
+            export DB_ENGINE="${{ secrets.DB_ENGINE }}"
+            export DB_NAME="${{ secrets.DB_NAME }}"
+            export DB_USER="${{ secrets.DB_USER }}"
+            export DB_PASSWORD="${{ secrets.DB_PASSWORD }}"
+            export DB_HOST="${{ secrets.DB_HOST }}"
+            export DB_PORT="${{ secrets.DB_PORT }}"
+            export DJANGO_SECRET_KEY="${{ secrets.DJANGO_SECRET_KEY }}"
+            export DJANGO_DEBUG="False"
+            export DJANGO_ALLOWED_HOSTS="${{ secrets.DJANGO_ALLOWED_HOSTS }}"
+
+            # =========================================
+            # DJANGO
+            # =========================================
+
+            echo "Running migrations..."
+
+            python manage.py migrate
+
+            echo "Collecting static files..."
+
+            python manage.py collectstatic --noinput
+
+            # =========================================
+            # RESTART SERVICES
+            # =========================================
+
+            echo "Restarting services..."
+
+            sudo systemctl daemon-reload
+
+            sudo systemctl restart vialtros-django
+            sudo systemctl restart apache2
+
+            # =========================================
+            # STATUS
+            # =========================================
+
+            echo "Checking services..."
+
+            sudo systemctl status vialtros-django --no-pager
+            sudo systemctl status apache2 --no-pager
+
+            echo "================================="
+            echo "Deployment completed successfully!"
+            echo "================================="
