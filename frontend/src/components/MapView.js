@@ -38,6 +38,7 @@ const GOOGLE_MAPS_OPTIONS = {
   mapTypeControl: false,
   streetViewControl: false,
   zoomControl: false,
+  fullscreenControl: false,
   gestureHandling: "greedy",
   styles: GOOGLE_MAPS_STYLES,
 };
@@ -814,7 +815,7 @@ out center;`;
     mapRef.setOptions({
       styles,
       tilt: gpsMode ? 45 : 0,
-      zoomControl: !gpsMode,
+      zoomControl: false,
       mapTypeControl: false,
       streetViewControl: false,
       fullscreenControl: false,
@@ -1521,39 +1522,6 @@ out center;`;
         </div>
       )}
 
-
-      {/* ---- Botones de zoom ---- */}
-      <div
-        className="map-zoom-group"
-        style={{
-          position: "absolute",
-          right: 14,
-          bottom: gpsMode ? 130 : 60,
-          zIndex: 25,
-        }}
-      >
-        <button
-          className="map-ctrl-btn map-ctrl-btn--zoom"
-          onClick={handleZoomIn}
-          aria-label="Acercar"
-          title="Acercar"
-        >
-          <svg viewBox="0 0 24 24" fill="none" width="20" height="20">
-            <path d="M12 5v14M5 12h14" stroke="#3c4043" strokeWidth="2.2" strokeLinecap="round"/>
-          </svg>
-        </button>
-        <div className="map-zoom-sep" />
-        <button
-          className="map-ctrl-btn map-ctrl-btn--zoom"
-          onClick={handleZoomOut}
-          aria-label="Alejar"
-          title="Alejar"
-        >
-          <svg viewBox="0 0 24 24" fill="none" width="20" height="20">
-            <path d="M5 12h14" stroke="#3c4043" strokeWidth="2.2" strokeLinecap="round"/>
-          </svg>
-        </button>
-      </div>
 
       {/* ---- Leyenda ---- */}
       {!isAdmin && !isDriver && !gpsMode && (
