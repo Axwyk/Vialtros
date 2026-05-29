@@ -15,7 +15,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import action
 from django.contrib.auth import get_user_model
 from .serializers import (
-    UserSerializer, UserCreateSerializer,
+    UserSerializer, UserCreateSerializer, UserProfileSerializer,
     RouteSerializer, TrackingSerializer, TrackingIngestSerializer,
     DriverSerializer, PassengerSerializer, build_route_intermediate_stops,
 )
@@ -427,8 +427,13 @@ class UserViewSet(viewsets.ModelViewSet):
         
         return super().destroy(request, *args, **kwargs)
 
-    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    @action(detail=False, methods=['get', 'patch'], permission_classes=[permissions.IsAuthenticated])
     def me(self, request):
+        if request.method == 'PATCH':
+            serializer = UserProfileSerializer(request.user, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(UserSerializer(request.user).data)
         serializer = UserSerializer(request.user)
         return Response(serializer.data)
 

@@ -24,7 +24,14 @@ def build_route_intermediate_stops(passengers):
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ('id', 'username', 'email', 'role', 'is_active', 'is_staff')
+        fields = ('id', 'username', 'email', 'first_name', 'last_name', 'phone_number', 'role', 'is_active', 'is_staff')
+
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    """Serializer para que el usuario actualice su propio perfil."""
+    class Meta:
+        model = User
+        fields = ('first_name', 'last_name', 'email', 'phone_number')
 
 
 class UserBasicSerializer(serializers.ModelSerializer):

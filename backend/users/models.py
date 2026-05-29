@@ -13,6 +13,7 @@ class User(AbstractUser):
 		('user', 'User'),
 	)
 	role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='user')
+	phone_number = models.CharField(max_length=20, blank=True, default='')
 
 class Driver(models.Model):
 	user = models.OneToOneField('User', on_delete=models.CASCADE)
