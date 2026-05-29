@@ -222,7 +222,7 @@ export default function LoginPage({ onLogin }) {
 
         {/* Footer */}
         <p className="relative z-10 text-blue-300 text-xs">
-          © 2026 Vialtros. Todos los derechos reservados.
+          
         </p>
       </div>
 
