@@ -495,7 +495,11 @@ function loadPersistentRouteCache() {
     if (!raw) return;
     const entries = JSON.parse(raw);
     if (Array.isArray(entries)) {
-      entries.forEach(([key, value]) => routeCache.set(key, value));
+      entries.forEach(([key, value]) => {
+        if (value && value.coordinates?.length > 1 && !value.isStraightLine) {
+          routeCache.set(key, value);
+        }
+      });
     }
   } catch {
     /* ignore corrupt cache */
@@ -505,7 +509,7 @@ function loadPersistentRouteCache() {
 function savePersistentRouteCache() {
   try {
     const entries = Array.from(routeCache.entries())
-      .filter(([, v]) => v && v.coordinates?.length > 1)
+      .filter(([, v]) => v && v.coordinates?.length > 1 && !v.isStraightLine)
       .slice(-ROUTE_CACHE_MAX_ENTRIES);
     localStorage.setItem(ROUTE_CACHE_LS_KEY, JSON.stringify(entries));
   } catch {
@@ -871,7 +875,8 @@ async function requestStreetRoute(points, maxDistance = 60000) {
   try {
     const data = await fetchJsonWithRetry(
       `${OSRM_BASE}/${coordinates}?overview=full&geometries=geojson&continue_straight=false&steps=true`,
-      1,
+      2,
+      18000,
     );
     if (
       data?.code === "Ok" &&
@@ -891,7 +896,7 @@ async function requestStreetRoute(points, maxDistance = 60000) {
 
   if (Array.isArray(points) && points.length === 2) {
     try {
-      const valResult = await valhallaRoute(points[0], points[1]);
+      const valResult = await valhallaRoute(points[0], points[1], 20000);
       if (
         valResult?.coordinates?.length > 1 &&
         valResult.distance < maxDistance
@@ -906,7 +911,6 @@ async function requestStreetRoute(points, maxDistance = 60000) {
     }
   }
 
-  routeCache.set(cacheKey, null);
   return null;
 }
 
@@ -1028,7 +1032,9 @@ export async function getStreetRouteThroughPoints(points, options = {}) {
       ),
       isStraightLine: segmentRoutes.every((segment) => segment?.isStraightLine),
     };
-    routeCache.set(routeCacheKey, resolved);
+    if (!resolved.isStraightLine) {
+      routeCache.set(routeCacheKey, resolved);
+    }
     return resolved;
   }
 

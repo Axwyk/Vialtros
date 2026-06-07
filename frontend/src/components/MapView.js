@@ -446,7 +446,6 @@ export default function MapView({
   const userMovedMapRef = useRef(true);
   const containerRef = useRef(null);
   const canvasRef = useRef(null); // VIALTROS-GPS: ref para canvas animado
-  const animRefs = useRef({ planned: null, remaining: null, offset: 0, timer: null });
   const spokenWarningsRef = useRef(new Set());
   const lastSpokenStepKeyRef = useRef(null);
 
@@ -463,30 +462,6 @@ export default function MapView({
     return () => document.removeEventListener("click", close);
   }, [gpsMenuOpen]);
 
-  // Flechas de dirección animadas sobre las polylines de ruta
-  useEffect(() => {
-    if (!mapsApiLoaded) return undefined;
-    const refs = animRefs.current;
-    refs.offset = 0;
-    refs.timer = setInterval(() => {
-      refs.offset = (refs.offset + 1.5) % 100;
-      const pct = `${refs.offset.toFixed(1)}%`;
-      const arrowIcon = {
-        path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-        scale: 2.5,
-        fillColor: "#FFFFFF",
-        fillOpacity: 0.88,
-        strokeWeight: 0,
-      };
-      const icons = [{ icon: arrowIcon, offset: pct, repeat: "90px" }];
-      refs.planned?.setOptions({ icons });
-      refs.remaining?.setOptions({ icons });
-    }, 50);
-    return () => {
-      clearInterval(refs.timer);
-      refs.timer = null;
-    };
-  }, [mapsApiLoaded]);
 
   // VIALTROS-GPS: monta animación simple en <canvas> para modo conducción
   useEffect(() => {
@@ -1233,13 +1208,6 @@ out center;`;
                     strokeWeight: isHighlighted ? 8 : 4,
                     strokeOpacity: isDimmed ? 0.15 : isHighlighted ? 1.0 : 0.88,
                     geodesic: true,
-                    ...(isHighlighted && {
-                      icons: [{
-                        icon: { path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 2, fillColor: "#FFFFFF", fillOpacity: 0.8, strokeWeight: 0 },
-                        offset: "50%",
-                        repeat: "100px",
-                      }],
-                    }),
                   }}
                 />
               </React.Fragment>
@@ -1258,8 +1226,6 @@ out center;`;
                 options={{ strokeColor: "#FFFFFF", strokeWeight: gpsMode ? 22 : 16, strokeOpacity: gpsMode ? 0.72 : 0.55, geodesic: true }}
               />
               <Polyline
-                onLoad={(p) => { animRefs.current.planned = p; }}
-                onUnmount={() => { animRefs.current.planned = null; }}
                 path={toLatLngArray(plannedLine)}
                 options={{ strokeColor: gpsMode ? "#1a56db" : "#1D4ED8", strokeWeight: gpsMode ? 14 : 10, strokeOpacity: 1.0, geodesic: true }}
               />
@@ -1278,8 +1244,6 @@ out center;`;
                 options={{ strokeColor: "#FFFFFF", strokeWeight: gpsMode ? 22 : 16, strokeOpacity: gpsMode ? 0.72 : 0.5, geodesic: true }}
               />
               <Polyline
-                onLoad={(p) => { animRefs.current.remaining = p; }}
-                onUnmount={() => { animRefs.current.remaining = null; }}
                 path={toLatLngArray(remainingLine)}
                 options={{ strokeColor: "#2563EB", strokeWeight: gpsMode ? 14 : 10, strokeOpacity: 1.0, geodesic: true }}
               />
