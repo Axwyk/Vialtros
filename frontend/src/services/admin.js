@@ -39,6 +39,8 @@ export const removePassengerFromRoute = (routeId, passengerId) =>
   api
     .post(`/routes/${routeId}/remove_passenger/`, { passenger_id: passengerId })
     .then((r) => r.data);
+export const completeRoute = (routeId) =>
+  api.post(`/routes/${routeId}/complete/`).then((r) => r.data);
 
 // ── Pasajeros ─────────────────────────────────────────────────
 export const getPassengers = (params) =>

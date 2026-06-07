@@ -25,7 +25,8 @@ export async function getUserAssignedRoute() {
   return response.data;
 }
 
-export async function getDriverTrackings() {
-  const response = await api.get("/tracking/");
-  return response.data;
+export async function getDriverTrackings(routeId) {
+  const url = routeId ? `/tracking/?route=${routeId}` : "/tracking/";
+  const response = await api.get(url);
+  return Array.isArray(response.data) ? response.data : [];
 }

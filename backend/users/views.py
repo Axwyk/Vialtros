@@ -1,4 +1,5 @@
 import logging
+import math
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
@@ -18,8 +19,9 @@ from .serializers import (
     UserSerializer, UserCreateSerializer, UserProfileSerializer,
     RouteSerializer, TrackingSerializer, TrackingIngestSerializer,
     DriverSerializer, PassengerSerializer, build_route_intermediate_stops,
+    RouteRatingSerializer,
 )
-from .models import Route, Tracking, Driver, Passenger, PasswordResetToken
+from .models import Route, Tracking, Driver, Passenger, PasswordResetToken, Notification, NotificationType, RouteRating
 from .permissions import IsAdmin, IsDriver, IsPassenger
 
 User = get_user_model()
@@ -55,6 +57,61 @@ def estimate_speed_kmh(previous_tracking, latest_tracking):
         (latest_tracking.latitude, latest_tracking.longitude),
     )
     return max(0, round(distance_km / elapsed_hours))
+
+
+def haversine_km(lat1, lng1, lat2, lng2):
+    """Calcula distancia en km entre dos puntos geograficos usando la formula de Haversine."""
+    R = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlng = math.radians(lng2 - lng1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlng / 2) ** 2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _should_notify(user, notif_type, route, cooldown_minutes=15):
+    """Retorna True si no existe ya una notificacion del mismo tipo para el usuario en los ultimos cooldown_minutes."""
+    cutoff = timezone.now() - timezone.timedelta(minutes=cooldown_minutes)
+    return not Notification.objects.filter(
+        user=user,
+        type=notif_type,
+        route=route,
+        created_at__gte=cutoff,
+    ).exists()
+
+
+def _create_and_broadcast_notification(user, notif_type, title, message, route=None, metadata=None):
+    """Crea una Notification en base de datos y la transmite via WebSocket al usuario."""
+    notif = Notification.objects.create(
+        user=user,
+        type=notif_type,
+        title=title,
+        message=message,
+        route=route,
+        metadata=metadata or {},
+    )
+    channel_layer = get_channel_layer()
+    if channel_layer is None:
+        return notif
+    try:
+        async_to_sync(channel_layer.group_send)(
+            f'notifications_{user.pk}',
+            {
+                'type': 'notification_message',
+                'payload': {
+                    'id': notif.pk,
+                    'type': notif_type,
+                    'title': title,
+                    'message': message,
+                    'route': route.pk if route else None,
+                    'read': False,
+                    'created_at': notif.created_at.isoformat(),
+                    'metadata': metadata or {},
+                },
+            },
+        )
+    except Exception as e:
+        logger.warning("No se pudo enviar notificacion WS al usuario %s: %s", user.pk, e)
+    return notif
 
 
 def build_weekly_activity(trackings_qs):
@@ -252,7 +309,7 @@ def build_admin_monitoring_summary(routes):
     no_signal_route_ids = []
 
     for route in routes:
-        total_passengers = route.passengers.count()
+        total_passengers = len(route.passengers.all())
         total_students += total_passengers
 
         latest_tracking = latest_by_route.get(route.id)
@@ -542,10 +599,15 @@ class UserViewSet(viewsets.ModelViewSet):
             passenger = Passenger.objects.get(user=request.user)
         except Passenger.DoesNotExist:
             return Response({'detail': 'No es pasajero'}, status=status.HTTP_403_FORBIDDEN)
-        routes = Route.objects.filter(passengers=passenger)
-        if not routes.exists():
+        route = (
+            Route.objects
+            .filter(passengers=passenger)
+            .select_related('driver__user')
+            .prefetch_related('passengers__user')
+            .first()
+        )
+        if not route:
             return Response({'detail': 'No tiene ruta asignada'}, status=status.HTTP_404_NOT_FOUND)
-        route = routes.first()
         return Response({
             'route': RouteSerializer(route).data,
             'driver': DriverSerializer(route.driver).data if route.driver else None,
@@ -617,6 +679,30 @@ class RouteViewSet(viewsets.ModelViewSet):
         route.passengers.remove(passenger)
         return Response({'detail': 'Pasajero removido'})
 
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    def complete(self, request, pk=None):
+        """Marca una ruta como completada. Solo el conductor asignado o un admin pueden hacerlo."""
+        try:
+            route = Route.objects.get(pk=pk)
+        except Route.DoesNotExist:
+            return Response({'detail': 'Ruta no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+
+        user = request.user
+        if user.role == 'driver':
+            try:
+                driver = Driver.objects.get(user=user)
+            except Driver.DoesNotExist:
+                return Response({'detail': 'No es conductor.'}, status=status.HTTP_403_FORBIDDEN)
+            if route.driver_id != driver.id:
+                return Response({'detail': 'No tienes permiso para finalizar esta ruta.'}, status=status.HTTP_403_FORBIDDEN)
+        elif user.role != 'admin':
+            return Response({'detail': 'Sin permiso.'}, status=status.HTTP_403_FORBIDDEN)
+
+        route.status = 'completed'
+        route.completed_at = timezone.now()
+        route.save(update_fields=['status', 'completed_at'])
+        return Response({'detail': 'Ruta marcada como completada.'})
+
 
 class TrackingViewSet(viewsets.ModelViewSet):
     queryset = Tracking.objects.all()
@@ -681,37 +767,90 @@ class TrackingViewSet(viewsets.ModelViewSet):
                     },
                 },
             )
-        except Exception:
-            # no fatal si no hay layer soporte
-            pass
+        except Exception as e:
+            logger.warning("No se pudo enviar al canal monitoring: %s", e)
 
     def get_queryset(self):
         user = self.request.user
+        base_qs = Tracking.objects.select_related('route', 'passenger__user')
         if user.role == 'admin':
-            return Tracking.objects.all()
+            return base_qs
         elif user.role == 'driver':
             try:
                 driver = Driver.objects.get(user=user)
             except Driver.DoesNotExist:
                 return Tracking.objects.none()
-            return Tracking.objects.filter(route__in=Route.objects.filter(driver=driver))
+            return base_qs.filter(route__in=Route.objects.filter(driver=driver))
         elif user.role == 'user':
             try:
                 passenger = Passenger.objects.get(user=user)
             except Passenger.DoesNotExist:
                 return Tracking.objects.none()
-            return Tracking.objects.filter(passenger=passenger)
+            return base_qs.filter(passenger=passenger)
+        return Tracking.objects.none()
+
+    def list(self, request):
+        qs = self.get_queryset()
+
+        route_id = request.query_params.get('route')
+        if route_id:
+            qs = qs.filter(route_id=route_id)
+
+        # Ventana de tiempo configurable via ?window=<minutos> (default: 20)
+        try:
+            window = max(1, min(int(request.query_params.get('window', 20)), 120))
+        except (ValueError, TypeError):
+            window = 20
+        since = timezone.now() - timezone.timedelta(minutes=window)
+        qs = qs.filter(timestamp__gte=since)
+
+        # Máximo 100 registros más recientes para mantener el payload pequeño
+        qs = qs.order_by('-timestamp')[:100]
+
+        return Response(TrackingSerializer(list(reversed(list(qs))), many=True).data)
 
     @action(detail=True, methods=['post', 'put'], permission_classes=[IsDriver])
     def update_status(self, request, pk=None):
         tracking = self.get_object()
         new_status = request.data.get('status')
-        if new_status not in ['picked', 'not_picked']:
-            return Response({'detail': 'Estado inválido. Use "picked" o "not_picked".'}, status=status.HTTP_400_BAD_REQUEST)
+        valid_statuses = ['picked', 'not_picked', 'dropped_off']
+        if new_status not in valid_statuses:
+            return Response({'detail': 'Estado inválido. Use "picked", "not_picked" o "dropped_off".'}, status=status.HTTP_400_BAD_REQUEST)
         tracking.status = new_status
         tracking.save()
+        self._notify_status_change(tracking, new_status)
         serializer = self.get_serializer(tracking)
         return Response(serializer.data)
+
+    def _notify_status_change(self, tracking, new_status):
+        """Envia notificacion al padre del estudiante cuando cambia su estado."""
+        if not tracking.passenger_id:
+            return
+        try:
+            parent_user = tracking.passenger.user
+        except Exception as e:
+            logger.warning("_notify_status_change: no se pudo obtener usuario del pasajero %s: %s", tracking.passenger_id, e)
+            return
+        route = tracking.route
+        student_name = parent_user.get_full_name() or parent_user.username
+        if new_status == 'picked':
+            _create_and_broadcast_notification(
+                user=parent_user,
+                notif_type=NotificationType.STUDENT_PICKED_UP,
+                title='Estudiante recogido',
+                message=f'{student_name} ha sido recogido por la ruta {route.name}.',
+                route=route,
+                metadata={'passenger_id': tracking.passenger_id, 'route_id': route.pk},
+            )
+        elif new_status == 'dropped_off':
+            _create_and_broadcast_notification(
+                user=parent_user,
+                notif_type=NotificationType.STUDENT_DROPPED_OFF,
+                title='Estudiante dejado en su parada',
+                message=f'{student_name} ha sido dejado en su parada de la ruta {route.name}.',
+                route=route,
+                metadata={'passenger_id': tracking.passenger_id, 'route_id': route.pk},
+            )
 
     @action(detail=False, methods=['post'], permission_classes=[IsDriver])
     def update_status_by_passenger(self, request):
@@ -719,8 +858,9 @@ class TrackingViewSet(viewsets.ModelViewSet):
         passenger_id = request.data.get('passenger_id')
         new_status = request.data.get('status')
 
-        if new_status not in ['picked', 'not_picked']:
-            return Response({'detail': 'Estado inválido. Use "picked" o "not_picked".'}, status=status.HTTP_400_BAD_REQUEST)
+        valid_statuses = ['picked', 'not_picked', 'dropped_off']
+        if new_status not in valid_statuses:
+            return Response({'detail': 'Estado inválido. Use "picked", "not_picked" o "dropped_off".'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             driver = Driver.objects.get(user=request.user)
@@ -753,6 +893,7 @@ class TrackingViewSet(viewsets.ModelViewSet):
             tracking.status = new_status
             tracking.save()
 
+        self._notify_status_change(tracking, new_status)
         serializer = self.get_serializer(tracking)
         return Response(serializer.data)
 
@@ -776,7 +917,186 @@ class TrackingViewSet(viewsets.ModelViewSet):
             response_payload['source'] = ingest_meta['source']
 
         self._broadcast_tracking(response_payload)
+        self._process_proximity_notifications(request, tracking, route)
         return Response(response_payload, status=status.HTTP_201_CREATED)
+
+    # --- Proximidad y notificaciones automaticas ---
+    APPROACHING_STOP_KM = 1.5
+    APPROACHING_DEST_KM = 0.5
+    DRIVER_NEAR_STOP_KM = 0.5
+    DRIVER_NEAR_DEST_KM = 0.5
+    ROUTE_START_WINDOW_HOURS = 3
+
+    def _process_proximity_notifications(self, request, tracking, route):
+        bus_lat = tracking.latitude
+        bus_lng = tracking.longitude
+        passengers = list(route.passengers.select_related('user').all())
+
+        window = timezone.now() - timezone.timedelta(hours=self.ROUTE_START_WINDOW_HOURS)
+        route_already_active = Tracking.objects.filter(
+            route=route,
+            timestamp__gte=window,
+        ).exclude(pk=tracking.pk).exists()
+
+        if not route_already_active:
+            # Primer tracking de la sesion: solo notificar inicio de ruta
+            self._notify_route_start(route, passengers)
+            return
+
+        # La ruta ya estaba activa: notificar proximidades
+        self._check_proximity_to_stops(bus_lat, bus_lng, route, passengers)
+        self._check_proximity_to_destination(bus_lat, bus_lng, route, passengers)
+
+        user = getattr(request, 'user', None)
+        if user and getattr(user, 'is_authenticated', False) and user.role == 'driver':
+            self._check_driver_proximity(user, bus_lat, bus_lng, route, passengers)
+
+    def _notify_route_start(self, route, passengers):
+        """Notifica inicio de ruta a todos los padres de la ruta."""
+        for passenger in passengers:
+            _create_and_broadcast_notification(
+                user=passenger.user,
+                notif_type=NotificationType.ROUTE_STARTED,
+                title='Ruta iniciada',
+                message=f'La ruta {route.name} ha comenzado. El bus esta en camino.',
+                route=route,
+                metadata={'route_id': route.pk},
+            )
+
+    def _check_proximity_to_stops(self, bus_lat, bus_lng, route, passengers):
+        for passenger in passengers:
+            if not passenger.pickup_lat or not passenger.pickup_lng:
+                continue
+            dist = haversine_km(bus_lat, bus_lng, passenger.pickup_lat, passenger.pickup_lng)
+            if dist <= self.APPROACHING_STOP_KM:
+                parent_user = passenger.user
+                if _should_notify(parent_user, NotificationType.APPROACHING_STOP, route):
+                    stop_label = passenger.pickup_address or 'su parada'
+                    _create_and_broadcast_notification(
+                        user=parent_user,
+                        notif_type=NotificationType.APPROACHING_STOP,
+                        title='Bus aproximandose a su parada',
+                        message=f'El bus de la ruta {route.name} esta aproximandose a {stop_label}.',
+                        route=route,
+                        metadata={'passenger_id': passenger.pk, 'distance_km': round(dist, 2)},
+                    )
+
+    def _check_proximity_to_destination(self, bus_lat, bus_lng, route, passengers):
+        if not route.destination_lat or not route.destination_lng:
+            return
+        dist = haversine_km(bus_lat, bus_lng, route.destination_lat, route.destination_lng)
+        if dist > self.APPROACHING_DEST_KM:
+            return
+        for passenger in passengers:
+            parent_user = passenger.user
+            if _should_notify(parent_user, NotificationType.APPROACHING_DESTINATION, route):
+                _create_and_broadcast_notification(
+                    user=parent_user,
+                    notif_type=NotificationType.APPROACHING_DESTINATION,
+                    title='Bus aproximandose al destino',
+                    message=f'El bus de la ruta {route.name} esta llegando al destino: {route.destination}.',
+                    route=route,
+                    metadata={'route_id': route.pk, 'distance_km': round(dist, 2)},
+                )
+
+    def _check_driver_proximity(self, driver_user, bus_lat, bus_lng, route, passengers):
+        for passenger in passengers:
+            if not passenger.pickup_lat or not passenger.pickup_lng:
+                continue
+            dist = haversine_km(bus_lat, bus_lng, passenger.pickup_lat, passenger.pickup_lng)
+            if dist <= self.DRIVER_NEAR_STOP_KM:
+                if _should_notify(driver_user, NotificationType.DRIVER_NEAR_STOP, route, cooldown_minutes=10):
+                    student_name = passenger.user.get_full_name() or passenger.user.username
+                    stop_label = passenger.pickup_address or 'sin direccion registrada'
+                    _create_and_broadcast_notification(
+                        user=driver_user,
+                        notif_type=NotificationType.DRIVER_NEAR_STOP,
+                        title='Proxima parada de estudiante',
+                        message=f'Se esta aproximando a la parada de {student_name}: {stop_label}.',
+                        route=route,
+                        metadata={'passenger_id': passenger.pk, 'distance_km': round(dist, 2)},
+                    )
+        if route.destination_lat and route.destination_lng:
+            dist_dest = haversine_km(bus_lat, bus_lng, route.destination_lat, route.destination_lng)
+            if dist_dest <= self.DRIVER_NEAR_DEST_KM:
+                if _should_notify(driver_user, NotificationType.DRIVER_NEAR_DESTINATION, route, cooldown_minutes=10):
+                    _create_and_broadcast_notification(
+                        user=driver_user,
+                        notif_type=NotificationType.DRIVER_NEAR_DESTINATION,
+                        title='Aproximandose al destino final',
+                        message=f'Se esta aproximando al destino final de la ruta {route.name}: {route.destination}.',
+                        route=route,
+                        metadata={'route_id': route.pk, 'distance_km': round(dist_dest, 2)},
+                    )
+
+
+class NotificationViewSet(viewsets.GenericViewSet):
+    """Notificaciones del usuario autenticado."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Notification.objects.filter(user=self.request.user)
+
+    def list(self, request):
+        qs = self.get_queryset()
+        data = list(qs.values(
+            'id', 'type', 'title', 'message', 'read', 'created_at', 'metadata',
+            'route_id',
+        ))
+        return Response(data)
+
+    @action(detail=True, methods=['post'])
+    def mark_read(self, request, pk=None):
+        updated = self.get_queryset().filter(pk=pk).update(read=True)
+        if not updated:
+            return Response({'detail': 'Notificacion no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response({'status': 'ok'})
+
+    @action(detail=False, methods=['post'])
+    def mark_all_read(self, request):
+        self.get_queryset().filter(read=False).update(read=True)
+        return Response({'status': 'ok'})
+
+    @action(detail=False, methods=['get'])
+    def unread_count(self, request):
+        count = self.get_queryset().filter(read=False).count()
+        return Response({'count': count})
+
+    @action(detail=True, methods=['post'])
+    def send_message(self, request, pk=None):
+        """Envia un mensaje del padre al conductor de la ruta asociada a la notificacion."""
+        try:
+            notif = self.get_queryset().get(pk=pk)
+        except Notification.DoesNotExist:
+            return Response({'detail': 'Notificacion no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+
+        message_text = (request.data.get('message') or '').strip()
+        if not message_text:
+            return Response({'detail': 'El mensaje no puede estar vacio.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        route = notif.route
+        if not route:
+            return Response({'detail': 'Esta notificacion no tiene ruta asociada.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not route.driver:
+            return Response({'detail': 'La ruta no tiene conductor asignado actualmente.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        driver_user = route.driver.user
+        sender_name = request.user.get_full_name() or request.user.username
+
+        _create_and_broadcast_notification(
+            user=driver_user,
+            notif_type=NotificationType.MESSAGE_FROM_USER,
+            title='Mensaje de padre de familia',
+            message=f'{sender_name}: {message_text}',
+            route=route,
+            metadata={
+                'from_user_id': request.user.pk,
+                'from_username': request.user.username,
+                'original_notification_id': notif.pk,
+            },
+        )
+        return Response({'status': 'ok'})
 
 
 class ForgotPasswordView(APIView):
@@ -869,8 +1189,8 @@ class ForgotPasswordView(APIView):
                 html_message=html_body,
                 fail_silently=False,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error("Error enviando correo de recuperacion a %s: %s", user.email, e)
 
         return GENERIC_RESPONSE
 
@@ -911,3 +1231,34 @@ class ResetPasswordView(APIView):
 
         return Response({'message': 'Contraseña actualizada correctamente.'})
 
+
+class RouteRatingViewSet(viewsets.ModelViewSet):
+    """
+    Calificaciones de rutas por parte de los conductores.
+    POST /api/route-ratings/        — crear o actualizar (upsert)
+    GET  /api/route-ratings/?route= — listar por ruta (solo admin)
+    """
+    serializer_class = RouteRatingSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.role == 'admin':
+            route_id = self.request.query_params.get('route')
+            qs = RouteRating.objects.all()
+            if route_id:
+                qs = qs.filter(route_id=route_id)
+            return qs
+        return RouteRating.objects.filter(driver=user)
+
+    def perform_create(self, serializer):
+        route_id = serializer.validated_data.get('route').id
+        # Upsert: si ya existe una calificacion del mismo conductor para esta ruta, actualiza
+        RouteRating.objects.update_or_create(
+            route_id=route_id,
+            driver=self.request.user,
+            defaults={
+                'stars': serializer.validated_data['stars'],
+                'comment': serializer.validated_data.get('comment', ''),
+            }
+        )

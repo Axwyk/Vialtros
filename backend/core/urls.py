@@ -34,6 +34,8 @@ from users.views import (
     PassengerViewSet,
     RouteViewSet,
     TrackingViewSet,
+    NotificationViewSet,
+    RouteRatingViewSet,
     ForgotPasswordView,
     ResetPasswordView,
 )
@@ -47,6 +49,8 @@ router.register(r'drivers', DriverViewSet)
 router.register(r'passengers', PassengerViewSet)
 router.register(r'routes', RouteViewSet)
 router.register(r'tracking', TrackingViewSet)
+router.register(r'notifications', NotificationViewSet, basename='notification')
+router.register(r'route-ratings', RouteRatingViewSet, basename='route-rating')
 
 urlpatterns = [
     path('', home, name='home'),
