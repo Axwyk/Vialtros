@@ -10,6 +10,7 @@ application = ProtocolTypeRouter({
         URLRouter([
             re_path(r"^ws/tracking/(?P<route_id>\d+)/$", consumers.TrackingConsumer.as_asgi()),
             re_path(r"^ws/monitoring/$", consumers.AdminMonitoringConsumer.as_asgi()),
+            re_path(r"^ws/notifications/$", consumers.NotificationConsumer.as_asgi()),
         ])
     ),
 })

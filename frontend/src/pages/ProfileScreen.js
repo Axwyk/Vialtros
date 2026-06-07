@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import SectionCard from "../components/dashboard/SectionCard";
 import { getCurrentUser, updateCurrentUser, getUserCache, saveUserCache } from "../services/auth";
 
@@ -41,7 +41,7 @@ export default function ProfileScreen() {
     return (localStorage.getItem("username") || "default").toLowerCase();
   };
 
-  const applyUserData = (u, token) => {
+  const applyUserData = useCallback((u, token) => {
     if (!u) return;
     const usernameRaw = localStorage.getItem("username") || u.username || "";
     const username = usernameRaw.charAt(0).toUpperCase() + usernameRaw.slice(1);
@@ -57,7 +57,7 @@ export default function ProfileScreen() {
     const userIdKey = getUserIdKey(u, token);
     const saved = localStorage.getItem(`profileImage_${userIdKey}`);
     setAvatar(saved || DEFAULT_AVATAR);
-  };
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem("access");
@@ -72,7 +72,7 @@ export default function ProfileScreen() {
       saveUserCache(u);
       applyUserData(u, token);
     });
-  }, []);
+  }, [applyUserData]);
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
