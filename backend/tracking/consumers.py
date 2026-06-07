@@ -1,5 +1,10 @@
 import json
+import logging
+
 from channels.generic.websocket import AsyncWebsocketConsumer
+from channels.db import database_sync_to_async
+
+logger = logging.getLogger(__name__)
 
 class TrackingConsumer(AsyncWebsocketConsumer):
     """
@@ -73,9 +78,33 @@ class AdminMonitoringConsumer(AsyncWebsocketConsumer):
                     'timestamp': payload.get('timestamp') or payload.get('time') or None,
                     'event': payload.get('event') or 'position_update',
                 }
-            except Exception:
+            except Exception as e:
+                logger.warning("AdminMonitoringConsumer: error procesando payload: %s", e)
                 minimal = {}
             await self.send(text_data=json.dumps(minimal))
             return
 
         await self.send(text_data=json.dumps(payload))
+
+
+class NotificationConsumer(AsyncWebsocketConsumer):
+    """
+    Consumer de notificaciones personalizadas por usuario.
+    Cada usuario autenticado se suscribe a su grupo privado notifications_{user_id}.
+    """
+    async def connect(self):
+        user = self.scope.get('user')
+        if not user or not getattr(user, 'is_authenticated', False):
+            await self.close()
+            return
+        self.user_id = user.pk
+        self.group_name = f'notifications_{self.user_id}'
+        await self.channel_layer.group_add(self.group_name, self.channel_name)
+        await self.accept()
+
+    async def disconnect(self, close_code):
+        if hasattr(self, 'group_name'):
+            await self.channel_layer.group_discard(self.group_name, self.channel_name)
+
+    async def notification_message(self, event):
+        await self.send(text_data=json.dumps(event['payload']))

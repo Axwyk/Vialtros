@@ -1,19 +1,8 @@
 import api from "./api";
 
-export async function getTrackings() {
-  const response = await api.get("/tracking/");
-  return Array.isArray(response.data) ? response.data : [];
-}
-
 export async function getTrackingsByRoute(routeId) {
-  const data = await getTrackings();
-
-  if (!Array.isArray(data)) {
-    return [];
-  }
-
-  const routeIdNum = Number(routeId);
-  return data.filter((item) => Number(item.route) === routeIdNum);
+  const response = await api.get(`/tracking/?route=${routeId}`);
+  return Array.isArray(response.data) ? response.data : [];
 }
 
 export async function updateTrackingStatus(trackingId, status) {

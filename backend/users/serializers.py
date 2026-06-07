@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Driver, Passenger, Route, Tracking, PickupStatus
+from .models import User, Driver, Passenger, Route, Tracking, PickupStatus, RouteRating
 
 
 def build_route_intermediate_stops(passengers):
@@ -25,6 +25,19 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ('id', 'username', 'email', 'first_name', 'last_name', 'phone_number', 'role', 'is_active', 'is_staff')
+        read_only_fields = ('is_active', 'is_staff')
+
+
+class RouteRatingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RouteRating
+        fields = ('id', 'route', 'driver', 'stars', 'comment', 'created_at')
+        read_only_fields = ('id', 'driver', 'created_at')
+
+    def validate_stars(self, value):
+        if not (1 <= value <= 5):
+            raise serializers.ValidationError("Las estrellas deben estar entre 1 y 5.")
+        return value
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -128,10 +141,12 @@ class RouteSerializer(serializers.ModelSerializer):
         fields = ('id', 'name', 'origin', 'destination',
                   'origin_lat', 'origin_lng', 'destination_lat', 'destination_lng',
                   'driver', 'driver_detail',
-                  'passengers', 'passenger_details', 'passenger_count', 'intermediate_stops')
+                  'passengers', 'passenger_details', 'passenger_count', 'intermediate_stops',
+                  'status', 'completed_at')
+        read_only_fields = ('status', 'completed_at')
 
     def get_passenger_count(self, obj):
-        return obj.passengers.count()
+        return len(obj.passengers.all())
 
     def get_intermediate_stops(self, obj):
         passengers = obj.passengers.all()

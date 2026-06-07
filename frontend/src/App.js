@@ -1,6 +1,13 @@
 // App principal con rutas protegidas y flujo de login/logout
 import React, { useState, useEffect, useCallback } from "react";
-import { getCurrentUser } from "./services/auth";
+import {
+  getCurrentUser,
+  clearSession,
+  ensureLocalAccessSession,
+  isLocalAccessEnabled,
+} from "./services/auth";
+import { NotificationProvider } from "./context/NotificationContext";
+import NotificationToast from "./components/notifications/NotificationToast";
 import {
   BrowserRouter as Router,
   Routes,
@@ -22,11 +29,6 @@ import DriverLocationPage from "./pages/DriverLocationPage";
 import LandingPage from "./pages/LandingPage";
 import PrivateRoute from "./components/PrivateRoute";
 import { Logo } from "./components/Logo";
-import {
-  clearSession,
-  ensureLocalAccessSession,
-  isLocalAccessEnabled,
-} from "./services/auth";
 import ActivityPage from "./pages/ActivityPage";
 import Footer from "./components/Footer";
 import PrivacyPage from "./pages/PrivacyPage";
@@ -49,16 +51,22 @@ function App() {
 
   useEffect(() => {
     if (isAuth) {
-      getCurrentUser().then((user) => {
-        if (user && user.role) {
-          setRole(user.role);
-          localStorage.setItem("role", user.role);
-        } else {
+      getCurrentUser()
+        .then((user) => {
+          if (user && user.role) {
+            setRole(user.role);
+            localStorage.setItem("role", user.role);
+          } else {
+            clearSession();
+            setIsAuth(false);
+            setRole(null);
+          }
+        })
+        .catch(() => {
           clearSession();
           setIsAuth(false);
           setRole(null);
-        }
-      });
+        });
     } else {
       setRole(null);
       localStorage.removeItem("role");
@@ -81,6 +89,7 @@ function App() {
   };
 
   return (
+    <NotificationProvider isAuth={isAuth} role={role}>
     <Router>
       <div className="bg-gray-100 h-screen flex flex-col overflow-hidden">
         {isAuth && (
@@ -88,26 +97,28 @@ function App() {
             <Link to="/dashboard" className="flex items-center">
               <Logo variant="light" iconSize={36} />
             </Link>
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-2 text-sm font-medium text-white-500 hover:text-red-600 transition px-3 py-2 rounded-lg hover:bg-red-50"
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 text-sm font-medium text-white-500 hover:text-red-600 transition px-3 py-2 rounded-lg hover:bg-red-50"
               >
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                <polyline points="16 17 21 12 16 7" />
-                <line x1="21" y1="12" x2="9" y2="12" />
-              </svg>
-              Cerrar sesión
-            </button>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <polyline points="16 17 21 12 16 7" />
+                  <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>
+                Cerrar sesion
+              </button>
+            </div>
           </nav>
         )}
         <div className="flex-1 min-h-0 overflow-auto flex flex-col">
@@ -222,6 +233,8 @@ function App() {
         </div>
       </div>
     </Router>
+    {role !== "admin" && <NotificationToast />}
+    </NotificationProvider>
   );
 }
 
