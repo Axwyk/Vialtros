@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import Sidebar from "../components/dashboard/Sidebar";
 import {
   getDriverAssignedRoutes,
@@ -12,9 +12,11 @@ import {
 import { icons } from "../components/dashboard/icons";
 
 export default function DriverRoutesPage({ onLogout }) {
+  const navigate = useNavigate();
   const [routes, setRoutes] = useState([]);
   const [routesLoading, setRoutesLoading] = useState(false);
   const [trackings, setTrackings] = useState([]);
+  const [statusError, setStatusError] = useState("");
   const usernameRaw = localStorage.getItem("username") || "Usuario";
   const username =
     usernameRaw.charAt(0).toUpperCase() + usernameRaw.slice(1).toLowerCase();
@@ -37,6 +39,7 @@ export default function DriverRoutesPage({ onLogout }) {
     passengerId,
     newStatus,
   ) => {
+    setStatusError("");
     try {
       if (trackingId) {
         await updateTrackingStatus(trackingId, newStatus);
@@ -45,8 +48,8 @@ export default function DriverRoutesPage({ onLogout }) {
       }
       const updatedTrackings = await getDriverTrackings();
       setTrackings(updatedTrackings);
-    } catch (error) {
-      console.error("Error updating status:", error);
+    } catch {
+      setStatusError("No se pudo actualizar el estado. Intenta de nuevo.");
     }
   };
 
@@ -79,6 +82,12 @@ export default function DriverRoutesPage({ onLogout }) {
             Volver al dashboard
           </Link>
         </div>
+
+        {statusError && (
+          <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+            {statusError}
+          </div>
+        )}
 
         {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
@@ -127,74 +136,75 @@ export default function DriverRoutesPage({ onLogout }) {
             {routes.map((route) => (
               <article
                 key={route.id}
-                className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm"
+                className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm hover:border-blue-200 transition-colors"
               >
-                <div className="flex items-start justify-between gap-4 mb-5">
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 border border-blue-100 shadow-sm">
-                        {icons.routes({ size: 17, strokeWidth: 2.1 })}
-                      </span>
-                      <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                          Ruta asignada
-                        </p>
-                        <h3 className="text-lg font-bold text-slate-900">
-                          {route.name}
-                        </h3>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div className="rounded-2xl border border-slate-100 bg-slate-50/90 px-4 py-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                          Origen
-                        </p>
-                        <div className="mt-2 flex items-start gap-2 text-slate-700">
-                          <span className="mt-0.5 text-blue-600">
-                            {icons.mapPin({ size: 15, strokeWidth: 2.2 })}
-                          </span>
-                          <span className="text-sm font-medium leading-5">
-                            {route.origin}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="rounded-2xl border border-slate-100 bg-slate-50/90 px-4 py-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                          Destino
-                        </p>
-                        <div className="mt-2 flex items-start gap-2 text-slate-700">
-                          <span className="mt-0.5 text-emerald-600">
-                            {icons.navigation({ size: 15, strokeWidth: 2.2 })}
-                          </span>
-                          <span className="text-sm font-medium leading-5">
-                            {route.destination}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end gap-2">
-                    <span className="rounded-full bg-gray-50 border border-gray-200 px-3 py-1 text-[11px] font-semibold text-gray-700 shadow-sm">
-                      {route.passenger_count ??
-                        route.passenger_details?.length ??
-                        0}{" "}
-                      estudiante
-                      {(route.passenger_count ??
-                        route.passenger_details?.length ??
-                        0) !== 1
-                        ? "s"
-                        : ""}
+                {/* Cabecera: nombre + badge estado + botones */}
+                <div className="flex items-start justify-between gap-4 mb-4">
+                  <div className="flex items-center gap-3">
+                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
+                      {icons.routes({ size: 18, strokeWidth: 2 })}
                     </span>
-                    <Link
-                      to={`/tracking/${route.id}`}
-                      className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2 text-xs font-bold uppercase tracking-[0.14em] text-blue-700 transition hover:border-blue-300 hover:bg-blue-100"
-                    >
-                      Ver tracking
-                    </Link>
+                    <div>
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <h3 className="text-base font-bold text-slate-900">{route.name}</h3>
+                        {route.status === "completed" ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                            Completada
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-[10px] font-semibold text-blue-700">
+                            <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                            Pendiente
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        {route.passenger_count ?? route.passenger_details?.length ?? 0} estudiantes asignados
+                      </p>
+                    </div>
                   </div>
                 </div>
 
-                {/* Passengers and Status */}
+                {/* Origen / Destino */}
+                <div className="flex flex-col gap-0 rounded-xl border border-slate-100 bg-slate-50/80 mb-4 overflow-hidden">
+                  <div className="flex items-center gap-3 px-4 py-3">
+                    <span className="h-2.5 w-2.5 rounded-full bg-blue-500 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-blue-600">Origen</p>
+                      <p className="text-sm font-medium text-slate-800 truncate">{route.origin || '—'}</p>
+                    </div>
+                  </div>
+                  <div className="mx-4 h-px bg-slate-200" />
+                  <div className="flex items-center gap-3 px-4 py-3">
+                    <span className="h-2.5 w-2.5 rounded-full bg-slate-400 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">Destino</p>
+                      <p className="text-sm font-medium text-slate-800 truncate">{route.destination || '—'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Botones de acción principales */}
+                <div className="flex gap-2 mb-5">
+                  <Link
+                    to={`/tracking/${route.id}`}
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+                  >
+                    {icons.mapPin({ size: 13, strokeWidth: 2.2 })}
+                    Ver en mapa
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/tracking/${route.id}`)}
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2.5 text-xs font-bold text-white hover:bg-blue-700 shadow-sm transition-colors"
+                  >
+                    {icons.navigation({ size: 13, strokeWidth: 2.2 })}
+                    Iniciar esta ruta
+                  </button>
+                </div>
+
+                {/* Pasajeros y estado de recogida */}
                 {route.passenger_details?.length > 0 ? (
                   <div>
                     <div className="flex items-center justify-between mb-3">
@@ -214,7 +224,12 @@ export default function DriverRoutesPage({ onLogout }) {
                             Number(t.route) === Number(route.id) &&
                             Number(t.passenger) === Number(passenger.id),
                         );
-                        const status = tracking?.status || "not_picked";
+                        const studentStatus = tracking?.status || "not_picked";
+                        const isPicked = studentStatus === "picked";
+                        const statusLabel = isPicked ? "Recogido" : "No recogido";
+                        const statusDot = isPicked
+                          ? "bg-green-100 border-green-300 text-green-600"
+                          : "bg-slate-100 border-slate-200 text-slate-400";
                         return (
                           <div
                             key={passenger.id}
@@ -222,62 +237,30 @@ export default function DriverRoutesPage({ onLogout }) {
                           >
                             <div className="flex items-center gap-3 min-w-0">
                               <div
-                                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 shadow-sm ${
-                                  status === "picked"
-                                    ? "bg-green-100 border-green-300 text-green-700"
-                                    : "bg-red-100 border-red-300 text-red-700"
-                                }`}
+                                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 text-xs font-semibold ${statusDot}`}
                               >
-                                {status === "picked" ? "✓" : "✗"}
+                                {isPicked ? "✓" : "—"}
                               </div>
                               <div className="min-w-0">
                                 <p className="text-sm font-semibold text-slate-800 truncate">
                                   {passenger.user_detail?.username ||
                                     `Estudiante #${passenger.id}`}
                                 </p>
-                                <p className="text-xs text-slate-400">
-                                  {status === "picked"
-                                    ? "Recogido"
-                                    : "No recogido"}
-                                </p>
+                                <p className="text-xs text-slate-400">{statusLabel}</p>
                               </div>
                             </div>
-                            <div className="flex gap-2 shrink-0">
+                            <div className="flex items-center shrink-0">
                               <button
-                                onClick={() =>
-                                  handleUpdateStatus(
-                                    tracking?.id,
-                                    route.id,
-                                    passenger.id,
-                                    "picked",
-                                  )
-                                }
-                                disabled={status === "picked"}
-                                className={`px-3 py-1 text-xs font-semibold rounded-full transition ${
-                                  status === "picked"
-                                    ? "bg-blue-100 text-blue-700 cursor-not-allowed"
-                                    : "bg-blue-600 text-white hover:bg-blue-700"
+                                title={isPicked ? "Ya recogido" : "Marcar como recogido"}
+                                onClick={() => handleUpdateStatus(tracking?.id, route.id, passenger.id, "picked")}
+                                disabled={isPicked}
+                                className={`flex items-center justify-center w-8 h-8 rounded-full border transition ${
+                                  isPicked
+                                    ? "border-green-200 bg-green-50 text-green-400 cursor-default"
+                                    : "border-slate-200 bg-white text-slate-400 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600"
                                 }`}
                               >
-                                Marcar recogido
-                              </button>
-                              <button
-                                onClick={() =>
-                                  handleUpdateStatus(
-                                    tracking?.id,
-                                    route.id,
-                                    passenger.id,
-                                    "not_picked",
-                                  )
-                                }
-                                disabled={status === "not_picked"}
-                                className={`px-3 py-1 text-xs font-semibold rounded-full transition ${
-                                  status === "not_picked"
-                                    ? "bg-red-100 text-red-700 cursor-not-allowed"
-                                    : "bg-red-600 text-white hover:bg-red-700"
-                                }`}
-                              >
-                                Marcar no recogido
+                                {icons.arrowRight({ size: 14, strokeWidth: 2 })}
                               </button>
                             </div>
                           </div>

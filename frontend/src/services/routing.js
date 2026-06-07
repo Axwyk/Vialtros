@@ -12,7 +12,7 @@ const BVA_VIEWBOX = "-77.18,3.72,-76.85,4.02";
 const BVA_CITY_SUFFIX = ", Buenaventura, Colombia";
 const geocodeCache = new Map();
 const routeCache = new Map();
-const TRACK_MATCH_RADIUS_METERS = 100;
+const TRACK_MATCH_RADIUS_METERS = 50;
 const TRACK_MATCH_GAP_SECONDS = 8;
 const TRACK_MAX_POINT_JUMP_KM = 1.4;
 const TRACK_MAX_BEARING_RANGE = 180;
@@ -1058,15 +1058,17 @@ export async function geocodeAddress(address, options = {}) {
     return resolved;
   }
 
-  const trySearch = async (query, bounded) => {
+  const trySearch = async (query, fallback) => {
     const url = new URL(`${NOMINATIM_BASE}/search`);
     url.searchParams.set("q", query);
     url.searchParams.set("format", "json");
     url.searchParams.set("limit", "1");
     url.searchParams.set("accept-language", "es");
-    url.searchParams.set("countrycodes", "co");
-    url.searchParams.set("viewbox", BVA_VIEWBOX);
-    if (bounded) url.searchParams.set("bounded", "1");
+    if (fallback && Array.isArray(fallback) && fallback.length === 2) {
+      const [lat, lng] = fallback;
+      const d = 0.5;
+      url.searchParams.set("viewbox", `${lng - d},${lat - d},${lng + d},${lat + d}`);
+    }
     try {
       const res = await fetch(url.toString(), {
         headers: { "User-Agent": "Vialtros/1.0" },
@@ -1074,30 +1076,21 @@ export async function geocodeAddress(address, options = {}) {
       if (!res.ok) return null;
       const data = await res.json();
       if (!Array.isArray(data) || data.length === 0) return null;
-      return sanitizeBuenaventuraCoords(
-        [parseFloat(data[0].lat), parseFloat(data[0].lon)],
-        fallbackCoords,
-      );
+      const lat = parseFloat(data[0].lat);
+      const lng = parseFloat(data[0].lon);
+      return Number.isFinite(lat) && Number.isFinite(lng) ? [lat, lng] : null;
     } catch {
       return null;
     }
   };
 
-  // 1. Con ciudad en la query, dentro del viewbox
-  const withCity = clean.toLowerCase().includes("buenaventura")
-    ? clean
-    : `${clean}${BVA_CITY_SUFFIX}`;
-  let result = await trySearch(withCity, true);
+  // 1. Con bias de ubicacion conocida si esta disponible
+  let result = await trySearch(clean, fallbackCoords);
 
-  // 2. Con ciudad pero sin bounded
-  if (!result) result = await trySearch(withCity, false);
+  // 2. Fallback sin restriccion geografica
+  if (!result) result = await trySearch(clean, null);
 
-  // 3. Fallback global (sin restricción geográfica)
-  if (!result) result = await trySearch(clean, false);
-
-  const resolved =
-    result ||
-    (isWithinBuenaventuraZone(fallbackCoords) ? fallbackCoords : null);
+  const resolved = result || (Array.isArray(fallbackCoords) && fallbackCoords.length === 2 ? fallbackCoords : null);
 
   // Snap geocoded coordinate to nearest road for precision
   if (resolved) {
@@ -1179,7 +1172,7 @@ export async function getTrackedStreetRoute(points) {
   );
   if (normalized.length < 2) return null;
 
-  const sampled = sampleTrackMatchPoints(normalized, 20);
+  const sampled = sampleTrackMatchPoints(normalized, 35);
   const sampledCoords = sampled.map((p) => p.coords);
 
   // 1. Primary: Valhalla trace_route (map matching)

@@ -89,15 +89,6 @@ export default function Sidebar({ role, onLogout }) {
       </nav>
    
       
-      {onLogout && (
-        <button
-          onClick={onLogout}
-          className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-500 hover:bg-red-50 hover:text-red-600 transition mt-4"
-        >
-          
-          
-        </button>
-      )}
     </aside>
   );
 }

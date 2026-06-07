@@ -9,10 +9,6 @@ import { getTrackingsByRoute } from "../services/tracking";
 import { geocodeAddress, getStreetRouteThroughPoints } from "../services/routing";
 import { connectTrackingWS } from "../services/ws";
 
-// --- Constantes de notificación ---
-const NOTIFY_APPROACHING_KM = 1.5;  // ~5 min a 18 km/h
-const NOTIFY_AT_STOP_KM = 0.35;     // bus en la parada del usuario
-const NOTIFY_AT_DEST_KM = 0.5;      // bus llegó al destino
 const DEFAULT_SPEED_KMH = 18;
 const NEAR_DISTANCE_KM = 0.8;
 
@@ -40,14 +36,6 @@ function normalizeTracking(raw) {
   return { ...raw, latitude, longitude };
 }
 
-function sendBrowserNotification(title, body) {
-  if (!("Notification" in window) || Notification.permission !== "granted") return;
-  try {
-    new Notification(title, { body, icon: "/favicon.ico" }); // eslint-disable-line no-new
-  } catch (_) {
-    // ignorar si las notificaciones están bloqueadas
-  }
-}
 
 export default function UserRoutePage({ role, onLogout }) {
   const [data, setData] = useState(null);
@@ -67,14 +55,6 @@ export default function UserRoutePage({ role, onLogout }) {
   const [isPollingFallback, setIsPollingFallback] = useState(false);
   const wsStatusRef = useRef(wsStatus);
 
-  // Banners in-app
-  const [showNearbyBanner, setShowNearbyBanner] = useState(false);
-  const [showArrivingBanner, setShowArrivingBanner] = useState(false);
-
-  // Refs para notificaciones (evitan duplicados entre renders)
-  const notifiedApproachingRef = useRef(false);
-  const notifiedAtStopRef = useRef(false);
-  const notifiedAtDestRef = useRef(false);
 
   // Carga inicial
   useEffect(() => {
@@ -98,14 +78,6 @@ export default function UserRoutePage({ role, onLogout }) {
   useEffect(() => {
     wsStatusRef.current = wsStatus;
   }, [wsStatus]);
-
-  // Solicitar permiso de notificaciones
-  useEffect(() => {
-    if (!("Notification" in window)) return;
-    if (Notification.permission === "default") {
-      Notification.requestPermission().catch(() => {});
-    }
-  }, []);
 
   // Geocodificar origen, destino y parada del usuario
   useEffect(() => {
@@ -225,60 +197,6 @@ export default function UserRoutePage({ role, onLogout }) {
     return () => { cancelled = true; clearInterval(id); };
   }, [data?.route?.id]);
 
-  // Lógica de notificaciones basada en posición en tiempo real
-  useEffect(() => {
-    if (!livePosition) return;
-    const speed = livePosition.speed_kmh > 2 ? livePosition.speed_kmh : DEFAULT_SPEED_KMH;
-
-    // Notificaciones hacia la parada personal del usuario
-    if (myPickupCoords) {
-      const km = distanceKm(
-        livePosition.latitude, livePosition.longitude,
-        myPickupCoords[0], myPickupCoords[1],
-      );
-
-      if (km <= NOTIFY_AT_STOP_KM && !notifiedAtStopRef.current) {
-        notifiedAtStopRef.current = true;
-        setShowArrivingBanner(true);
-        sendBrowserNotification(
-          "¡El bus está en tu parada!",
-          "Tu conductor está llegando ahora a tu punto de recogida.",
-        );
-      } else if (km <= NOTIFY_APPROACHING_KM && !notifiedApproachingRef.current) {
-        notifiedApproachingRef.current = true;
-        setShowNearbyBanner(true);
-        const etaMins = Math.max(1, Math.round((km / speed) * 60));
-        sendBrowserNotification(
-          "Tu bus se acerca",
-          `El bus está a aproximadamente ${etaMins} min de tu parada. ¡Prepárate!`,
-        );
-      }
-
-      // Resetear banners si el bus se aleja (inicio de recorrido o retroceso)
-      if (km > NOTIFY_APPROACHING_KM + 0.5) {
-        notifiedApproachingRef.current = false;
-        notifiedAtStopRef.current = false;
-        setShowNearbyBanner(false);
-        setShowArrivingBanner(false);
-      }
-    }
-
-    // Notificación cuando el bus llega al destino final
-    if (destinationCoords) {
-      const km = distanceKm(
-        livePosition.latitude, livePosition.longitude,
-        destinationCoords[0], destinationCoords[1],
-      );
-      if (km <= NOTIFY_AT_DEST_KM && !notifiedAtDestRef.current) {
-        notifiedAtDestRef.current = true;
-        sendBrowserNotification(
-          "El bus llegó al destino",
-          "El recorrido de hoy ha finalizado.",
-        );
-      }
-    }
-  }, [livePosition, myPickupCoords, destinationCoords]);
-
   const route = data?.route;
   const driver = data?.driver;
 
@@ -332,42 +250,6 @@ export default function UserRoutePage({ role, onLogout }) {
     <div className="min-h-screen flex bg-gray-50 font-sans">
       <Sidebar role={role} onLogout={onLogout} />
       <main className="flex-1 min-w-0 py-8 px-6 md:px-10 overflow-y-auto">
-
-        {/* Banner: bus llegando a la parada del usuario */}
-        {showArrivingBanner && (
-          <div className="fixed top-6 right-6 z-50 max-w-sm rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 shadow-lg flex items-start gap-3">
-            <div className="mt-0.5 h-3 w-3 rounded-full bg-blue-500 animate-pulse flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-blue-800">¡El bus está en tu parada!</p>
-              <p className="mt-1 text-xs text-blue-700">Tu conductor está llegando ahora a tu punto de recogida.</p>
-              <button
-                className="mt-2 text-xs text-blue-500 hover:text-blue-700 underline"
-                onClick={() => setShowArrivingBanner(false)}
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Banner: bus acercándose */}
-        {!showArrivingBanner && showNearbyBanner && (
-          <div className="fixed top-6 right-6 z-50 max-w-sm rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 shadow-lg flex items-start gap-3">
-            <div className="mt-0.5 h-3 w-3 rounded-full bg-emerald-500 animate-pulse flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-emerald-800">
-                Tu bus se acerca{etaMinutes ? ` · ${etaMinutes} min` : ""}
-              </p>
-              <p className="mt-1 text-xs text-emerald-700">Prepárate, el conductor está próximo a tu parada.</p>
-              <button
-                className="mt-2 text-xs text-emerald-500 hover:text-emerald-700 underline"
-                onClick={() => setShowNearbyBanner(false)}
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        )}
 
         <div className="mb-6">
           <TrackingHero
@@ -517,16 +399,22 @@ export default function UserRoutePage({ role, onLogout }) {
                       className={`inline-flex items-center gap-1 text-sm font-medium px-3 py-1 rounded-full ${
                         pickupStatus === "picked"
                           ? "bg-blue-100 text-blue-700"
+                          : pickupStatus === "dropped_off"
+                          ? "bg-emerald-100 text-emerald-700"
                           : "bg-red-100 text-red-700"
                       }`}
                     >
                       {pickupStatus === "picked"
-                        ? "✓ Ya fuiste recogido"
-                        : "✗ Aún no has sido recogido"}
+                        ? "Ya fuiste recogido"
+                        : pickupStatus === "dropped_off"
+                        ? "Dejado en tu parada"
+                        : "Aun no has sido recogido"}
                     </span>
                     <p className="text-xs text-gray-400">
                       {pickupStatus === "picked"
                         ? "Tu conductor te ha marcado como recogido."
+                        : pickupStatus === "dropped_off"
+                        ? "Tu conductor te ha dejado en tu parada."
                         : "Espera a que tu conductor te marque como recogido."}
                     </p>
                   </div>

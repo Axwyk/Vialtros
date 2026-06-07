@@ -26,7 +26,7 @@ function toLatLngArray(coordsArray) {
 // Constantes
 // ---------------------------------------------------------------------------
 const GOOGLE_MAPS_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "";
-const BUENAVENTURA_CENTER = [3.8785, -77.0200];
+const WORLD_CENTER = [0, 0];
 const CORPORATE_ROUTE_COLOR = "#2563EB";
 
 // Stable reference — must not be defined inside the component
@@ -39,6 +39,8 @@ const GOOGLE_MAPS_OPTIONS = {
   streetViewControl: false,
   zoomControl: false,
   fullscreenControl: false,
+  rotateControl: false,
+  panControl: false,
   gestureHandling: "greedy",
   styles: GOOGLE_MAPS_STYLES,
 };
@@ -219,6 +221,28 @@ function getSegmentRotation(start, end) {
   return Math.atan2(-deltaLat, deltaLng) * (180 / Math.PI);
 }
 
+/**
+ * Retorna los segmentos de la ruta planificada ADELANTE del vehículo
+ * para calcular el bearing hacia donde va, no hacia donde fue.
+ */
+function getAheadDirectionLine(plannedLine, vehiclePoint) {
+  if (!Array.isArray(plannedLine) || plannedLine.length < 2 || !Array.isArray(vehiclePoint))
+    return plannedLine;
+
+  let closestIndex = 0;
+  let closestDist = Infinity;
+  for (let i = 0; i < plannedLine.length - 1; i++) {
+    const { distanceSquared } = projectPointOnSegment(vehiclePoint, plannedLine[i], plannedLine[i + 1]);
+    if (distanceSquared < closestDist) {
+      closestDist = distanceSquared;
+      closestIndex = i;
+    }
+  }
+  // Toma los proximos 5 segmentos adelante para suavizar el bearing
+  const slice = plannedLine.slice(closestIndex, closestIndex + 6);
+  return slice.length >= 2 ? slice : plannedLine;
+}
+
 function getVehicleRotation(line, vehiclePoint) {
   if (!Array.isArray(line) || line.length < 2) return 0;
 
@@ -316,6 +340,27 @@ function getPointAtDistance(path, distance) {
   return path[path.length - 1];
 }
 
+function lineDistanceKm(line = []) {
+  if (!Array.isArray(line) || line.length < 2) return 0;
+  const toRad = (v) => (v * Math.PI) / 180;
+  const earthKm = 6371;
+  let total = 0;
+  for (let i = 1; i < line.length; i += 1) {
+    const [lat1, lng1] = line[i - 1];
+    const [lat2, lng2] = line[i];
+    if (!Number.isFinite(lat1) || !Number.isFinite(lng1) || !Number.isFinite(lat2) || !Number.isFinite(lng2)) continue;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lng2 - lng1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    total += earthKm * c;
+  }
+  return total;
+}
+
 function getPoiIcon(tags = {}) {
   const amenity = (tags.amenity || "").toLowerCase();
   const shop = (tags.shop || "").toLowerCase();
@@ -369,6 +414,7 @@ export default function MapView({
   onExitGps = null,
   isAdmin = false,
   isDriver = false,
+  darkMode = false,
 }) {
   const { isLoaded: mapsApiLoaded } = useJsApiLoader({
     id: "vialtros-google-map",
@@ -383,7 +429,7 @@ export default function MapView({
   const [gpsMenuOpen, setGpsMenuOpen] = useState(false);
   const [gpsNightMode, setGpsNightMode] = useState(false);
   const gpsMutedRef = useRef(false);
-  const [gpsToast, setGpsToast] = useState(null);
+  const [, setGpsToast] = useState(null);
   const gpsToastTimerRef = useRef(null);
   const prevGpsModeRef = useRef(false);
   const lastToastStepKeyRef = useRef(null);
@@ -399,6 +445,8 @@ export default function MapView({
   const firstFollowRef = useRef(true);
   const userMovedMapRef = useRef(true);
   const containerRef = useRef(null);
+  const canvasRef = useRef(null); // VIALTROS-GPS: ref para canvas animado
+  const animRefs = useRef({ planned: null, remaining: null, offset: 0, timer: null });
   const spokenWarningsRef = useRef(new Set());
   const lastSpokenStepKeyRef = useRef(null);
 
@@ -414,6 +462,143 @@ export default function MapView({
     document.addEventListener("click", close);
     return () => document.removeEventListener("click", close);
   }, [gpsMenuOpen]);
+
+  // Flechas de dirección animadas sobre las polylines de ruta
+  useEffect(() => {
+    if (!mapsApiLoaded) return undefined;
+    const refs = animRefs.current;
+    refs.offset = 0;
+    refs.timer = setInterval(() => {
+      refs.offset = (refs.offset + 1.5) % 100;
+      const pct = `${refs.offset.toFixed(1)}%`;
+      const arrowIcon = {
+        path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+        scale: 2.5,
+        fillColor: "#FFFFFF",
+        fillOpacity: 0.88,
+        strokeWeight: 0,
+      };
+      const icons = [{ icon: arrowIcon, offset: pct, repeat: "90px" }];
+      refs.planned?.setOptions({ icons });
+      refs.remaining?.setOptions({ icons });
+    }, 50);
+    return () => {
+      clearInterval(refs.timer);
+      refs.timer = null;
+    };
+  }, [mapsApiLoaded]);
+
+  // VIALTROS-GPS: monta animación simple en <canvas> para modo conducción
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return undefined;
+
+    const ctx = canvas.getContext("2d");
+    let rafId = null;
+
+    const resize = () => {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+      canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+      canvas.style.width = `${rect.width}px`;
+      canvas.style.height = `${rect.height}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+
+    // Polyfill roundRect una sola vez
+    if (!ctx.roundRect) {
+      ctx.roundRect = function(x, y, w, h, r) {
+        this.moveTo(x + r, y);
+        this.lineTo(x + w - r, y);
+        this.quadraticCurveTo(x + w, y, x + w, y + r);
+        this.lineTo(x + w, y + h - r);
+        this.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        this.lineTo(x + r, y + h);
+        this.quadraticCurveTo(x, y + h, x, y + h - r);
+        this.lineTo(x, y + r);
+        this.quadraticCurveTo(x, y, x + r, y);
+      };
+    }
+
+    let start = performance.now();
+    const loop = (t) => {
+      const elapsed = (t - start) / 1000;
+      // clear
+      const w = canvas.width / (window.devicePixelRatio || 1);
+      const h = canvas.height / (window.devicePixelRatio || 1);
+      ctx.clearRect(0, 0, w, h);
+
+      // colors según modo
+      const day = !gpsNightMode;
+      const bg1 = day ? '#86c2ff' : '#081428';
+      const bg2 = day ? '#cfe9ff' : '#0b2338';
+
+      // sky / vignette
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, bg1);
+      g.addColorStop(1, bg2);
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+
+      // road
+      const roadH = h * 0.45;
+      const roadY = h - roadH;
+      ctx.fillStyle = day ? '#2f2f2f' : '#111827';
+      const roadW = w * 0.95;
+      const roadX = (w - roadW) / 2;
+      const radius = 20;
+      // rounded rect road
+      ctx.beginPath();
+      ctx.moveTo(roadX + radius, roadY);
+      ctx.lineTo(roadX + roadW - radius, roadY);
+      ctx.quadraticCurveTo(roadX + roadW, roadY, roadX + roadW, roadY + radius);
+      ctx.lineTo(roadX + roadW, roadY + roadH - radius);
+      ctx.quadraticCurveTo(roadX + roadW, roadY + roadH, roadX + roadW - radius, roadY + roadH);
+      ctx.lineTo(roadX + radius, roadY + roadH);
+      ctx.quadraticCurveTo(roadX, roadY + roadH, roadX, roadY + roadH - radius);
+      ctx.lineTo(roadX, roadY + radius);
+      ctx.quadraticCurveTo(roadX, roadY, roadX + radius, roadY);
+      ctx.closePath();
+      ctx.fill();
+
+      // lane markings — moving dashes
+      ctx.strokeStyle = day ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.6)';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([30, 20]);
+      const offset = (elapsed * 200) % 50;
+      ctx.lineDashOffset = -offset;
+      const lanes = 4;
+      for (let i = 1; i < lanes; i++) {
+        const x = roadX + (roadW / lanes) * i;
+        ctx.beginPath();
+        ctx.moveTo(x, roadY + 20);
+        ctx.lineTo(x, roadY + roadH - 20);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+
+      // vehicle marker (bottom center)
+      ctx.fillStyle = '#1b3fa0';
+      const carW = 36;
+      const carH = 18;
+      ctx.beginPath();
+      ctx.roundRect((w - carW) / 2, roadY + roadH - carH - 10, carW, carH, 6);
+      ctx.fill();
+
+      rafId = requestAnimationFrame(loop);
+    };
+
+    // start
+    resize();
+    window.addEventListener('resize', resize);
+    rafId = requestAnimationFrame(loop);
+
+    return () => {
+      window.removeEventListener('resize', resize);
+      if (rafId) cancelAnimationFrame(rafId);
+    };
+  }, [gpsMode, gpsNightMode]);
 
   // Cuando el usuario arrastra o hace zoom, suspende el auto-seguimiento
   useEffect(() => {
@@ -453,12 +638,12 @@ export default function MapView({
   const center = useMemo(
     () =>
       focusAllVehicles
-        ? BUENAVENTURA_CENTER
+        ? userCoords || WORLD_CENTER
         : latestPoint ||
           originCoords ||
           destinationCoords ||
           userCoords ||
-          BUENAVENTURA_CENTER,
+          WORLD_CENTER,
     [
       focusAllVehicles,
       latestPoint,
@@ -467,13 +652,15 @@ export default function MapView({
       userCoords,
     ],
   );
+  const defaultZoom = useMemo(() => {
+    if (focusAllVehicles) return 13;
+    if (latestPoint || originCoords || destinationCoords || userCoords) return 14;
+    return 2;
+  }, [focusAllVehicles, latestPoint, originCoords, destinationCoords, userCoords]);
   const loadLocalPois = useCallback(async () => {
     try {
       const res = await fetch("/pois.json");
       if (!res.ok) {
-        console.debug("MapView local pois not found (status)", res.status);
-        
-
         return;
       }
       const data = await res.json();
@@ -490,13 +677,8 @@ export default function MapView({
           .filter(Boolean);
       }
       setDisplayPois(parsed);
-      
-
-      console.debug("MapView loaded local POIs:", parsed.length);
-    } catch (err) {
-      console.debug("MapView error loading local pois:", err);
-      
-
+    } catch {
+      // ignorar errores al cargar POIs locales
     }
   }, []);
 
@@ -513,7 +695,6 @@ export default function MapView({
 out center;`;
 
       const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(q)}`;
-      console.debug("MapView fetchPOIs url:", url);
       const res = await fetch(url);
       if (!res.ok) return;
       const data = await res.json();
@@ -523,13 +704,8 @@ out center;`;
         lon: el.lon ?? el.center?.lon,
         tags: el.tags || {},
       }));
-      console.debug("MapView fetchPOIs parsed:", parsed.length, parsed.slice(0, 6));
       setDisplayPois(parsed);
-      
-
-      console.debug("MapView fetched POIs:", parsed.length);
       if (!parsed.length) {
-        console.debug("MapView: Overpass returned 0 elements, attempting local fallback");
         await loadLocalPois();
       }
     } catch (err) {
@@ -732,16 +908,24 @@ out center;`;
   const secondaryVehicles = useMemo(
     () =>
       primaryVehicle
-        ? activeVehicles.filter((vehicle, index) => index > 0)
+        ? activeVehicles.filter((_, index) => index > 0)
         : activeVehicles,
     [activeVehicles, primaryVehicle],
   );
-  const vehicleDirectionLine =
-    traveledLine?.length > 1
+  const vehicleDirectionLine = useMemo(() => {
+    const vp = effectiveVehiclePoint || vehiclePoint;
+    if (gpsMode && plannedLine?.length > 1) {
+      // En modo GPS usamos los segmentos ADELANTE del vehículo para calcular
+      // el bearing correcto (hacia donde va, no hacia donde fue)
+      return getAheadDirectionLine(plannedLine, vp);
+    }
+    return traveledLine?.length > 1
       ? traveledLine
       : plannedLine?.length > 1
         ? plannedLine
         : validPoints;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gpsMode, plannedLine, traveledLine, validPoints, effectiveVehiclePoint, vehiclePoint]);
   const primaryVehicleRotation = useMemo(
     () =>
       getVehicleRotation(
@@ -761,43 +945,41 @@ out center;`;
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
     if (gpsMode) {
+      const geoBearing = (primaryVehicleRotationRef.current + 90 + 360) % 360;
+      const bearingRad = geoBearing * Math.PI / 180;
+
+      // Desplaza el centro 220m adelante del vehiculo para ver el camino que viene
+      const OFFSET_DEG = 0.002;
+      const cosLat = Math.cos(lat * Math.PI / 180) || 1;
+      const aheadLat = lat + OFFSET_DEG * Math.cos(bearingRad);
+      const aheadLng = lng + (OFFSET_DEG / cosLat) * Math.sin(bearingRad);
+
       if (firstFollowRef.current) {
         firstFollowRef.current = false;
         suppressListenerRef.current = true;
-        mapRef.setCenter({ lat, lng });
+        mapRef.setCenter({ lat: aheadLat, lng: aheadLng });
         mapRef.setZoom(17);
         suppressListenerRef.current = false;
       }
-      mapRef.panTo({ lat, lng });
-      mapRef.setHeading(primaryVehicleRotationRef.current + 90);
+
+      // moveCamera aplica centro + heading + tilt en una sola llamada suave
+      if (mapRef.moveCamera) {
+        mapRef.moveCamera({
+          center: { lat: aheadLat, lng: aheadLng },
+          heading: geoBearing,
+          tilt: 45,
+          zoom: 17,
+        });
+      } else {
+        mapRef.panTo({ lat: aheadLat, lng: aheadLng });
+        mapRef.setHeading(geoBearing);
+      }
       return;
     }
 
     if (userMovedMapRef.current) return;
     mapRef.panTo({ lat, lng });
   }, [mapRef, effectiveVehiclePoint, focusAllVehicles, hasLiveTrackings, gpsMode]);
-
-  // Calcula distancia total de una línea de coordenadas [lat,lng] en kilómetros
-  function lineDistanceKm(line = []) {
-    if (!Array.isArray(line) || line.length < 2) return 0;
-    const toRad = (v) => (v * Math.PI) / 180;
-    const earthKm = 6371;
-    let total = 0;
-    for (let i = 1; i < line.length; i += 1) {
-      const [lat1, lng1] = line[i - 1];
-      const [lat2, lng2] = line[i];
-      if (!Number.isFinite(lat1) || !Number.isFinite(lng1) || !Number.isFinite(lat2) || !Number.isFinite(lng2)) continue;
-      const dLat = toRad(lat2 - lat1);
-      const dLon = toRad(lng2 - lng1);
-      const a =
-        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-        Math.sin(dLon / 2) * Math.sin(dLon / 2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      total += earthKm * c;
-    }
-    return total;
-  }
 
   const plannedKm = Math.round((plannedLine?.length > 1 ? lineDistanceKm(plannedLine) : 0) * 10) / 10;
   const traveledKm = Math.round((traveledLine?.length > 1 ? lineDistanceKm(traveledLine) : 0) * 10) / 10;
@@ -810,7 +992,7 @@ out center;`;
     if (gpsMode) {
       styles = gpsNightMode ? GPS_NIGHT_STYLES : GPS_NAV_STYLES;
     } else {
-      styles = GOOGLE_MAPS_STYLES;
+      styles = darkMode ? GPS_NIGHT_STYLES : GOOGLE_MAPS_STYLES;
     }
     mapRef.setOptions({
       styles,
@@ -819,9 +1001,11 @@ out center;`;
       mapTypeControl: false,
       streetViewControl: false,
       fullscreenControl: false,
+      rotateControl: false,
+      panControl: false,
     });
     if (!gpsMode) mapRef.setHeading(0);
-  }, [mapRef, gpsMode, gpsNightMode]);
+  }, [mapRef, gpsMode, gpsNightMode, darkMode]);
 
   const nextStep = useMemo(() => {
     if (!gpsMode || !Array.isArray(navigationSteps) || !vehiclePoint) return null;
@@ -985,10 +1169,6 @@ out center;`;
     [],
   );
 
-  useEffect(() => {
-    // Eliminado: currentTime no se utiliza
-  }, []);
-
   const handleMapClick = useCallback((e) => {
     if (gpsMode) return;
     const lat = e.latLng.lat();
@@ -1007,35 +1187,19 @@ out center;`;
     });
   }, [gpsMode]);
 
-  const handleZoomIn = useCallback(() => {
-    if (!mapRef) return;
-    mapRef.setZoom((mapRef.getZoom() ?? 14) + 1);
-    userMovedMapRef.current = true;
-    setFollowPaused(true);
-  }, [mapRef]);
-
-  const handleZoomOut = useCallback(() => {
-    if (!mapRef) return;
-    mapRef.setZoom((mapRef.getZoom() ?? 14) - 1);
-    userMovedMapRef.current = true;
-    setFollowPaused(true);
-  }, [mapRef]);
-
   return (
     <div
       ref={containerRef}
-      style={gpsMode
-        ? { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999 }
-        : { position: "relative", height: mapHeight }}
-      className="tracking-map-container"
+      className={`tracking-map-container ${gpsMode ? "tracking-map-fixed" : "tracking-map-relative"}`}
+      style={gpsMode ? undefined : { height: mapHeight }}
     >
       {!mapsApiLoaded ? (
-        <div style={{ height: "100%", background: "#f0f9ff" }} />
+        <div className="map-loading-placeholder" />
       ) : (
       <GoogleMap
-          mapContainerStyle={{ height: "100%", width: "100%" }}
-          center={toLatLng(center) || { lat: BUENAVENTURA_CENTER[0], lng: BUENAVENTURA_CENTER[1] }}
-          zoom={focusAllVehicles ? 13 : 14}
+          mapContainerClassName="tracking-map-google-container"
+          center={toLatLng(center) || { lat: WORLD_CENTER[0], lng: WORLD_CENTER[1] }}
+          zoom={defaultZoom}
           onLoad={(map) => setMapRef(map)}
           onClick={handleMapClick}
           options={GOOGLE_MAPS_OPTIONS}
@@ -1047,22 +1211,35 @@ out center;`;
             const path = toLatLngArray(overlay.polyline);
             return (
               <React.Fragment key={`route-overlay-${overlay.id}`}>
+                {isHighlighted && (
+                  <Polyline
+                    path={path}
+                    options={{ strokeColor: "#3B82F6", strokeWeight: 22, strokeOpacity: 0.08, geodesic: true }}
+                  />
+                )}
                 <Polyline
                   path={path}
                   options={{
                     strokeColor: "#FFFFFF",
-                    strokeWeight: isHighlighted ? 10 : 8,
-                    strokeOpacity: isDimmed ? 0.04 : isHighlighted ? 0.65 : 0.5,
+                    strokeWeight: isHighlighted ? 14 : 8,
+                    strokeOpacity: isDimmed ? 0.04 : isHighlighted ? 0.68 : 0.5,
                     geodesic: true,
                   }}
                 />
                 <Polyline
                   path={path}
                   options={{
-                    strokeColor: isHighlighted ? "#3B82F6" : CORPORATE_ROUTE_COLOR,
-                    strokeWeight: isHighlighted ? 6 : 4,
-                    strokeOpacity: isDimmed ? 0.15 : 0.88,
+                    strokeColor: isHighlighted ? "#1D4ED8" : CORPORATE_ROUTE_COLOR,
+                    strokeWeight: isHighlighted ? 8 : 4,
+                    strokeOpacity: isDimmed ? 0.15 : isHighlighted ? 1.0 : 0.88,
                     geodesic: true,
+                    ...(isHighlighted && {
+                      icons: [{
+                        icon: { path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 2, fillColor: "#FFFFFF", fillOpacity: 0.8, strokeWeight: 0 },
+                        offset: "50%",
+                        repeat: "100px",
+                      }],
+                    }),
                   }}
                 />
               </React.Fragment>
@@ -1074,11 +1251,17 @@ out center;`;
             <>
               <Polyline
                 path={toLatLngArray(plannedLine)}
-                options={{ strokeColor: "#FFFFFF", strokeWeight: gpsMode ? 20 : 14, strokeOpacity: gpsMode ? 0.7 : 0.52, geodesic: true }}
+                options={{ strokeColor: "#3B82F6", strokeWeight: gpsMode ? 32 : 24, strokeOpacity: 0.07, geodesic: true }}
               />
               <Polyline
                 path={toLatLngArray(plannedLine)}
-                options={{ strokeColor: gpsMode ? "#1a56db" : CORPORATE_ROUTE_COLOR, strokeWeight: gpsMode ? 14 : 8, strokeOpacity: 0.98, geodesic: true }}
+                options={{ strokeColor: "#FFFFFF", strokeWeight: gpsMode ? 22 : 16, strokeOpacity: gpsMode ? 0.72 : 0.55, geodesic: true }}
+              />
+              <Polyline
+                onLoad={(p) => { animRefs.current.planned = p; }}
+                onUnmount={() => { animRefs.current.planned = null; }}
+                path={toLatLngArray(plannedLine)}
+                options={{ strokeColor: gpsMode ? "#1a56db" : "#1D4ED8", strokeWeight: gpsMode ? 14 : 10, strokeOpacity: 1.0, geodesic: true }}
               />
             </>
           )}
@@ -1088,11 +1271,17 @@ out center;`;
             <>
               <Polyline
                 path={toLatLngArray(remainingLine)}
-                options={{ strokeColor: "#FFFFFF", strokeWeight: gpsMode ? 20 : 14, strokeOpacity: gpsMode ? 0.7 : 0.5, geodesic: true }}
+                options={{ strokeColor: "#3B82F6", strokeWeight: gpsMode ? 32 : 24, strokeOpacity: 0.07, geodesic: true }}
               />
               <Polyline
                 path={toLatLngArray(remainingLine)}
-                options={{ strokeColor: "#1a56db", strokeWeight: gpsMode ? 14 : 8, strokeOpacity: 1.0, geodesic: true }}
+                options={{ strokeColor: "#FFFFFF", strokeWeight: gpsMode ? 22 : 16, strokeOpacity: gpsMode ? 0.72 : 0.5, geodesic: true }}
+              />
+              <Polyline
+                onLoad={(p) => { animRefs.current.remaining = p; }}
+                onUnmount={() => { animRefs.current.remaining = null; }}
+                path={toLatLngArray(remainingLine)}
+                options={{ strokeColor: "#2563EB", strokeWeight: gpsMode ? 14 : 10, strokeOpacity: 1.0, geodesic: true }}
               />
             </>
           )}
@@ -1102,11 +1291,11 @@ out center;`;
             <>
               <Polyline
                 path={toLatLngArray(traveledLine)}
-                options={{ strokeColor: "#FFFFFF", strokeWeight: 10, strokeOpacity: 0.28, geodesic: true }}
+                options={{ strokeColor: "#FFFFFF", strokeWeight: 10, strokeOpacity: 0.22, geodesic: true }}
               />
               <Polyline
                 path={toLatLngArray(traveledLine)}
-                options={{ strokeColor: "#64748b", strokeWeight: 6, strokeOpacity: 0.8, geodesic: true }}
+                options={{ strokeColor: "#94A3B8", strokeWeight: 6, strokeOpacity: 0.72, geodesic: true }}
               />
             </>
           )}
@@ -1114,7 +1303,7 @@ out center;`;
           {/* ---- Origen ---- */}
           {toLatLng(originCoords) && (
             <OverlayView position={toLatLng(originCoords)} mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}>
-              <div style={{ transform: "translate(-50%, -50%)", pointerEvents: "none" }}>
+              <div className="vt-map-overlay-center">
                 <div className="vt-route-point vt-route-point-start" />
               </div>
             </OverlayView>
@@ -1127,7 +1316,7 @@ out center;`;
               position={toLatLng(stop.coords)}
               mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
             >
-              <div style={{ transform: "translate(-50%, -50%)", pointerEvents: "none" }}>
+              <div className="vt-map-overlay-center">
                 <div className="vt-route-stop-marker">
                   <span className="vt-route-stop-ring" />
                   <span className="vt-route-stop-core">{stop.order}</span>
@@ -1139,7 +1328,7 @@ out center;`;
           {/* ---- Destino ---- */}
           {toLatLng(destinationCoords) && (
             <OverlayView position={toLatLng(destinationCoords)} mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}>
-              <div style={{ transform: "translate(-50%, -50%)", pointerEvents: "none" }}>
+              <div className="vt-map-overlay-center">
                 <div className="vt-route-point vt-route-point-end" />
               </div>
             </OverlayView>
@@ -1152,7 +1341,7 @@ out center;`;
                 position={{ lat: primaryVehicle.latitude, lng: primaryVehicle.longitude }}
                 mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
               >
-                  <div style={{ transform: "translate(-50%, -50%)", pointerEvents: "none" }}>
+                  <div className="vt-map-overlay-center">
                   <div
                     className="vt-gps-nav-arrow"
                     style={{ transform: `rotate(${primaryVehicleRotation + 90}deg)` }}
@@ -1174,29 +1363,23 @@ out center;`;
                   position={{ lat: primaryVehicle.latitude, lng: primaryVehicle.longitude }}
                   mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
                 >
-                  <div style={{ transform: "translate(-50%, -50%)", pointerEvents: "none" }}>
-                    <div
-                      className="vt-current-point-ring"
-                      style={{ width: 28, height: 28, borderRadius: "50%", border: "6px solid rgba(37,99,235,0.18)" }}
-                    />
+                  <div className="vt-map-overlay-center">
+                    <div className="vt-current-point-ring" />
                   </div>
                 </OverlayView>
                 <OverlayView
                   position={{ lat: primaryVehicle.latitude, lng: primaryVehicle.longitude }}
                   mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
                 >
-                  <div style={{ transform: "translate(-50%, -50%)", pointerEvents: "none" }}>
-                    <div
-                      className="vt-current-point-core"
-                      style={{ width: 12, height: 12, borderRadius: "50%", background: "#2563eb", border: "3px solid #ffffff" }}
-                    />
+                  <div className="vt-map-overlay-center">
+                    <div className="vt-current-point-core" />
                   </div>
                 </OverlayView>
                 <OverlayView
                   position={{ lat: primaryVehicle.latitude, lng: primaryVehicle.longitude }}
                   mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
                 >
-                  <div style={{ transform: "translate(-50%, calc(-100% - 14px))", pointerEvents: "none" }}>
+                  <div className="vt-map-overlay-above">
                     <div className={`vt-vehicle-chip vt-vehicle-chip-${primaryVehicle.status === "En ruta" ? "moving" : "idle"}`}>
                       <span className="vt-vehicle-icon" style={{ transform: `rotate(${primaryVehicleRotation}deg)` }}>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
@@ -1223,7 +1406,7 @@ out center;`;
                 position={{ lat: vehicle.latitude, lng: vehicle.longitude }}
                 mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
               >
-                <div style={{ transform: "translate(-50%, calc(-100% - 14px))", pointerEvents: "none" }}>
+                <div className="vt-map-overlay-above">
                   <div className={`vt-vehicle-chip vt-vehicle-chip-${vehicle.status === "En ruta" ? "moving" : "idle"}`}>
                     <span className="vt-vehicle-icon">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
@@ -1252,7 +1435,7 @@ out center;`;
                   position={{ lat, lng: lon }}
                   mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
                 >
-                  <div style={{ transform: "translate(-50%, -50%)", pointerEvents: "none" }}>
+                  <div className="vt-map-overlay-center">
                     <div className="vt-poi-marker">{getPoiIcon(p.tags || {})}</div>
                   </div>
                 </OverlayView>
@@ -1292,214 +1475,115 @@ out center;`;
 
 
       {/* ---- HUD GPS — overlays flotantes estilo Google Maps ---- */}
-      {gpsMode && (() => {
+          {gpsMode && (() => {
+        // VIALTROS-GPS: nuevo HUD visual inspirado en diseño adjunto
         const arrivalTime = (() => {
           if (eta === null) return "--";
           const d = new Date(Date.now() + Number(eta) * 60000);
           return d.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
         })();
+
+        const displaySpeed = Math.round((activeVehicles[0]?.speedKmh ?? 0) || 0);
+        const licenseTag = primaryVehicle?.label || "LIC-000000";
+
         return (
-          <>
-            {/* Banner superior centrado — En Ruta */}
-            <div className="gps-overlay-top" aria-live="polite">
-              <div className="gps-overlay-top-left">
-                <span className="gps-overlay-en-ruta">En Ruta:</span>
-                <span className="gps-overlay-street">{destinationName || nextStep?.name || "Destino"}</span>
-              </div>
-              <div className="gps-overlay-top-right">
-                <div className="gps-overlay-icon">
-                  {getArrowSvg(nextStep?.modifier, nextStep?.type)}
-                </div>
-                <div className="gps-overlay-time-block">
-                  <div className="gps-overlay-time-row">
-                    <span className="gps-overlay-eta-big">{eta !== null ? eta : "--"}</span>
-                    <span className="gps-overlay-min-label">MIN</span>
+          <div className="vt-gps-shell" aria-live="polite">
+
+            {/* Barra superior: volver + etiqueta GPS + progreso + menu */}
+            <div className="gps-topbar">
+              <button className="top-back" onClick={() => { if (onExitGps) onExitGps(); else window.history.back(); }} title="Salir del GPS">
+                ←
+              </button>
+              <div className="top-pill">GPS</div>
+              <div className="top-pill top-pill-percent">{Math.round((plannedKm > 0 ? ((plannedKm - pendingKm) / plannedKm) * 100 : 0))}%</div>
+              <div className="gps-topbar-menu">
+                <button
+                  className={`gps-action-btn${gpsMenuOpen ? ' gps-action-btn-active' : ''}`}
+                  onClick={(e) => { e.stopPropagation(); setGpsMenuOpen((v) => !v); }}
+                  aria-label="Más opciones"
+                >
+                  <svg viewBox="0 0 24 24" width="18" height="18"><circle cx="12" cy="5" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="19" r="1.5" fill="currentColor"/></svg>
+                </button>
+                {gpsMenuOpen && (
+                  <div className="gps-menu-popup" role="menu" onClick={(e) => e.stopPropagation()}>
+                    <button className="gps-menu-item" onClick={() => { setGpsMenuOpen(false); userMovedMapRef.current = false; setFollowPaused(false); if (mapRef && primaryVehicle) { suppressListenerRef.current = true; mapRef.panTo({ lat: primaryVehicle.latitude, lng: primaryVehicle.longitude }); mapRef.setZoom(17); suppressListenerRef.current = false; } }}>Centrar en vehículo</button>
+                    <button className="gps-menu-item" onClick={() => { setGpsMenuOpen(false); const next = !gpsMuted; setGpsMuted(next); gpsMutedRef.current = next; if (next && window.speechSynthesis) window.speechSynthesis.cancel(); }}>{gpsMuted ? 'Activar voz' : 'Silenciar voz'}</button>
+                    <div className="gps-menu-divider" />
+                    <button className="gps-menu-item" onClick={() => { setGpsMenuOpen(false); setGpsNightMode((v) => !v); }}>{gpsNightMode ? 'Modo claro' : 'Modo noche'}</button>
+                    <div className="gps-menu-divider" />
+                    <button className="gps-menu-item gps-menu-item-danger" onClick={() => { setGpsMenuOpen(false); if (onExitGps) onExitGps(); }}>Salir del GPS</button>
                   </div>
-                  <span className="gps-overlay-arrival-top">{arrivalTime}</span>
+                )}
+              </div>
+            </div>
+
+            {/* Tarjeta de giro: icono + distancia + nombre de calle */}
+            <div className="turn-banner">
+              <div id="turn-icon-box">{getArrowSvg(nextStep?.modifier, nextStep?.type, "#ffffff")}</div>
+              <div id="turn-body">
+                <div id="turn-dist">
+                  {nextStep?.distanceAway
+                    ? `en ${nextStep.distanceAway >= 1000 ? `${(nextStep.distanceAway / 1000).toFixed(1)} km` : `${Math.round(nextStep.distanceAway)} m`}`
+                    : 'En ruta'}
+                </div>
+                <div id="turn-name">
+                  {nextStep?.name
+                    ? `${nextStep.modifier ? nextStep.modifier.charAt(0).toUpperCase() + nextStep.modifier.slice(1) + ' → ' : ''}${nextStep.name}`
+                    : destinationName || 'Destino'}
                 </div>
               </div>
             </div>
 
-            {/* Toast GPS: inicio / giro / llegada */}
-            {gpsToast && (
-              <div className={`gps-toast gps-toast-${gpsToast.type}`} role="status" aria-live="polite"
-                onClick={() => setGpsToast(null)}>
-                <div className="gps-toast-icon">
-                  {gpsToast.type === "turn" && (
-                    <div style={{ width: 32, height: 32 }}>
-                      {getArrowSvg(gpsToast.modifier, gpsToast.stepType)}
-                    </div>
-                  )}
-                  {gpsToast.type === "start" && (
-                    <svg viewBox="0 0 24 24" fill="none" width="28" height="28">
-                      <circle cx="12" cy="12" r="10" fill="#1a56db" opacity="0.15"/>
-                      <path d="M10 8l6 4-6 4V8z" fill="#1a56db"/>
-                    </svg>
-                  )}
-                  {gpsToast.type === "arrive" && (
-                    <svg viewBox="0 0 24 24" fill="none" width="28" height="28">
-                      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#1a56db"/>
-                      <circle cx="12" cy="9" r="3" fill="white"/>
-                    </svg>
-                  )}
-                </div>
-                <div className="gps-toast-body">
-                  <span className="gps-toast-text">{gpsToast.text}</span>
-                  {gpsToast.sub && <span className="gps-toast-sub">{gpsToast.sub}</span>}
-                </div>
-              </div>
+            {/* Badge de velocidad: independiente, arriba-derecha */}
+            <div id="spd-box">
+              <div id="spd-val">{displaySpeed}</div>
+              <div id="spd-lbl">km/h</div>
+            </div>
+
+            {/* Placa del vehículo */}
+            {licenseTag && licenseTag !== 'LIC-000000' && (
+              <div id="lic-tag">{licenseTag}</div>
             )}
 
-            {/* Banner inferior — resumen flotante */}
-            <div className="gps-overlay-bottom" aria-live="polite">
-              <div className="gps-overlay-col gps-overlay-col-eta">
-                <span className="gps-overlay-eta-num">{eta !== null ? eta : "--"}</span>
-                <span className="gps-overlay-label-sm">min</span>
-              </div>
-              <div className="gps-overlay-sep" aria-hidden="true" />
-              <div className="gps-overlay-col gps-overlay-col-dist">
-                <span className="gps-overlay-dist-num">{pendingKm} km</span>
-                <span className="gps-overlay-label-sm">restantes</span>
-                <span className="gps-overlay-arrival">Llegada: {arrivalTime}</span>
-              </div>
-              <div className="gps-overlay-sep" aria-hidden="true" />
-              <div className="gps-overlay-col gps-overlay-col-actions">
-                {/* Cancelar navegación */}
-                <button
-                  className="gps-action-btn gps-action-btn-cancel"
-                  onClick={onExitGps || undefined}
-                  aria-label="Cancelar navegación"
-                  title="Cancelar navegación"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
-                    <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
-                  </svg>
-                </button>
-
-                {/* Silenciar / activar voz */}
-                <button
-                  className={`gps-action-btn${gpsMuted ? " gps-action-btn-muted" : ""}`}
-                  onClick={() => {
-                    const next = !gpsMuted;
-                    setGpsMuted(next);
-                    gpsMutedRef.current = next;
-                    if (next && window.speechSynthesis) window.speechSynthesis.cancel();
-                  }}
-                  aria-label={gpsMuted ? "Activar voz" : "Silenciar voz"}
-                  title={gpsMuted ? "Activar voz" : "Silenciar voz"}
-                >
-                  {gpsMuted ? (
-                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
-                      <path d="M11 5L6 9H2v6h4l5 4V5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      <line x1="23" y1="9" x2="17" y2="15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                      <line x1="17" y1="9" x2="23" y2="15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                    </svg>
-                  ) : (
-                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
-                      <path d="M11 5L6 9H2v6h4l5 4V5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M15.54 8.46a5 5 0 010 7.07" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                      <path d="M19.07 4.93a10 10 0 010 14.14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                    </svg>
-                  )}
-                </button>
-
-                {/* Más opciones ⋮ */}
-                <div className="gps-menu-wrapper">
-                  <button
-                    className={`gps-action-btn${gpsMenuOpen ? " gps-action-btn-active" : ""}`}
-                    onClick={(e) => { e.stopPropagation(); setGpsMenuOpen((v) => !v); }}
-                    aria-label="Más opciones"
-                    title="Más opciones"
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
-                      <circle cx="12" cy="5" r="1.5" fill="currentColor"/>
-                      <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
-                      <circle cx="12" cy="19" r="1.5" fill="currentColor"/>
-                    </svg>
-                  </button>
-                  {gpsMenuOpen && (
-                    <div className="gps-menu-popup" role="menu" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        className="gps-menu-item"
-                        role="menuitem"
-                        onClick={() => {
-                          setGpsMenuOpen(false);
-                          userMovedMapRef.current = false;
-                          setFollowPaused(false);
-                          if (mapRef && primaryVehicle) {
-                            suppressListenerRef.current = true;
-                            mapRef.panTo({ lat: primaryVehicle.latitude, lng: primaryVehicle.longitude });
-                            mapRef.setZoom(17);
-                            suppressListenerRef.current = false;
-                          }
-                        }}
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" width="17" height="17">
-                          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="currentColor"/>
-                        </svg>
-                        Centrar en vehículo
-                      </button>
-                      <button
-                        className="gps-menu-item"
-                        role="menuitem"
-                        onClick={() => {
-                          setGpsMenuOpen(false);
-                          const next = !gpsMuted;
-                          setGpsMuted(next);
-                          gpsMutedRef.current = next;
-                          if (next && window.speechSynthesis) window.speechSynthesis.cancel();
-                        }}
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" width="17" height="17">
-                          <path d="M11 5L6 9H2v6h4l5 4V5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          {gpsMuted
-                            ? <><line x1="23" y1="9" x2="17" y2="15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><line x1="17" y1="9" x2="23" y2="15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></>
-                            : <path d="M15.54 8.46a5 5 0 010 7.07" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                          }
-                        </svg>
-                        {gpsMuted ? "Activar voz" : "Silenciar voz"}
-                      </button>
-                      <div className="gps-menu-divider" />
-                      <button
-                        className="gps-menu-item"
-                        role="menuitem"
-                        onClick={() => {
-                          setGpsMenuOpen(false);
-                          setGpsNightMode((v) => !v);
-                        }}
-                      >
-                        {gpsNightMode ? (
-                          <svg viewBox="0 0 24 24" fill="none" width="17" height="17">
-                            <circle cx="12" cy="12" r="4" fill="currentColor"/>
-                            <path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                          </svg>
-                        ) : (
-                          <svg viewBox="0 0 24 24" fill="none" width="17" height="17">
-                            <path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z" fill="currentColor"/>
-                          </svg>
-                        )}
-                        {gpsNightMode ? "Modo claro" : "Modo noche"}
-                      </button>
-                      <div className="gps-menu-divider" />
-                      <button
-                        className="gps-menu-item gps-menu-item-danger"
-                        role="menuitem"
-                        onClick={() => {
-                          setGpsMenuOpen(false);
-                          if (onExitGps) onExitGps();
-                        }}
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" width="17" height="17">
-                          <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/>
-                        </svg>
-                        Salir del GPS
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
+            {/* Botones de acción: centrar, audio, zoom */}
+            <div id="right-btns">
+              <button className="rbtn" aria-label="Centrar en vehículo" title="Centrar" onClick={() => { setFollowPaused(false); if (mapRef && primaryVehicle) { suppressListenerRef.current = true; mapRef.panTo({ lat: primaryVehicle.latitude, lng: primaryVehicle.longitude }); mapRef.setZoom(17); suppressListenerRef.current = false; } }}>
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg>
+              </button>
+              <button className="rbtn" aria-label={gpsMuted ? 'Activar voz' : 'Silenciar voz'} title={gpsMuted ? 'Activar voz' : 'Silenciar voz'} onClick={() => { const next = !gpsMuted; setGpsMuted(next); gpsMutedRef.current = next; if (next && window.speechSynthesis) window.speechSynthesis.cancel(); }}>
+                {gpsMuted
+                  ? <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+                  : <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                }
+              </button>
+              <button className="rbtn" aria-label="Acercar" title="+" onClick={() => { if (mapRef?.getZoom) mapRef.setZoom((mapRef.getZoom() ?? 16) + 1); }}>
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </button>
+              <button className="rbtn" aria-label="Alejar" title="−" onClick={() => { if (mapRef?.getZoom) mapRef.setZoom((mapRef.getZoom() ?? 16) - 1); }}>
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </button>
             </div>
-          </>
+
+            {/* Panel ETA inferior */}
+            <div id="eta-panel">
+              <div className="ep-block">
+                <div className="ep-val">{eta === null ? '—' : `${eta} min`}</div>
+                <div className="ep-lbl">Tiempo est.</div>
+              </div>
+              <div className="ep-block">
+                <div className="ep-val">{pendingKm > 0 ? `${pendingKm} km` : '—'}</div>
+                <div className="ep-lbl">Restante</div>
+              </div>
+              <div className="ep-block">
+                <div className="ep-val">{arrivalTime}</div>
+                <div className="ep-lbl">Llegada</div>
+              </div>
+              <button id="stop-nav" onClick={() => { if (onExitGps) onExitGps(); }}>
+                Detener
+              </button>
+            </div>
+
+          </div>
         );
       })()}
 

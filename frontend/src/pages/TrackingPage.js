@@ -6,12 +6,13 @@ import React, {
   useReducer,
   useState,
 } from "react";
+import ReactDOM from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
 import MapView from "../components/MapView";
 import { connectTrackingWS } from "../services/ws";
 import { connectAdminMonitoring } from "../services/adminWs";
 import { getTrackingsByRoute } from "../services/tracking";
-import { getRoute, getRouteMonitoringSummary } from "../services/admin";
+import { getRoute, getRouteMonitoringSummary, completeRoute } from "../services/admin";
 import {
   getDriverAssignedRoutes,
   getUserAssignedRoute,
@@ -22,11 +23,12 @@ import {
   getStreetRouteThroughPoints,
   getETAMinutes,
   getTrackedStreetRoute,
-  isWithinBuenaventuraZone,
   snapPointToRoad,
   buildRoadPathBetweenPoints,
 } from "../services/routing";
 import "./TrackingPage.css";
+import NotificationCenter from "../components/notifications/NotificationCenter";
+import { MdWarning, MdInfo, MdError, MdNotificationsActive, MdClose, MdArrowForward } from "react-icons/md";
 
 
 const LIVE_WINDOW_MINUTES = 20;
@@ -411,6 +413,549 @@ function isWithinBuenaventura(lat, lng) {
   );
 }
 
+/* ── Notificación GPS unificada ──────────────────────────── */
+const GPS_NOTIF_CONFIG = {
+  live:     { label: "En vivo",               accent: "#2563eb", iconColor: "#2563eb", bg: "#eff6ff" },
+  stop:     { label: "Proxima parada",         accent: "#2563eb", iconColor: "#475569", bg: "#f8fafc" },
+  early:    { label: "Parada proxima",         accent: "#475569", iconColor: "#475569", bg: "#f8fafc" },
+  arriving: { label: "Llegando a la parada",  accent: "#16a34a", iconColor: "#16a34a", bg: "#f0fdf4" },
+  arrival:  { label: "Llegando al destino",   accent: "#2563eb", iconColor: "#2563eb", bg: "#eff6ff" },
+  finished: { label: "Recorrido finalizado",  accent: "#16a34a", iconColor: "#16a34a", bg: "#f0fdf4" },
+};
+
+const GPS_ICONS = {
+  live: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8"/>
+      <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+    </svg>
+  ),
+  stop: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+      <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z" stroke="currentColor" strokeWidth="1.8"/>
+      <circle cx="12" cy="10" r="3" stroke="currentColor" strokeWidth="1.8"/>
+    </svg>
+  ),
+  arriving: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+      <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z" stroke="currentColor" strokeWidth="1.8"/>
+      <circle cx="12" cy="10" r="3" stroke="currentColor" strokeWidth="1.8"/>
+    </svg>
+  ),
+  arrival: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+      <polygon points="3 11 22 2 13 21 11 13 3 11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
+  finished: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+      <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
+};
+GPS_ICONS.early = GPS_ICONS.stop;
+
+function GpsNotif({ type, title, sub, onClose, duration = 6000 }) {
+  const cfg = GPS_NOTIF_CONFIG[type] || GPS_NOTIF_CONFIG.stop;
+  const icon = GPS_ICONS[type] || GPS_ICONS.stop;
+  const [progress, setProgress] = React.useState(100);
+
+  React.useEffect(() => {
+    const start = Date.now();
+    const tick = setInterval(() => {
+      const elapsed = Date.now() - start;
+      const pct = Math.max(0, 100 - (elapsed / duration) * 100);
+      setProgress(pct);
+      if (pct <= 0) { clearInterval(tick); onClose(); }
+    }, 50);
+    return () => clearInterval(tick);
+  }, [duration, onClose]);
+
+  return (
+    <div className="gps-notif-item" style={{ "--accent": cfg.accent, "--icon-color": cfg.iconColor, "--notif-bg": cfg.bg }}>
+      <div className="gps-notif-icon">
+        {icon}
+      </div>
+      <div className="gps-notif-body">
+        <span className="gps-notif-label">{cfg.label}</span>
+        <span className="gps-notif-title">{title}</span>
+        {sub && <span className="gps-notif-sub">{sub}</span>}
+        <div className="gps-notif-bar">
+          <div className="gps-notif-bar-fill" style={{ width: `${progress}%` }} />
+        </div>
+      </div>
+      <button type="button" className="gps-notif-close" onClick={onClose} aria-label="Cerrar">
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+        </svg>
+      </button>
+    </div>
+  );
+}
+
+/* ── Panel de alertas del administrador ──────────────────── */
+const ALERT_TONE = {
+  warning: { Icon: MdWarning,  bg: "adm-alert-warning" },
+  danger:  { Icon: MdError,    bg: "adm-alert-danger"  },
+  info:    { Icon: MdInfo,     bg: "adm-alert-info"    },
+};
+
+const alertKey = (a) => a.id || `${a.title}__${a.detail}`;
+
+function AdminAlertsPanel({ alerts, anchorRef, onClose, onAction, getActionLabel, dismissed, onDismiss, onDismissAll }) {
+  const panelRef = React.useRef(null);
+  const [style, setStyle] = React.useState({});
+  const [expanded, setExpanded] = React.useState(null);
+
+  const visible = alerts.filter((a) => !dismissed.has(alertKey(a)));
+
+  React.useEffect(() => {
+    if (visible.length === 0) onClose();
+  }, [visible.length, onClose]);
+
+  React.useEffect(() => {
+    if (!anchorRef.current) return;
+    const rect = anchorRef.current.getBoundingClientRect();
+    const W = 340;
+    const fitsRight = window.innerWidth - rect.left >= W;
+    setStyle({
+      position: "fixed",
+      top: rect.bottom + 6,
+      left: Math.max(8, fitsRight ? rect.left : rect.right - W),
+      width: W,
+      zIndex: 9999,
+    });
+  }, [anchorRef]);
+
+  React.useEffect(() => {
+    function handle(e) {
+      if (!panelRef.current?.contains(e.target) && !anchorRef.current?.contains(e.target)) onClose();
+    }
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [onClose, anchorRef]);
+
+  const dismiss = (a) => {
+    onDismiss(alertKey(a));
+    if (expanded === alertKey(a)) setExpanded(null);
+  };
+
+  const dismissAll = () => onDismissAll(alerts.map(alertKey));
+
+  const toggleExpand = (a) => {
+    const k = alertKey(a);
+    setExpanded((prev) => (prev === k ? null : k));
+  };
+
+  return ReactDOM.createPortal(
+    <div ref={panelRef} style={style} className="adm-alerts-panel">
+      {/* Header */}
+      <div className="adm-alerts-header">
+        <div className="adm-alerts-header-left">
+          <MdNotificationsActive className="adm-alerts-header-icon" />
+          <div>
+            <p className="adm-alerts-header-title">Alertas activas</p>
+            <p className="adm-alerts-header-sub">
+              {visible.length} alerta{visible.length !== 1 ? "s" : ""} requieren atención
+            </p>
+          </div>
+        </div>
+        <div className="adm-alerts-header-actions">
+          <button type="button" className="adm-alerts-dismiss-all" onClick={dismissAll}>
+            Marcar todas vistas
+          </button>
+          <button type="button" onClick={onClose} className="adm-alerts-close" aria-label="Cerrar">
+            <MdClose />
+          </button>
+        </div>
+      </div>
+
+      {/* Lista */}
+      <div className="adm-alerts-list">
+        {visible.map((alert) => {
+          const tone = ALERT_TONE[alert.tone] || ALERT_TONE.info;
+          const { Icon, bg } = tone;
+          const actionLabel = getActionLabel(alert);
+          const key = alertKey(alert);
+          const isExpanded = expanded === key;
+
+          return (
+            <div key={key} className={`adm-alert-item ${bg}`}>
+              {/* Fila principal clickeable */}
+              <button
+                type="button"
+                className="adm-alert-main"
+                onClick={() => toggleExpand(alert)}
+                aria-expanded={isExpanded}
+              >
+                <div className="adm-alert-icon-wrap">
+                  <Icon className="adm-alert-icon" />
+                </div>
+                <div className="adm-alert-body">
+                  <p className="adm-alert-title">{alert.title}</p>
+                  {!isExpanded && alert.detail && (
+                    <p className="adm-alert-detail adm-alert-detail-preview">{alert.detail}</p>
+                  )}
+                </div>
+                <div className="adm-alert-row-end">
+                  <svg
+                    className={`adm-alert-chevron${isExpanded ? " open" : ""}`}
+                    width="12" height="12" viewBox="0 0 12 12" fill="none"
+                  >
+                    <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+              </button>
+
+              {/* Panel expandido */}
+              {isExpanded && (
+                <div className="adm-alert-expanded">
+                  {alert.detail && (
+                    <p className="adm-alert-detail">{alert.detail}</p>
+                  )}
+                  <div className="adm-alert-expanded-footer">
+                    {actionLabel && (
+                      <button
+                        type="button"
+                        className="adm-alert-action-btn"
+                        onClick={() => { onAction(alert); onClose(); }}
+                      >
+                        {actionLabel}
+                        <MdArrowForward className="adm-alert-action-icon" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="adm-alert-dismiss-btn"
+                      onClick={() => dismiss(alert)}
+                    >
+                      Marcar como vista
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/* ── Popover de paradas intermedias ──────────────────────── */
+function StopsPopover({ stops, anchorRef, onClose, stopCount, passengerCount }) {
+  const popRef = React.useRef(null);
+  const [style, setStyle] = React.useState({});
+
+  React.useEffect(() => {
+    if (!anchorRef.current) return;
+    const rect = anchorRef.current.getBoundingClientRect();
+    const POP_W = 260;
+    const fitsRight = window.innerWidth - rect.left >= POP_W;
+    setStyle({
+      position: "fixed",
+      top: rect.bottom + 6,
+      left: Math.max(8, fitsRight ? rect.left : rect.right - POP_W),
+      width: POP_W,
+      zIndex: 9999,
+    });
+  }, [anchorRef]);
+
+  React.useEffect(() => {
+    function handle(e) {
+      if (popRef.current && !popRef.current.contains(e.target) && !anchorRef.current?.contains(e.target)) {
+        onClose();
+      }
+    }
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [onClose, anchorRef]);
+
+  return ReactDOM.createPortal(
+    <div ref={popRef} style={style} className="vt-stops-popover">
+      <div className="vt-stops-pop-header">
+        <div>
+          <span>Paradas del recorrido</span>
+          <div className="vt-stops-pop-meta">
+            {stopCount != null && <span>{stopCount} paradas</span>}
+            {stopCount != null && passengerCount != null && <span className="vt-stops-pop-sep">·</span>}
+            {passengerCount != null && <span>{passengerCount} estudiante{passengerCount !== 1 ? "s" : ""}</span>}
+          </div>
+        </div>
+        <button type="button" onClick={onClose} className="vt-stops-pop-close" aria-label="Cerrar">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M1 1l10 10M11 1L1 11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <ul className="vt-stops-pop-list">
+        {stops.map((stop, i) => (
+          <li key={stop.id} className="vt-stops-pop-item">
+            <span className="vt-stops-pop-num">{i + 1}</span>
+            <div className="vt-stops-pop-info">
+              <p className="vt-stops-pop-name">{stop.label || `Parada ${stop.order}`}</p>
+              {stop.address && stop.address !== stop.label && (
+                <p className="vt-stops-pop-addr">{stop.address}</p>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>,
+    document.body
+  );
+}
+
+/* ── Componente de tarjeta de ruta reutilizable ─────────── */
+function RouteCard({ routeInfo, selectedRouteId, routeBadge, displayIntermediateStops, routeProgressPercent, collapsibleStops = false, children }) {
+  const [popoverOpen, setPopoverOpen] = React.useState(false);
+  const toggleBtnRef = React.useRef(null);
+  const stops = displayIntermediateStops || [];
+  const stopCount = stops.length + 2;
+  const passengerCount =
+    routeInfo?.passenger_count ??
+    routeInfo?.passenger_details?.length ??
+    routeInfo?.passengers?.length ??
+    (stops.length > 0 ? stops.length : null);
+
+  return (
+    <div className="vt-route-card">
+      {/* Popover de paradas */}
+      {collapsibleStops && popoverOpen && stops.length > 0 && (
+        <StopsPopover
+          stops={stops}
+          anchorRef={toggleBtnRef}
+          onClose={() => setPopoverOpen(false)}
+          stopCount={stopCount}
+          passengerCount={passengerCount}
+        />
+      )}
+
+      {/* Header */}
+      <div className="vt-route-header">
+        <div className="vt-route-title-group">
+          <p className="vt-route-eyebrow">Ruta asignada</p>
+          <div className="vt-route-name-row">
+            <p className="vt-route-name">
+              {routeInfo?.name || (Number.isFinite(selectedRouteId) ? `Ruta #${selectedRouteId}` : "Sin ruta")}
+            </p>
+            {collapsibleStops && stops.length > 0 && (
+              <button
+                ref={toggleBtnRef}
+                type="button"
+                onClick={() => setPopoverOpen((v) => !v)}
+                className="vt-stops-toggle-arrow"
+                aria-label="Ver detalle de paradas"
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                  <path d="M5 3l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+
+      {/* Paradas */}
+      <div className="vt-timeline">
+        <div className="vt-tl-row">
+          <span className="vt-tl-dot start" />
+          <div className="vt-tl-info">
+            <p className="vt-tl-label blue">Origen</p>
+            <p className="vt-tl-value">{routeInfo?.origin || "—"}</p>
+          </div>
+        </div>
+
+        {!collapsibleStops && stops.map((stop) => (
+          <div key={stop.id} className="vt-tl-row">
+            <span className="vt-tl-dot mid" />
+            <div className="vt-tl-info">
+              <p className="vt-tl-label">Parada</p>
+              <p className="vt-tl-value">{stop.label || stop.address || `Parada ${stop.order}`}</p>
+            </div>
+          </div>
+        ))}
+
+        <div className="vt-tl-row">
+          <span className="vt-tl-dot end" />
+          <div className="vt-tl-info">
+            <p className="vt-tl-label">Destino</p>
+            <p className="vt-tl-value">{routeInfo?.destination || "—"}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Progreso */}
+      <div className="vt-progress-section">
+        <div className="vt-progress-header">
+          <span className="vt-progress-text">Progreso del recorrido</span>
+          <span className="vt-progress-pct-pill">{routeProgressPercent}%</span>
+        </div>
+        <div className="vt-progress-track">
+          <div className="vt-progress-fill" style={{ width: `${routeProgressPercent}%` }} />
+        </div>
+      </div>
+
+      {/* Slot para contenido extra por rol */}
+      {children}
+    </div>
+  );
+}
+
+/* ── Pantalla de ruta finalizada (conductor) ──────────────── */
+function RouteFinishedScreen({
+  routeName,
+  origin,
+  destination,
+  distanceKm,
+  durationMinutes,
+  speedKmh,
+  stopsCount,
+  finishedAt,
+  nextRoute,
+  nextRouteCountdown,
+  onNewRoute,
+  onGoHome,
+  onViewReport,
+}) {
+
+  const finishLabel = finishedAt
+    ? new Date(finishedAt).toLocaleTimeString("es-CO", {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "--:--";
+
+  return (
+    <div className="rfs-wrap">
+
+      {/* ── Hero ── */}
+      <div className="rfs-hero">
+        <div className="rfs-check-ring">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
+        <h2 className="rfs-hero-title">¡{routeName || "Ruta"} finalizada!</h2>
+        <p className="rfs-hero-sub">
+          Llegaste exitosamente a<br />{destination || "tu destino"}
+        </p>
+        <span className="rfs-hero-time">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
+            <path d="M12 6v6l4 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+          Completada a las <strong>{finishLabel}</strong>
+        </span>
+      </div>
+
+      {/* ── Resumen ── */}
+      <div className="rfs-section">
+        <p className="rfs-sec-label">RESUMEN DEL RECORRIDO</p>
+
+        <div className="rfs-od-card">
+          <div className="rfs-od-row">
+            <span className="rfs-od-dot origin" />
+            <span className="rfs-od-lbl origin">Origen</span>
+            <span className="rfs-od-txt">{origin || "—"}</span>
+          </div>
+          <div className="rfs-od-row">
+            <span className="rfs-od-dot dest" />
+            <span className="rfs-od-lbl dest">Destino</span>
+            <span className="rfs-od-txt">{destination || "—"}</span>
+          </div>
+        </div>
+
+        <div className="rfs-stats-grid">
+          <div className="rfs-stat-card">
+            <span className="rfs-stat-label">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8"/></svg>
+              Distancia
+            </span>
+            <span className="rfs-stat-val">{distanceKm != null ? `${distanceKm.toFixed(1)} km` : "-- km"}</span>
+            <span className="rfs-stat-sub">recorridos</span>
+          </div>
+          <div className="rfs-stat-card">
+            <span className="rfs-stat-label">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2" strokeLinecap="round"/></svg>
+              Duración
+            </span>
+            <span className="rfs-stat-val">{durationMinutes != null ? `${durationMinutes} min` : "-- min"}</span>
+            <span className="rfs-stat-sub">tiempo total</span>
+          </div>
+          <div className="rfs-stat-card">
+            <span className="rfs-stat-label">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/></svg>
+              Vel. promedio
+            </span>
+            <span className="rfs-stat-val">{speedKmh > 0 ? `${speedKmh} km/h` : "-- km/h"}</span>
+          </div>
+          <div className="rfs-stat-card">
+            <span className="rfs-stat-label">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              Paradas
+            </span>
+            <span className="rfs-stat-val">{stopsCount ?? 0}</span>
+            <span className="rfs-stat-sub">{stopsCount === 0 ? "sin desvíos" : "en ruta"}</span>
+          </div>
+        </div>
+
+        <div className="rfs-progress-card">
+          <div className="rfs-progress-top">
+            <span className="rfs-progress-lbl">Progreso final</span>
+            <span className="rfs-progress-complete">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Completo
+            </span>
+          </div>
+          <div className="rfs-progress-labels">
+            <span>0 km</span>
+            <span className="rfs-progress-pct">100% completado</span>
+            <span>{distanceKm != null ? `${distanceKm.toFixed(1)} km` : "--"}</span>
+          </div>
+          <div className="rfs-pbar">
+            <div className="rfs-pfill" style={{ width: "100%" }} />
+          </div>
+        </div>
+      </div>
+
+      {/* ── Acciones ── */}
+      <div className="rfs-actions">
+        <button type="button" className="rfs-btn report" onClick={onViewReport || onGoHome}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
+          Ver reporte completo
+        </button>
+        <button type="button" className="rfs-btn primary" onClick={onNewRoute}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/>
+            <circle cx="12" cy="10" r="3"/>
+          </svg>
+          {nextRoute
+            ? `Nueva ruta${nextRouteCountdown !== null ? ` (${nextRouteCountdown}s)` : ""}`
+            : "Nueva ruta"}
+        </button>
+        <button type="button" className="rfs-btn secondary" onClick={onGoHome}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            <polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+          Ir al inicio
+        </button>
+      </div>
+
+    </div>
+  );
+}
+
 export default function TrackingPage({ routeId: routeIdProp }) {
   const params = useParams();
   const navigate = useNavigate();
@@ -477,7 +1022,6 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const [etaUpdated, setEtaUpdated] = useState(null);
   const [loading, setLoading] = useState(true);
   const [wsStatus, setWsStatus] = useState("connecting");
-  const [isPollingFallback, setIsPollingFallback] = useState(false);
   const [forceBuenaventuraDemo, setForceBuenaventuraDemo] = useState(false);
   const [showLiveTransition, setShowLiveTransition] = useState(false);
   const [showLiveToast, setShowLiveToast] = useState(false);
@@ -486,6 +1030,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const [guidedRouteLoading, setGuidedRouteLoading] = useState(false);
   const [guidedRouteRunning, setGuidedRouteRunning] = useState(false);
   const [gpsOverlayVisible, setGpsOverlayVisible] = useState(false);
+  const [startedByDriver, setStartedByDriver] = useState(false);
   const [guidedRouteError, setGuidedRouteError] = useState("");
   const [guidedRouteDisplayPath, setGuidedRouteDisplayPath] = useState([]);
   const [navigationSteps, setNavigationSteps] = useState(null);
@@ -498,6 +1043,16 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const [kpiCollapsed, setKpiCollapsed] = useState(false);
   const [routesCollapsed, setRoutesCollapsed] = useState(false);
   const [showAlertsPanel, setShowAlertsPanel] = useState(false);
+  const [dismissedAlertKeys, setDismissedAlertKeys] = useState(new Set());
+  const adminBellRef = useRef(null);
+  const [routeStartedAt, setRouteStartedAt] = useState(null);
+  const [elapsedMinutes, setElapsedMinutes] = useState(null);
+  const hasStartedOnceRef = useRef(false);
+  const [routeFinishedAt, setRouteFinishedAt] = useState(null);
+  // VIALTROS: modal detener
+  const [showStopModal, setShowStopModal] = useState(false);
+  const [forceRouteFinished, setForceRouteFinished] = useState(false);
+  const routeCompletedRef = useRef(false);
 
   const resolveRouteInfo = useCallback(
     async (routeId) => {
@@ -533,6 +1088,8 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const guidedRoutePointsRef = useRef([]);
   const guidedRouteIndexRef = useRef(0);
   const guidedRouteFullPathRef = useRef([]);
+  const guidedRouteDurationRef = useRef(null);
+  const guidedRouteStepDelaysRef = useRef([]);
   const routeEndNotifiedRef = useRef(false);
   const routeFinishedTimerRef = useRef(null);
   const nextRouteCountdownRef = useRef(null);
@@ -554,6 +1111,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     wsStatusRef.current = wsStatus;
   }, [wsStatus]);
 
+
   useEffect(() => {
     trackingsRef.current = trackings;
   }, [trackings]);
@@ -568,7 +1126,25 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     setGpsOverlayVisible(false);
     setGuidedRouteError("");
     setNavigationSteps(null);
+    setRouteStartedAt(null);
+    setStartedByDriver(false);
+    setElapsedMinutes(null);
+    setRouteFinishedAt(null);
+    setShowStopModal(false);
+    setForceRouteFinished(false);
+    hasStartedOnceRef.current = false;
+    routeCompletedRef.current = false;
   }, [selectedRouteId]);
+
+  // Marcar ruta como completada cuando el conductor la finaliza manualmente
+  useEffect(() => {
+    if (!forceRouteFinished) return;
+    if (currentRole !== "driver") return;
+    if (!Number.isFinite(selectedRouteId)) return;
+    if (routeCompletedRef.current) return;
+    routeCompletedRef.current = true;
+    completeRoute(selectedRouteId).catch(() => {});
+  }, [forceRouteFinished, currentRole, selectedRouteId]);
 
   useEffect(
     () => () => {
@@ -583,9 +1159,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
 
     const success = (position) => {
       const coords = [position.coords.latitude, position.coords.longitude];
-      if (isWithinBuenaventuraZone(coords)) {
-        setUserCoords(coords);
-      }
+      setUserCoords(coords);
     };
 
     navigator.geolocation.getCurrentPosition(success, () => {}, {
@@ -614,12 +1188,6 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       })
       .catch(() => {
         if (!cancelled) setDriverRoutes([]);
-      })
-      .finally(() => {
-        if (!cancelled) {
-          // setLoadingRoutes se comenta ya que loadingRoutes fue eliminado
-          // setLoadingRoutes(false);
-        }
       });
 
     return () => {
@@ -682,7 +1250,6 @@ export default function TrackingPage({ routeId: routeIdProp }) {
             : [],
         );
         setAdminAlerts(Array.isArray(summary?.alerts) ? summary.alerts : []);
-        if (wsStatusRef.current !== "live") setIsPollingFallback(true);
       } catch {
         if (!cancelled) {
           setAdminStats(null);
@@ -696,7 +1263,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     loadAdminData();
     const intervalId = setInterval(() => {
       void loadAdminData();
-    }, 5000);
+    }, 10000);
 
     return () => {
       cancelled = true;
@@ -759,7 +1326,6 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       {
         onOpen: () => {
           setWsStatus("live");
-          setIsPollingFallback(false);
         },
         onReconnecting: () => {
           setWsStatus("connecting");
@@ -1182,7 +1748,6 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           opened = true;
           clearTimeout(openingTimeoutId);
           setWsStatus("live");
-          setIsPollingFallback(false);
         },
         onClose: () => {
           setWsStatus((current) => {
@@ -1245,7 +1810,6 @@ export default function TrackingPage({ routeId: routeIdProp }) {
         });
 
         // mark that polling provided recent data only when websocket isn't the primary source
-        if (wsStatusRef.current !== "live") setIsPollingFallback(true);
       } catch {
         // ignore transient network errors
       }
@@ -1406,17 +1970,6 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     };
   }, [guidedRouteDisplayPath, liveRouteHistory, guidedRouteRunning]);
 
-  const statusBadge = useMemo(() => {
-    const badges = {
-      connecting: { label: "Conectando", color: "connecting" },
-      live: { label: "En vivo", color: "live" },
-      offline: { label: "Sin conexion", color: "offline" },
-      fallback: { label: "En vivo (respaldo)", color: "live" },
-    };
-    if (isPollingFallback && wsStatus !== "live") return badges.fallback;
-    return badges[wsStatus] || badges.connecting;
-  }, [wsStatus, isPollingFallback]);
-
   const hasLiveData = trackings.length > 0;
   const showEmptyCityCanvas = !hasLiveData;
   const hasPlannedRoute =
@@ -1426,7 +1979,8 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const showRouteContext =
     !forceBuenaventuraDemo && (hasResolvedStops || hasPlannedRoute);
   const canManageGuidedRoute = currentRole === "driver";
-  const routeIsLive = guidedRouteRunning || hasLiveData;
+  // Consider route 'live' only if driver explicitly started it or guided playback is running
+  const routeIsLive = guidedRouteRunning || (hasLiveData && startedByDriver);
 
   const displayOriginCoords = showRouteContext ? originCoords : null;
   const displayDestinationCoords = showRouteContext ? destinationCoords : null;
@@ -1656,13 +2210,19 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   // Derivar estado legible de la ruta: 'en_curso' | 'finalizada' | 'detenida'
   const routeState = useMemo(() => {
     if (routeIsLive) {
-      if (Number.isFinite(remainingDistanceKm) && remainingDistanceKm <= 0.03)
-        return "finalizada";
+      // Solo considerar ruta 'finalizada' cuando la distancia restante sea muy pequeña
+      // y el vehículo esté efectivamente detenido o a muy baja velocidad.
+      // Además requerimos que la ruta haya estado activa al menos unos segundos
+      // para evitar finalizaciones instantáneas al abrir la vista.
+      const arrivedByDistance = Number.isFinite(remainingDistanceKm) && remainingDistanceKm <= 0.03;
+      const stopped = vehicleSummary?.status === "Detenido" || (Number.isFinite(vehicleSummary?.speedKmh) && vehicleSummary.speedKmh < 3);
+      const startedAgo = routeStartedAt ? Date.now() - routeStartedAt > 5000 : false;
+      if (arrivedByDistance && stopped && startedAgo) return "finalizada";
       return "en_curso";
     }
     if (vehicleSummary?.status === "Detenido") return "detenida";
     return "detenida";
-  }, [routeIsLive, remainingDistanceKm, vehicleSummary]);
+  }, [routeIsLive, remainingDistanceKm, vehicleSummary, routeStartedAt]);
 
   const routeBadge = useMemo(() => {
     if (routeState === "finalizada") {
@@ -1715,6 +2275,14 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       statusLabel: "Buscando",
     };
   }, [routeGeometryMode, routeIsLive, routeState]);
+
+
+  const routeStartLabel = routeStartedAt
+    ? new Date(routeStartedAt).toLocaleTimeString("es-CO", {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "--:--";
 
   const activeVehicles = useMemo(() => {
     if (!hasLiveData) return [];
@@ -1904,6 +2472,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     guidedRouteIndexRef.current = 0;
     setGuidedRouteLoading(false);
     setGuidedRouteRunning(false);
+    setStartedByDriver(false);
     setGpsOverlayVisible(false);
     setNavigationSteps(null);
   };
@@ -1913,11 +2482,27 @@ export default function TrackingPage({ routeId: routeIdProp }) {
 
   const pushGuidedTrackingPoint = async (point) => {
     const timestamp = new Date().toISOString();
+    // Calculate realistic speed for this step using next sampled point and configured delays
+    let speedKmh = GUIDED_ROUTE_SPEED_KMH;
+    try {
+      const idx = guidedRouteIndexRef.current;
+      const delays = guidedRouteStepDelaysRef.current || [];
+      const nextPoint = guidedRoutePointsRef.current[idx + 1];
+      if (nextPoint && Array.isArray(point)) {
+        const distKm = distanceKm(point[0], point[1], nextPoint[0], nextPoint[1]);
+        const delayMs = delays[idx] || GUIDED_ROUTE_STEP_MS;
+        const hours = Math.max(0.00001, delayMs / 1000 / 3600);
+        speedKmh = Math.max(0, Math.round(distKm / hours));
+      }
+    } catch (e) {
+      speedKmh = GUIDED_ROUTE_SPEED_KMH;
+    }
+
     const payload = {
       route: selectedRouteId,
       latitude: point[0],
       longitude: point[1],
-      speed_kmh: GUIDED_ROUTE_SPEED_KMH,
+      speed_kmh: speedKmh,
       timestamp,
       source: "tracking-guided-route",
       status: "picked",
@@ -1974,9 +2559,12 @@ export default function TrackingPage({ routeId: routeIdProp }) {
         stopGuidedRoute();
         return;
       }
+      const idxDelay = guidedRouteIndexRef.current - 1;
+      const delays = guidedRouteStepDelaysRef.current || [];
+      const delayMs = delays[idxDelay] || GUIDED_ROUTE_STEP_MS;
       guidedRouteTimerRef.current = setTimeout(() => {
         void runGuidedRouteStep();
-      }, GUIDED_ROUTE_STEP_MS);
+      }, Math.max(250, Math.round(delayMs)));
     } catch {
       stopGuidedRoute();
       setGuidedRouteError("No se pudo iniciar o continuar la ruta guiada.");
@@ -2005,6 +2593,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
         Array.isArray(routePolyline) && routePolyline.length > 1
           ? routePolyline
           : null;
+      let streetRoute = null;
       if (!playbackRoute && routeInfo?.origin && routeInfo?.destination) {
         const [from, to] = await Promise.all([
           geocodeAddress(routeInfo.origin, { fallbackCoords: userCoords }),
@@ -2015,7 +2604,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           to,
           routeInfo?.intermediate_stops,
         );
-        const streetRoute =
+        streetRoute =
           waypointCoords.length > 1
             ? await getStreetRouteThroughPoints(waypointCoords)
             : null;
@@ -2090,9 +2679,39 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       stopGuidedRoute();
       guidedRouteFullPathRef.current = exactRoute;
       guidedRoutePointsRef.current = sampledRoute;
+      // Calculate realistic total duration and per-step delays
+      try {
+        const totalDistanceKm = polylineDistanceKm(exactRoute) || 0;
+        const totalDurationSec = (streetRoute && Number.isFinite(streetRoute.duration))
+          ? Number(streetRoute.duration)
+          : totalDistanceKm > 0
+            ? (totalDistanceKm / Math.max(GUIDED_ROUTE_SPEED_KMH, 1)) * 3600
+            : (GUIDED_ROUTE_STEP_MS / 1000) * sampledRoute.length;
+        guidedRouteDurationRef.current = totalDurationSec;
+        const delays = [];
+        if (totalDistanceKm > 0) {
+          for (let i = 0; i < sampledRoute.length - 1; i += 1) {
+            const a = sampledRoute[i];
+            const b = sampledRoute[i + 1];
+            const d = distanceKm(a[0], a[1], b[0], b[1]);
+            const segMs = (d / totalDistanceKm) * totalDurationSec * 1000;
+            delays.push(Math.max(250, segMs));
+          }
+        } else {
+          for (let i = 0; i < sampledRoute.length - 1; i += 1) delays.push(GUIDED_ROUTE_STEP_MS);
+        }
+        guidedRouteStepDelaysRef.current = delays;
+      } catch (e) {
+        guidedRouteStepDelaysRef.current = [];
+      }
       guidedRouteIndexRef.current = 0;
       setGuidedRouteDisplayPath([exactRoute[0]]);
+      if (!hasStartedOnceRef.current) {
+        setRouteStartedAt(Date.now());
+        hasStartedOnceRef.current = true;
+      }
       setGuidedRouteRunning(true);
+      setStartedByDriver(true);
       setGpsOverlayVisible(true);
       setGuidedRouteLoading(false);
       routeEndNotifiedRef.current = false;
@@ -2137,7 +2756,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       );
     }
 
-    // Si somos conductor, enviar notificación final al backend
+    // Si somos conductor, enviar notificación final al backend y marcar ruta como completada
     if (currentRole === "driver" && Number.isFinite(selectedRouteId)) {
       (async () => {
         try {
@@ -2161,6 +2780,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
               source: "route-end",
             }).catch(() => {});
           }
+          await completeRoute(selectedRouteId).catch(() => {});
         } catch {
           // ignore
         }
@@ -2328,53 +2948,132 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     return undefined;
   }, [guidedRouteRunning, vehiclePosition, displayIntermediateStops]);
 
+  useEffect(() => {
+    if (currentRole === "driver" && routeState === "finalizada" && !routeFinishedAt) {
+      setRouteFinishedAt(Date.now());
+      setShowStopModal(false);
+    }
+  }, [currentRole, routeState, routeFinishedAt]);
+
+  // Nota: no marcar la ruta como iniciada automáticamente cuando haya datos
+  // en vivo. `routeStartedAt` se establece explícitamente cuando el
+  // conductor inicia la ruta (startGuidedRoute) para evitar inicios
+  // automáticos al abrir la vista.
+
+  useEffect(() => {
+    if (!guidedRouteRunning || !routeStartedAt) {
+      setElapsedMinutes(null);
+      return undefined;
+    }
+    setElapsedMinutes(0);
+    const id = setInterval(
+      () => setElapsedMinutes(Math.floor((Date.now() - routeStartedAt) / 60000)),
+      30000,
+    );
+    return () => clearInterval(id);
+  }, [guidedRouteRunning, routeStartedAt]);
+
+
+  if (currentRole === "driver" && (routeState === "finalizada" || forceRouteFinished)) {
+    // Tiempo real exacto: desde inicio hasta el momento en que se marcó como finalizada
+    const realElapsedMinutes = (() => {
+      if (routeStartedAt && routeFinishedAt) {
+        return Math.max(0, Math.floor((routeFinishedAt - routeStartedAt) / 60000));
+      }
+      return elapsedMinutes;
+    })();
+
+    // Distancia recorrida real: lo que avanzó hasta el momento de parada
+    const traveledKm = plannedDistanceKm > 0 && remainingDistanceKm != null
+      ? Math.max(0, plannedDistanceKm - remainingDistanceKm)
+      : null;
+
+    // Velocidad promedio real
+    const avgSpeedKmh = (() => {
+      if (realElapsedMinutes && realElapsedMinutes > 0 && (traveledKm ?? plannedDistanceKm) > 0) {
+        const dist = traveledKm ?? plannedDistanceKm;
+        const hrs = Math.max(0.001, realElapsedMinutes / 60);
+        return Math.max(0, Math.round(dist / hrs));
+      }
+      return vehicleSummary.speedKmh || 0;
+    })();
+
+    return (
+      <RouteFinishedScreen
+        routeName={routeInfo?.name || (Number.isFinite(selectedRouteId) ? `Ruta #${selectedRouteId}` : "Ruta")}
+        origin={routeInfo?.origin}
+        destination={routeInfo?.destination}
+        distanceKm={traveledKm ?? (plannedDistanceKm > 0 ? plannedDistanceKm : null)}
+        durationMinutes={realElapsedMinutes}
+        speedKmh={avgSpeedKmh}
+        stopsCount={displayIntermediateStops.length}
+        finishedAt={routeFinishedAt}
+        nextRoute={nextRoute}
+        nextRouteCountdown={nextRouteCountdown}
+        onNewRoute={() => {
+          if (nextRouteCountdownRef.current) {
+            clearInterval(nextRouteCountdownRef.current);
+            nextRouteCountdownRef.current = null;
+          }
+          setNextRouteCountdown(null);
+          if (nextRoute) {
+            navigate(`/tracking/${nextRoute.id}`);
+          } else {
+            navigate("/driver/routes");
+          }
+        }}
+        onGoHome={() => navigate("/dashboard")}
+        onViewReport={() => navigate("/activity")}
+      />
+    );
+  }
+
   return (
     <div className="tracking-layout">
-      {/* ---- Toasts globales ---- */}
-      {!isAdminView && showRouteFinishedToast && (
-        <div className="route-finished-toast" role="status" aria-live="polite">
-          ✓ Recorrido finalizado
-        </div>
-      )}
-      {showArrivalNotif && (
-        <div className="arrival-notif" role="alert" aria-live="assertive">
-          <span className="arrival-notif-icon">🚏</span>
-          <div>
-            <strong className="arrival-notif-title">Llegando al destino</strong>
-            <p className="arrival-notif-sub">
-              {remainingDistanceKm !== null
-                ? `${remainingDistanceKm.toFixed(2)} km restantes`
-                : "Próxima parada"}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {guidedRouteRunning && stopNotification && (
-        <div className={`gps-stop-notif${stopNotification.early ? " gps-stop-notif-early" : ""}`} role="alert" aria-live="polite">
-          <div className="gps-stop-notif-icon">
-            {stopNotification.early ? (
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#1a56db" opacity="0.15"/><path d="M12 6v6l4 2" stroke="#1a56db" strokeWidth="2" strokeLinecap="round"/><circle cx="12" cy="12" r="9" stroke="#1a56db" strokeWidth="1.5" fill="none"/></svg>
-            ) : "🚏"}
-          </div>
-          <div className="gps-stop-notif-body">
-            <span className="gps-stop-notif-type">
-              {stopNotification.arriving ? "Llegando a parada" : stopNotification.early ? `En ${stopNotification.etaMin} min` : "Próxima parada"}
-            </span>
-            <span className="gps-stop-notif-label">{stopNotification.label}</span>
-            {!stopNotification.arriving && !stopNotification.early && stopNotification.etaMin !== null && (
-              <span className="gps-stop-notif-eta">
-                ~{stopNotification.etaMin} min · {eta !== null ? `destino en ${eta} min` : ""}
-              </span>
-            )}
-          </div>
-          <button
-            className="gps-stop-notif-close"
-            onClick={() => setStopNotification(null)}
-            aria-label="Cerrar"
-          >×</button>
-        </div>
-      )}
+      {/* ---- Notificaciones GPS unificadas (top-center) ---- */}
+      <div className="gps-notif-stack" aria-live="polite">
+        {showLiveToast && (
+          <GpsNotif
+            type="live"
+            title="Conectado en vivo"
+            onClose={() => setShowLiveToast(false)}
+            duration={3000}
+          />
+        )}
+        {!isAdminView && showRouteFinishedToast && (
+          <GpsNotif
+            type="finished"
+            title="Recorrido finalizado"
+            sub="El trayecto de hoy ha concluido."
+            onClose={() => setShowRouteFinishedToast(false)}
+            duration={5000}
+          />
+        )}
+        {showArrivalNotif && (
+          <GpsNotif
+            type="arrival"
+            title="Llegando al destino"
+            sub={remainingDistanceKm !== null ? `${remainingDistanceKm.toFixed(2)} km restantes` : null}
+            onClose={() => setShowArrivalNotif(false)}
+            duration={10000}
+          />
+        )}
+        {guidedRouteRunning && stopNotification && (
+          <GpsNotif
+            type={stopNotification.arriving ? "arriving" : stopNotification.early ? "early" : "stop"}
+            title={stopNotification.label}
+            sub={
+              stopNotification.arriving
+                ? null
+                : stopNotification.etaMin !== null
+                  ? `${stopNotification.early ? `Aprox. ${stopNotification.etaMin} min` : `~${stopNotification.etaMin} min`}${eta !== null ? ` · destino en ${eta} min` : ""}`
+                  : null
+            }
+            onClose={() => setStopNotification(null)}
+            duration={stopNotification.early ? 15000 : 7000}
+          />
+        )}
+      </div>
 
       <div className="tracking-dashboard">
         {/* ======================================================
@@ -2395,62 +3094,43 @@ export default function TrackingPage({ routeId: routeIdProp }) {
               Volver
             </button>
             <div className="sidebar-top-right">
-              <span className={`status-badge ${statusBadge.color}`}>
-                <span className="status-dot" />
-                {statusBadge.label}
-              </span>
-              {isAdminView && contextualAdminAlerts.length > 0 && (
-                <button
-                  type="button"
-                  className="alert-bell-btn"
-                  onClick={() => setShowAlertsPanel((v) => !v)}
-                  aria-label={`${contextualAdminAlerts.length} alertas activas`}
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M13.73 21a2 2 0 0 1-3.46 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  <span className="alert-bell-badge">{contextualAdminAlerts.length}</span>
-                </button>
+              {!isAdminView && (
+                <NotificationCenter />
               )}
+              {isAdminView && (() => {
+                const visibleCount = contextualAdminAlerts.filter(
+                  (a) => !dismissedAlertKeys.has(alertKey(a))
+                ).length;
+                return (
+                  <button
+                    ref={adminBellRef}
+                    type="button"
+                    className="adm-bell-btn"
+                    onClick={() => setShowAlertsPanel((v) => !v)}
+                    aria-label={visibleCount > 0 ? `${visibleCount} alertas activas` : "Sin alertas activas"}
+                  >
+                    <MdNotificationsActive className="adm-bell-icon" />
+                    {visibleCount > 0 && (
+                      <span className="adm-bell-badge">{visibleCount}</span>
+                    )}
+                  </button>
+                );
+              })()}
             </div>
           </div>
 
-          {/* ---- Panel de alertas inline (admin) ---- */}
+          {/* ---- Panel de alertas admin (portal) ---- */}
           {isAdminView && showAlertsPanel && contextualAdminAlerts.length > 0 && (
-            <div className="alerts-popover" role="dialog" aria-label="Panel de alertas">
-              <div className="alerts-popover-header">
-                <span className="alerts-popover-title">Alertas activas</span>
-                <button
-                  type="button"
-                  className="alerts-popover-close"
-                  onClick={() => setShowAlertsPanel(false)}
-                  aria-label="Cerrar alertas"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="admin-alert-list alerts-popover-body">
-                {contextualAdminAlerts.map((alert) => (
-                  <article
-                    key={alert.id || `${alert.title}-${alert.detail}`}
-                    className={`admin-alert-row ${alert.tone}`}
-                  >
-                    <div className="admin-alert-row-body">
-                      <p className="admin-alert-title">{alert.title}</p>
-                      <p className="admin-alert-detail">{alert.detail}</p>
-                    </div>
-                    <button
-                      type="button"
-                      className="admin-alert-action"
-                      onClick={() => { handleAdminAlertAction(alert); setShowAlertsPanel(false); }}
-                    >
-                      {getAdminAlertActionLabel(alert)}
-                    </button>
-                  </article>
-                ))}
-              </div>
-            </div>
+            <AdminAlertsPanel
+              alerts={contextualAdminAlerts}
+              anchorRef={adminBellRef}
+              onClose={() => setShowAlertsPanel(false)}
+              onAction={handleAdminAlertAction}
+              getActionLabel={getAdminAlertActionLabel}
+              dismissed={dismissedAlertKeys}
+              onDismiss={(key) => setDismissedAlertKeys((prev) => new Set([...prev, key]))}
+              onDismissAll={(keys) => setDismissedAlertKeys((prev) => new Set([...prev, ...keys]))}
+            />
           )}
 
           {showLiveToast && (
@@ -2569,21 +3249,6 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           {/* ==================== CONDUCTOR ==================== */}
           {currentRole === "driver" && (
             <>
-              {routeInfo && (
-                <div className="driver-route-current-wrap">
-                  <span className="sidebar-label">Ruta asignada</span>
-                  <div className="driver-route-current-name">
-                    {routeInfo.name || `Ruta ${selectedRouteId}`}
-                    {driverRoutes.length > 1 && (
-                      <span className="driver-route-counter">
-                        {driverRoutes.findIndex((r) => r.id === selectedRouteId) + 1}
-                        {" / "}
-                        {driverRoutes.length}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
 
               {nextRouteCountdown !== null && nextRoute && (
                 <div className="driver-next-route-banner">
@@ -2628,53 +3293,68 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                 </div>
               )}
 
-              <section className="sidebar-section">
-                <div className="sidebar-section-head">
-                  <span className="sidebar-section-title">
-                    {routeInfo?.name ||
-                      (Number.isFinite(selectedRouteId)
-                        ? `Ruta #${selectedRouteId}`
-                        : "Sin ruta")}
-                  </span>
-                  <span className={`route-auth-badge ${routeBadge.className}`}>
-                    {routeBadge.statusLabel}
-                  </span>
-                </div>
-
-                <div className="route-stop-stack">
-                  <div className="route-stop-row">
-                    <span className="route-stop-dot start" />
-                    <div>
-                      <p className="stop-label">Origen</p>
-                      <p className="stop-value">{routeInfo?.origin || "—"}</p>
-                    </div>
+              <RouteCard
+                routeInfo={routeInfo}
+                selectedRouteId={selectedRouteId}
+                routeBadge={routeBadge}
+                displayIntermediateStops={displayIntermediateStops}
+                routeProgressPercent={routeProgressPercent}
+                collapsibleStops
+              >
+                {showStopModal && (
+                  <div className="drv-state-badge-row">
+                    <span className="drv-state-badge stopped">Navegación detenida</span>
                   </div>
-                  {displayIntermediateStops.map((stop) => (
-                    <div key={stop.id} className="route-stop-row">
-                      <span className="route-stop-dot intermediate" />
-                      <div>
-                        <p className="stop-label">Parada {stop.order}</p>
-                        <p className="stop-value">{stop.label}</p>
-                      </div>
-                    </div>
-                  ))}
-                  <div className="route-stop-row">
-                    <span className="route-stop-dot end" />
-                    <div>
-                      <p className="stop-label">Destino</p>
-                      <p className="stop-value">{routeInfo?.destination || "—"}</p>
-                    </div>
+                )}
+
+                <p className="drv-stats-label">RECORRIDO HASTA AHORA</p>
+
+                <div className="drv-stats-grid">
+                  {/* Recorrido: solo muestra distancia real avanzada una vez iniciada */}
+                  <div className="drv-stat-card">
+                    <span className="drv-stat-title">Recorrido</span>
+                    <span className="drv-stat-main">
+                      {startedByDriver && plannedDistanceKm > 0
+                        ? `${(plannedDistanceKm - (remainingDistanceKm ?? plannedDistanceKm)).toFixed(1)} km`
+                        : "0.0 km"}
+                    </span>
+                    <span className="drv-stat-sub">
+                      de {plannedDistanceKm > 0 ? `${plannedDistanceKm.toFixed(1)} km` : "--"}
+                    </span>
+                  </div>
+                  {/* Transcurrido: solo muestra tiempo desde que se inició */}
+                  <div className="drv-stat-card">
+                    <span className="drv-stat-title">Transcurrido</span>
+                    <span className="drv-stat-main">
+                      {startedByDriver && elapsedMinutes !== null ? `${elapsedMinutes} min` : "0 min"}
+                    </span>
+                    <span className="drv-stat-sub">
+                      {startedByDriver ? `inicio: ${routeStartLabel}` : "sin iniciar"}
+                    </span>
+                  </div>
+                  {/* Velocidad: solo válida mientras la ruta está en curso */}
+                  <div className="drv-stat-card">
+                    <span className="drv-stat-title">Vel. prom.</span>
+                    <span className="drv-stat-main">
+                      {startedByDriver && vehicleSummary.speedKmh > 0
+                        ? `${vehicleSummary.speedKmh} km/h`
+                        : "0 km/h"}
+                    </span>
+                  </div>
+                  {/* Restante: solo muestra progreso real una vez iniciada */}
+                  <div className="drv-stat-card">
+                    <span className="drv-stat-title">Restante</span>
+                    <span className="drv-stat-main">
+                      {startedByDriver && remainingDistanceKm !== null
+                        ? `${remainingDistanceKm.toFixed(1)} km`
+                        : "-- km"}
+                    </span>
+                    <span className="drv-stat-sub">
+                      {startedByDriver && eta !== null ? `~${eta} min` : ""}
+                    </span>
                   </div>
                 </div>
-
-                <div className="progress-row">
-                  <span className="progress-label">Progreso</span>
-                  <strong className="progress-pct">{routeProgressPercent}%</strong>
-                </div>
-                <div className="progress-bar" aria-hidden="true">
-                  <span style={{ width: `${routeProgressPercent}%` }} />
-                </div>
-              </section>
+              </RouteCard>
 
               <div className="driver-actions">
                 <button
@@ -2684,7 +3364,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                     void startGuidedRoute();
                   }}
                   disabled={loading || guidedRouteLoading || guidedRouteRunning}
-                  className={`action-btn primary${guidedRouteRunning || routeState === "en_curso" ? " active" : ""}`}
+                  className="drv-btn-primary"
                 >
                   {guidedRouteLoading
                     ? "Preparando..."
@@ -2692,30 +3372,32 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                       ? "Ruta en curso"
                       : routeState === "finalizada"
                         ? "Finalizada"
-                        : "Iniciar Ruta"}
+                        : hasStartedOnceRef.current
+                          ? "Reanudar ruta"
+                          : "Iniciar Ruta"}
                 </button>
                 <button
                   type="button"
-                  onClick={() => void handleStopAll()}
+                  onClick={() => { void handleStopAll(); setShowStopModal(true); }} // VIALTROS: modal detener
                   disabled={
                     (!sharing && !guidedRouteRunning && !guidedRouteLoading) ||
                     routeState === "finalizada"
                   }
-                  className="action-btn secondary"
+                  className="drv-btn-secondary"
                 >
-                  Detener
+                  {routeState === "finalizada" ? "Ruta finalizada" : "Detener"}
                 </button>
               </div>
 
               {nearDestination && (
-                <div className="near-destination-alert">
-                  <span>🚏</span>
+                <div className="vt-near-dest">
+                  <div className="vt-near-dest-icon">&#9873;</div>
                   <div>
-                    <strong>Llegando al destino</strong>
-                    <p>
+                    <p className="vt-near-dest-title">Llegando al destino</p>
+                    <p className="vt-near-dest-sub">
                       {remainingDistanceKm !== null
                         ? `${remainingDistanceKm.toFixed(2)} km restantes`
-                        : "Próxima parada"}
+                        : "Proxima parada final"}
                     </p>
                   </div>
                 </div>
@@ -2730,88 +3412,41 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           {/* ==================== USUARIO ==================== */}
           {currentRole === "user" && (
             <>
-              <section className="sidebar-section">
-                <div className="sidebar-section-head">
-                  <span className="sidebar-section-title">
-                    {routeInfo?.name ||
-                      (Number.isFinite(selectedRouteId)
-                        ? `Ruta #${selectedRouteId}`
-                        : "Sin ruta")}
-                  </span>
-                  <span className={`route-auth-badge ${routeBadge.className}`}>
-                    {routeBadge.statusLabel}
-                  </span>
-                </div>
-
-                <div className="route-stop-stack">
-                  <div className="route-stop-row">
-                    <span className="route-stop-dot start" />
-                    <div>
-                      <p className="stop-label">Origen</p>
-                      <p className="stop-value">{routeInfo?.origin || "—"}</p>
-                    </div>
-                  </div>
-                  {displayIntermediateStops.map((stop) => (
-                    <div key={stop.id} className="route-stop-row">
-                      <span className="route-stop-dot intermediate" />
-                      <div>
-                        <p className="stop-label">Parada {stop.order}</p>
-                        <p className="stop-value">{stop.label}</p>
-                      </div>
-                    </div>
-                  ))}
-                  <div className="route-stop-row">
-                    <span className="route-stop-dot end" />
-                    <div>
-                      <p className="stop-label">Destino</p>
-                      <p className="stop-value">{routeInfo?.destination || "—"}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="progress-row">
-                  <span className="progress-label">Progreso del recorrido</span>
-                  <strong className="progress-pct">{routeProgressPercent}%</strong>
-                </div>
-                <div className="progress-bar" aria-hidden="true">
-                  <span style={{ width: `${routeProgressPercent}%` }} />
-                </div>
-
+              <RouteCard
+                routeInfo={routeInfo}
+                selectedRouteId={selectedRouteId}
+                routeBadge={routeBadge}
+                displayIntermediateStops={displayIntermediateStops}
+                routeProgressPercent={routeProgressPercent}
+                collapsibleStops
+              >
                 {routeState === "finalizada" ? (
-                  <div className="user-finished">
-                    <p className="panel-muted">
-                      El recorrido ha finalizado. Gracias por usar el servicio.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => navigate("/dashboard")}
-                      className="action-btn primary compact"
-                    >
-                      Ver historial
-                    </button>
-                  </div>
+                  <p className="vt-route-status done">
+                    <span className="vt-status-dot" />
+                    Recorrido finalizado.
+                  </p>
                 ) : routeState === "en_curso" ? (
-                  <div className="user-in-progress">
-                    <span className="user-status-dot live" />
-                    <span className="user-status-text">Ruta en progreso</span>
-                  </div>
+                  <p className="vt-route-status active">
+                    <span className="vt-status-dot" />
+                    Ruta en progreso
+                  </p>
                 ) : (
-                  <p className="panel-muted">
+                  <p className="vt-route-status waiting">
+                    <span className="vt-status-dot" />
                     Esperando inicio por parte del conductor.
                   </p>
                 )}
-
-              </section>
+              </RouteCard>
 
               {nearDestination && (
-                <div className="near-destination-alert">
-                  <span>🚏</span>
+                <div className="vt-near-dest">
+                  <div className="vt-near-dest-icon">&#9873;</div>
                   <div>
-                    <strong>Llegando al destino</strong>
-                    <p>
+                    <p className="vt-near-dest-title">Llegando al destino</p>
+                    <p className="vt-near-dest-sub">
                       {remainingDistanceKm !== null
                         ? `${remainingDistanceKm.toFixed(2)} km restantes`
-                        : "Próxima parada"}
+                        : "Proxima parada final"}
                     </p>
                   </div>
                 </div>
@@ -2854,8 +3489,84 @@ export default function TrackingPage({ routeId: routeIdProp }) {
               onExitGps={canManageGuidedRoute ? hideGpsOverlay : null}
               isAdmin={isAdminView}
               isDriver={currentRole === "driver"}
+              darkMode={false}
             />
           </div>
+
+          {/* VIALTROS: modal detener */}
+          {currentRole === "driver" && showStopModal && (
+            <div className="drv-stopped-overlay">
+              <div className="drv-stopped-modal">
+                <div className="drv-stopped-icon">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <rect x="6" y="4" width="4" height="16" rx="1.5" fill="currentColor"/>
+                    <rect x="14" y="4" width="4" height="16" rx="1.5" fill="currentColor"/>
+                  </svg>
+                </div>
+                <h3 className="drv-stopped-title">Navegación detenida</h3>
+                <p className="drv-stopped-sub">
+                  Has recorrido{" "}
+                  {plannedDistanceKm > 0
+                    ? `${(plannedDistanceKm - (remainingDistanceKm ?? plannedDistanceKm)).toFixed(1)} km`
+                    : "--"}{" "}
+                  de{" "}
+                  {plannedDistanceKm > 0 ? `${plannedDistanceKm.toFixed(1)} km` : "--"}.{" "}
+                  ¿Deseas continuar o finalizar la ruta?
+                </p>
+                <div className="drv-stopped-stats">
+                  <div className="drv-stopped-stat">
+                    <span className="drv-stopped-stat-val">{routeProgressPercent}%</span>
+                    <span className="drv-stopped-stat-label">Completado</span>
+                  </div>
+                  <div className="drv-stopped-stat">
+                    <span className="drv-stopped-stat-val">
+                      {elapsedMinutes !== null ? `${elapsedMinutes}` : "--"} min
+                    </span>
+                    <span className="drv-stopped-stat-label">Transcurrido</span>
+                  </div>
+                  <div className="drv-stopped-stat">
+                    <span className="drv-stopped-stat-val">
+                      {remainingDistanceKm !== null ? `${remainingDistanceKm.toFixed(1)}` : "--"} km
+                    </span>
+                    <span className="drv-stopped-stat-label">Restante</span>
+                  </div>
+                </div>
+                <div className="drv-stopped-actions">
+                  <button
+                    type="button"
+                    className="drv-stopped-btn resume"
+                    onClick={() => { setShowStopModal(false); setGuidedRouteError(""); void startGuidedRoute(); }}
+                    disabled={guidedRouteLoading}
+                  >
+                    {guidedRouteLoading ? "Preparando..." : "Reanudar ruta"}
+                  </button>
+                  <button
+                    type="button"
+                    className="drv-stopped-btn gps"
+                    onClick={() => { setShowStopModal(false); setGuidedRouteError(""); void startGuidedRoute(); }}
+                    disabled={guidedRouteLoading}
+                  >
+                    Ver GPS
+                  </button>
+                  <button
+                    type="button"
+                    className="drv-stopped-btn finish"
+                    onClick={async () => {
+                      const now = Date.now();
+                      setRouteFinishedAt(now);
+                      setElapsedMinutes(routeStartedAt ? Math.floor((now - routeStartedAt) / 60000) : elapsedMinutes);
+                      setShowStopModal(false);
+                      await handleStopAll();
+                      setForceRouteFinished(true);
+                    }}
+                  >
+                    Finalizar ruta
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
         </main>
       </div>
     </div>
