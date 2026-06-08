@@ -407,13 +407,6 @@
   inset: 0;
   pointer-events: none;
   z-index: 50;
-}
-.vt-gps-canvas,
-.vt-gps-canvas-day,
-.vt-gps-canvas-night { display: none; }
-
-/* Variables locales del HUD */
-.vt-gps-shell {
   --gps-dark:    #0f172a;
   --gps-navy:    #1e293b;
   --gps-blue:    #1a56db;
@@ -422,6 +415,9 @@
   --gps-radius:  16px;
   --gps-shadow:  0 8px 32px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.1);
 }
+.vt-gps-canvas,
+.vt-gps-canvas-day,
+.vt-gps-canvas-night { display: none; }
 
 /* ── Topbar ── */
 .gps-topbar {
@@ -448,8 +444,8 @@
   align-items: center;
   justify-content: center;
   transition: background 0.15s;
-  backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
 }
 .gps-topbar .top-back:hover { background: rgba(255,255,255,0.15); }
 .gps-topbar .top-pill {
@@ -476,8 +472,8 @@
   border: 1px solid rgba(255,255,255,0.12);
   display: flex;
   align-items: center;
-  backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
 }
 .gps-topbar .brand-logo,
 .gps-topbar .brand-name { display: none; }
@@ -594,8 +590,8 @@
   pointer-events: auto;
   border: 1px solid rgba(255,255,255,0.1);
   letter-spacing: 0.07em;
-  backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
 }
 
 /* ── Botones de acción (derecha, estilo cuadrado oscuro referencia) ── */
@@ -621,8 +617,8 @@
   cursor: pointer;
   color: #e2e8f0;
   transition: background 0.13s, transform 0.1s;
-  backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
 }
 .rbtn:hover {
   background: rgba(255,255,255,0.18);
@@ -647,8 +643,8 @@
   border: 1px solid rgba(255,255,255,0.08);
   overflow: hidden;
   min-height: 72px;
-  backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
 }
 .ep-block {
   flex: 1;
@@ -770,8 +766,8 @@
   transition: background 0.13s;
   pointer-events: auto;
   border: 1px solid rgba(255,255,255,0.12);
-  backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
 }
 .gps-action-btn:hover {
   background: rgba(255,255,255,0.18);
@@ -803,8 +799,8 @@
   min-width: 210px;
   padding: 6px 0;
   z-index: 100;
-  backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
   animation: gpsMenuFadeIn 0.16s ease-out;
 }
 
@@ -1056,17 +1052,6 @@
 
 .vt-vehicle-text {
   white-space: nowrap;
-}
-
-@keyframes vt-chip-in {
-  0% {
-    opacity: 0;
-    transform: translateY(4px) scale(0.98);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
 }
 
 @keyframes vt-vehicle-in {

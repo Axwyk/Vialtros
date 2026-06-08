@@ -30,7 +30,7 @@ load_dotenv(BASE_DIR / '.env')
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-dev-only-change-in-production')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
+DEBUG = os.environ.get('DJANGO_DEBUG', 'False') == 'True'
 
 ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', 'www.vialtros.ds1.eleueleo.com,vialtros.ds1.eleueleo.com').split(',')
 
@@ -224,8 +224,9 @@ else:
 
 # Security settings para producción
 if not DEBUG:
-    # HTTPS/SSL
-    SECURE_SSL_REDIRECT = True
+    # HTTPS/SSL — desactivado por defecto porque Apache maneja SSL termination
+    # Activar solo si Django debe forzar el redirect (DJANGO_SECURE_SSL_REDIRECT=True en .env)
+    SECURE_SSL_REDIRECT = os.environ.get('DJANGO_SECURE_SSL_REDIRECT', 'False') == 'True'
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_BROWSER_XSS_FILTER = True

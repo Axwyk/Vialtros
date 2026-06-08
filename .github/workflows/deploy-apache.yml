@@ -187,6 +187,24 @@ jobs:
             python manage.py collectstatic --noinput
 
             # =========================================
+            # CONFIGURACION APACHE Y SYSTEMD
+            # =========================================
+
+            echo "Updating Apache config..."
+
+            # Habilitar modulos necesarios (WebSocket, rewrite, headers)
+            sudo a2enmod proxy_wstunnel proxy_http rewrite headers
+
+            # Copiar config de Apache desde el repo
+            sudo cp $APP_DIR/etc/apache2/vialtros.conf /etc/apache2/sites-available/vialtros.conf
+            sudo a2ensite vialtros
+
+            echo "Updating systemd service..."
+
+            # Copiar el unit file de Daphne desde el repo
+            sudo cp $APP_DIR/etc/systemd/vialtros-django.service /etc/systemd/system/vialtros-django.service
+
+            # =========================================
             # RESTART SERVICES
             # =========================================
 

@@ -129,6 +129,7 @@ export default function LoginPage({ onLogin }) {
       });
       localStorage.setItem("access", res.data.access);
       localStorage.setItem("refresh", res.data.refresh);
+      localStorage.removeItem("role");
       // Pre-cargar datos del usuario en caché para que el perfil cargue instantáneo
       getCurrentUser().then((u) => { if (u) saveUserCache(u); });
       finishLogin(normalizedUsername);
