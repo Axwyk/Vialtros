@@ -6,6 +6,7 @@ import api from "../services/api";
 import {
   ensureLocalAccessSession,
   isLocalAccessEnabled,
+  isAuthenticated,
   getCurrentUser,
   saveUserCache,
 } from "../services/auth";
@@ -104,6 +105,14 @@ export default function LoginPage({ onLogin }) {
   );
 
   useEffect(() => {
+    if (isAuthenticated()) {
+      if (onLogin) {
+        onLogin();
+      }
+      navigate("/dashboard", { replace: true });
+      return;
+    }
+
     if (!isLocalAccessEnabled()) return;
 
     ensureLocalAccessSession();
