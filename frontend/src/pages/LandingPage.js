@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { LogoIcon } from "../components/Logo";
+import { isAuthenticated } from "../services/auth";
 
 // ── Iconos Lucide inline ──────────────────────────────────────────────────────
 const IcoLocation = () => (
@@ -356,6 +357,17 @@ const TRUST = ["Roles diferenciados", "Seguimiento en tiempo real"];
 // ── Componente principal ──────────────────────────────────────────────────────
 export default function LandingPage() {
   const navigate = useNavigate();
+  const [isAuth, setIsAuth] = useState(false);
+
+  useEffect(() => {
+    setIsAuth(isAuthenticated());
+  }, []);
+
+  const handlePrimaryAction = () => {
+    navigate(isAuth ? "/dashboard" : "/login");
+  };
+
+  const buttonLabel = isAuth ? "Ir al panel" : "Acceder al sistema";
 
   return (
     <div className="min-h-screen w-full flex flex-col bg-gradient-to-r from-blue-100 to-indigo-200 font-sans">
@@ -394,10 +406,10 @@ export default function LandingPage() {
           </li>
         </ul>
         <button
-          onClick={() => navigate("/login")}
+          onClick={handlePrimaryAction}
           className="bg-blue-600 hover:bg-blue-700 text-white text-base font-medium px-6 py-2.5 rounded-lg transition-all shadow-sm"
         >
-          Acceder al sistema
+          {buttonLabel}
         </button>
       </nav>
 
@@ -422,10 +434,10 @@ export default function LandingPage() {
           </p>
           <div className="flex gap-4 mb-10">
             <button
-              onClick={() => navigate("/login")}
+              onClick={handlePrimaryAction}
               className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-8 py-4 rounded-xl shadow-md transition-all text-base flex items-center gap-2"
             >
-              Acceder al sistema <span>→</span>
+              {buttonLabel} <span>→</span>
             </button>
             <a
               href="#caracteristicas"
@@ -673,10 +685,10 @@ export default function LandingPage() {
           </div>
           <div className="flex gap-4 relative z-10 flex-shrink-0">
             <button
-              onClick={() => navigate("/login")}
+              onClick={handlePrimaryAction}
               className="bg-white hover:bg-blue-50 text-blue-700 font-semibold px-8 py-4 rounded-xl text-base transition-all shadow-md"
             >
-              Acceder al sistema →
+              {buttonLabel} →
             </button>
           </div>
         </div>
