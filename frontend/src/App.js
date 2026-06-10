@@ -134,7 +134,13 @@ function App() {
             />
             <Route
               path="/login"
-              element={<LoginPage onLogin={handleLogin} />}
+              element={
+                isAuth ? (
+                  <Navigate to="/dashboard" replace />
+                ) : (
+                  <LoginPage onLogin={handleLogin} />
+                )
+              }
             />
             <Route path="/" element={<LandingPage />} />
             <Route
