@@ -12,6 +12,8 @@ import {
 const GOOGLE_ROUTES_API_KEY = process.env.REACT_APP_GOOGLE_ROUTES_API_KEY;
 const OSRM_MATCH_BASE = "https://router.project-osrm.org/match/v1/driving";
 const OSRM_NEAREST_BASE = "https://router.project-osrm.org/nearest/v1/driving";
+const OSRM_BASE = "https://router.project-osrm.org/route/v1/driving"; // Legacy - not used
+const VALHALLA_BASE = ""; // Legacy - not used
 const NOMINATIM_BASE = "https://nominatim.openstreetmap.org";
 
 // Buenaventura viewbox: minLng,minLat,maxLng,maxLat
@@ -1069,7 +1071,7 @@ export async function geocodeAddress(address, options = {}) {
   // Snap geocoded coordinate to nearest road for precision
   if (resolved) {
     try {
-      const snapped = await valhallaLocate(resolved);
+      const snapped = await googleSnapPointToRoad(resolved);
       if (snapped) {
         geocodeCache.set(cacheKey, snapped);
         return snapped;
@@ -1197,9 +1199,6 @@ export async function getTrackedStreetRoute(points) {
   // 3. Last resort: straight line
   return straightLineRoute(sampledCoords[0], sampledCoords[sampledCoords.length - 1]);
 }
-  // 3. Last resort: straight line
-  return straightLineRoute(sampledCoords[0], sampledCoords[sampledCoords.length - 1]);
-}
 
 /**
  * Calcula el ETA en minutos desde una posición hasta el destino.
@@ -1243,7 +1242,6 @@ export async function snapPointToRoad(coords) {
   } catch {
     return coords;
   }
-}
 }
 
 /**
