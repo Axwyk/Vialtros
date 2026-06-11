@@ -79,6 +79,20 @@ def _should_notify(user, notif_type, route, cooldown_minutes=15):
     ).exists()
 
 
+def _should_notify_threshold(user, notif_type, route, threshold_label, cooldown_minutes=240):
+    """True si no existe notificacion del mismo tipo+ruta+umbral en los ultimos cooldown_minutes.
+    Permite que cada umbral (50m, 150m, 300m) tenga su propio control de duplicados.
+    """
+    cutoff = timezone.now() - timezone.timedelta(minutes=cooldown_minutes)
+    return not Notification.objects.filter(
+        user=user,
+        type=notif_type,
+        route=route,
+        created_at__gte=cutoff,
+        metadata__threshold=threshold_label,
+    ).exists()
+
+
 def _create_and_broadcast_notification(user, notif_type, title, message, route=None, metadata=None):
     """Crea una Notification en base de datos y la transmite via WebSocket al usuario."""
     notif = Notification.objects.create(
@@ -619,7 +633,7 @@ class DriverViewSet(viewsets.ModelViewSet):
     serializer_class = DriverSerializer
     permission_classes = [IsAdmin]
     filter_backends = [SearchFilter]
-    search_fields = ['user__username', 'user__email', 'license_number']
+    search_fields = ['user__username', 'user__first_name', 'user__last_name', 'user__email', 'license_number']
 
 
 class PassengerViewSet(viewsets.ModelViewSet):
@@ -627,7 +641,7 @@ class PassengerViewSet(viewsets.ModelViewSet):
     serializer_class = PassengerSerializer
     permission_classes = [IsAdmin]
     filter_backends = [SearchFilter]
-    search_fields = ['user__username', 'user__email', 'phone', 'pickup_address']
+    search_fields = ['user__username', 'user__first_name', 'user__last_name', 'user__email', 'phone', 'pickup_address']
 
 
 class RouteViewSet(viewsets.ModelViewSet):
@@ -745,16 +759,19 @@ class TrackingViewSet(viewsets.ModelViewSet):
         if channel_layer is None:
             return
 
-        async_to_sync(channel_layer.group_send)(
-            f"tracking_{payload['route']}",
-            {
-                'type': 'tracking_update',
-                'data': {
-                    'event': 'position_update',
-                    'data': payload,
+        try:
+            async_to_sync(channel_layer.group_send)(
+                f"tracking_{payload['route']}",
+                {
+                    'type': 'tracking_update',
+                    'data': {
+                        'event': 'position_update',
+                        'data': payload,
+                    },
                 },
-            },
-        )
+            )
+        except Exception as e:
+            logger.warning("No se pudo enviar al canal tracking_%s: %s", payload.get('route'), e)
         # También enviar copia para paneles administrativos que estén suscritos al grupo 'monitoring'
         try:
             async_to_sync(channel_layer.group_send)(
@@ -916,14 +933,22 @@ class TrackingViewSet(viewsets.ModelViewSet):
         if ingest_meta.get('source'):
             response_payload['source'] = ingest_meta['source']
 
-        self._broadcast_tracking(response_payload)
-        self._process_proximity_notifications(request, tracking, route)
+        try:
+            self._broadcast_tracking(response_payload)
+        except Exception:
+            logger.exception("Error al hacer broadcast de tracking para ruta %s", route.pk)
+
+        try:
+            self._process_proximity_notifications(request, tracking, route)
+        except Exception:
+            logger.exception("Error al procesar notificaciones de proximidad para ruta %s", route.pk)
+
         return Response(response_payload, status=status.HTTP_201_CREATED)
 
     # --- Proximidad y notificaciones automaticas ---
-    APPROACHING_STOP_KM = 1.5
+    # Umbrales progresivos ordenados de menor a mayor: 50m, 150m, 300m
+    STOP_THRESHOLDS_KM = [0.05, 0.15, 0.30]
     APPROACHING_DEST_KM = 0.5
-    DRIVER_NEAR_STOP_KM = 0.5
     DRIVER_NEAR_DEST_KM = 0.5
     ROUTE_START_WINDOW_HOURS = 3
 
@@ -944,12 +969,13 @@ class TrackingViewSet(viewsets.ModelViewSet):
             return
 
         # La ruta ya estaba activa: notificar proximidades
-        self._check_proximity_to_stops(bus_lat, bus_lng, route, passengers)
-        self._check_proximity_to_destination(bus_lat, bus_lng, route, passengers)
+        speed_kmh = tracking.speed_kmh or 0
+        self._check_proximity_to_stops(bus_lat, bus_lng, route, passengers, speed_kmh)
+        self._check_proximity_to_destination(bus_lat, bus_lng, route, passengers, speed_kmh)
 
         user = getattr(request, 'user', None)
         if user and getattr(user, 'is_authenticated', False) and user.role == 'driver':
-            self._check_driver_proximity(user, bus_lat, bus_lng, route, passengers)
+            self._check_driver_proximity(user, bus_lat, bus_lng, route, passengers, speed_kmh)
 
     def _notify_route_start(self, route, passengers):
         """Notifica inicio de ruta a todos los padres de la ruta."""
@@ -963,70 +989,122 @@ class TrackingViewSet(viewsets.ModelViewSet):
                 metadata={'route_id': route.pk},
             )
 
-    def _check_proximity_to_stops(self, bus_lat, bus_lng, route, passengers):
+    def _eta_minutes(self, distance_km, speed_kmh):
+        """Estima minutos de llegada dado distancia y velocidad actual."""
+        effective_speed = speed_kmh if speed_kmh >= 5 else 25
+        return max(1, round(distance_km / effective_speed * 60))
+
+    def _check_proximity_to_stops(self, bus_lat, bus_lng, route, passengers, speed_kmh=0):
+        # Configuracion de umbrales ordenados de menor (mas urgente) a mayor
+        THRESHOLD_CONFIGS = [
+            (0.05, '50m',  'Tu transporte esta llegando',
+             'El transporte esta llegando a tu parada. Sal ahora.'),
+            (0.15, '150m', 'Preparate para abordar',
+             'El transporte esta a menos de 150 metros. Preparate para abordar.'),
+            (0.30, '300m', 'El conductor se aproxima a tu parada',
+             'Tu transporte esta cerca de tu parada. Atento a la llegada.'),
+        ]
         for passenger in passengers:
             if not passenger.pickup_lat or not passenger.pickup_lng:
                 continue
             dist = haversine_km(bus_lat, bus_lng, passenger.pickup_lat, passenger.pickup_lng)
-            if dist <= self.APPROACHING_STOP_KM:
-                parent_user = passenger.user
-                if _should_notify(parent_user, NotificationType.APPROACHING_STOP, route):
-                    stop_label = passenger.pickup_address or 'su parada'
-                    _create_and_broadcast_notification(
-                        user=parent_user,
-                        notif_type=NotificationType.APPROACHING_STOP,
-                        title='Bus aproximandose a su parada',
-                        message=f'El bus de la ruta {route.name} esta aproximandose a {stop_label}.',
-                        route=route,
-                        metadata={'passenger_id': passenger.pk, 'distance_km': round(dist, 2)},
-                    )
+            parent_user = passenger.user
+            stop_label = passenger.pickup_address or 'tu parada'
+            student_name = parent_user.get_full_name() or parent_user.username
 
-    def _check_proximity_to_destination(self, bus_lat, bus_lng, route, passengers):
+            for threshold_km, threshold_label, title, message in THRESHOLD_CONFIGS:
+                if dist <= threshold_km:
+                    if _should_notify_threshold(parent_user, NotificationType.APPROACHING_STOP, route, threshold_label):
+                        eta_min = self._eta_minutes(dist, speed_kmh)
+                        dist_m = round(dist * 1000)
+                        _create_and_broadcast_notification(
+                            user=parent_user,
+                            notif_type=NotificationType.APPROACHING_STOP,
+                            title=title,
+                            message=message,
+                            route=route,
+                            metadata={
+                                'passenger_id': passenger.pk,
+                                'distance_meters': dist_m,
+                                'eta_minutes': eta_min,
+                                'stop_name': stop_label,
+                                'student_name': student_name,
+                                'threshold': threshold_label,
+                            },
+                        )
+                    break  # solo notificar el umbral mas cercano alcanzado
+
+    def _check_proximity_to_destination(self, bus_lat, bus_lng, route, passengers, speed_kmh=0):
         if not route.destination_lat or not route.destination_lng:
             return
         dist = haversine_km(bus_lat, bus_lng, route.destination_lat, route.destination_lng)
         if dist > self.APPROACHING_DEST_KM:
             return
+        eta_min = self._eta_minutes(dist, speed_kmh)
         for passenger in passengers:
             parent_user = passenger.user
             if _should_notify(parent_user, NotificationType.APPROACHING_DESTINATION, route):
                 _create_and_broadcast_notification(
                     user=parent_user,
                     notif_type=NotificationType.APPROACHING_DESTINATION,
-                    title='Bus aproximandose al destino',
-                    message=f'El bus de la ruta {route.name} esta llegando al destino: {route.destination}.',
+                    title='Bus llegando al destino',
+                    message=f'El bus de la ruta {route.name} llegara al destino en aproximadamente {eta_min} minuto{"s" if eta_min != 1 else ""}.',
                     route=route,
-                    metadata={'route_id': route.pk, 'distance_km': round(dist, 2)},
+                    metadata={'route_id': route.pk, 'distance_km': round(dist, 2), 'eta_minutes': eta_min},
                 )
 
-    def _check_driver_proximity(self, driver_user, bus_lat, bus_lng, route, passengers):
+    def _check_driver_proximity(self, driver_user, bus_lat, bus_lng, route, passengers, speed_kmh=0):
+        # Umbrales ordenados de menor (mas urgente) a mayor para el conductor
+        THRESHOLD_CONFIGS = [
+            (0.05, '50m',  'Llegando a parada de estudiante'),
+            (0.15, '150m', 'Proxima parada de estudiante'),
+            (0.30, '300m', 'Proxima parada de estudiante'),
+        ]
         for passenger in passengers:
             if not passenger.pickup_lat or not passenger.pickup_lng:
                 continue
             dist = haversine_km(bus_lat, bus_lng, passenger.pickup_lat, passenger.pickup_lng)
-            if dist <= self.DRIVER_NEAR_STOP_KM:
-                if _should_notify(driver_user, NotificationType.DRIVER_NEAR_STOP, route, cooldown_minutes=10):
-                    student_name = passenger.user.get_full_name() or passenger.user.username
-                    stop_label = passenger.pickup_address or 'sin direccion registrada'
-                    _create_and_broadcast_notification(
-                        user=driver_user,
-                        notif_type=NotificationType.DRIVER_NEAR_STOP,
-                        title='Proxima parada de estudiante',
-                        message=f'Se esta aproximando a la parada de {student_name}: {stop_label}.',
-                        route=route,
-                        metadata={'passenger_id': passenger.pk, 'distance_km': round(dist, 2)},
-                    )
+            student_name = passenger.user.get_full_name() or passenger.user.username
+            stop_label = passenger.pickup_address or 'parada registrada'
+
+            for threshold_km, threshold_label, title in THRESHOLD_CONFIGS:
+                if dist <= threshold_km:
+                    if _should_notify_threshold(driver_user, NotificationType.DRIVER_NEAR_STOP, route, threshold_label, cooldown_minutes=240):
+                        eta_min = self._eta_minutes(dist, speed_kmh)
+                        dist_m = round(dist * 1000)
+                        if threshold_label == '50m':
+                            message = f'Llegando a parada de {student_name}. {dist_m} m.'
+                        else:
+                            message = f'Proxima parada: {student_name}. {dist_m} m · ETA {eta_min} min.'
+                        _create_and_broadcast_notification(
+                            user=driver_user,
+                            notif_type=NotificationType.DRIVER_NEAR_STOP,
+                            title=title,
+                            message=message,
+                            route=route,
+                            metadata={
+                                'passenger_id': passenger.pk,
+                                'distance_meters': dist_m,
+                                'eta_minutes': eta_min,
+                                'stop_name': stop_label,
+                                'student_name': student_name,
+                                'threshold': threshold_label,
+                            },
+                        )
+                    break  # solo notificar el umbral mas cercano alcanzado
+
         if route.destination_lat and route.destination_lng:
             dist_dest = haversine_km(bus_lat, bus_lng, route.destination_lat, route.destination_lng)
             if dist_dest <= self.DRIVER_NEAR_DEST_KM:
                 if _should_notify(driver_user, NotificationType.DRIVER_NEAR_DESTINATION, route, cooldown_minutes=10):
+                    eta_min = self._eta_minutes(dist_dest, speed_kmh)
                     _create_and_broadcast_notification(
                         user=driver_user,
                         notif_type=NotificationType.DRIVER_NEAR_DESTINATION,
                         title='Aproximandose al destino final',
-                        message=f'Se esta aproximando al destino final de la ruta {route.name}: {route.destination}.',
+                        message=f'Llegaras al destino final de la ruta {route.name} en aproximadamente {eta_min} minuto{"s" if eta_min != 1 else ""}.',
                         route=route,
-                        metadata={'route_id': route.pk, 'distance_km': round(dist_dest, 2)},
+                        metadata={'route_id': route.pk, 'distance_km': round(dist_dest, 2), 'eta_minutes': eta_min},
                     )
 
 

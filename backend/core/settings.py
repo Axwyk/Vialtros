@@ -38,6 +38,7 @@ ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', 'www.vialtros.ds1.eleuele
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',                          # debe ser el primero para sobreescribir runserver
     'corsheaders',
     'django.contrib.admin',
     'django.contrib.auth',
@@ -258,6 +259,50 @@ if _strict:
         return ctx
 
     _ssl.create_default_context = _patched_create_default_context
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '[{levelname}] {asctime} {name}: {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+        },
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        'daphne': {
+            'handlers': ['console'],
+            'level': 'INFO',
+        },
+        'channels': {
+            'handlers': ['console'],
+            'level': 'INFO',
+        },
+        'tracking': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+        },
+        'users': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+        },
+    },
+}
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')

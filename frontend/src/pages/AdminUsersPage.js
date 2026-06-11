@@ -12,6 +12,8 @@ import {
 const ALL_ROLES = ["admin", "driver", "user"];
 const EMPTY_FORM = {
   username: "",
+  first_name: "",
+  last_name: "",
   email: "",
   role: "user",
   password: "",
@@ -114,6 +116,8 @@ export default function AdminUsersPage({ role, onLogout }) {
   const openEdit = (u) => {
     setForm({
       username: u.username,
+      first_name: u.first_name || "",
+      last_name: u.last_name || "",
       email: u.email,
       role: u.role,
       password: "",
@@ -493,6 +497,30 @@ export default function AdminUsersPage({ role, onLogout }) {
                 }
               />
             </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-sm font-medium text-gray-600">
+                Nombre
+                <input
+                  className="mt-1 block w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  value={form.first_name}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, first_name: e.target.value }))
+                  }
+                  placeholder="ej. Juan"
+                />
+              </label>
+              <label className="text-sm font-medium text-gray-600">
+                Apellido
+                <input
+                  className="mt-1 block w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  value={form.last_name}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, last_name: e.target.value }))
+                  }
+                  placeholder="ej. Pérez"
+                />
+              </label>
+            </div>
             <label className="text-sm font-medium text-gray-600">
               Email
               <input

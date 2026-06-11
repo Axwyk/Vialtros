@@ -14,6 +14,7 @@ import {
 } from "../services/admin";
 import { getDriverTrackings } from "../services/dashboard";
 import { geocodeAddress, snapPointToRoad } from "../services/routing";
+import LocationAutocomplete from "../components/LocationAutocomplete";
 
 const EMPTY_FORM = {
   user: "",
@@ -383,12 +384,12 @@ export default function AdminPassengersPage({ role, onLogout }) {
                           className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${
                             pickupStatus === "picked"
                               ? "bg-green-100 text-green-700"
-                              : "bg-red-100 text-red-700"
+                              : "bg-slate-100 text-slate-500"
                           }`}
                         >
                           {pickupStatus === "picked"
                             ? "✓ Recogido"
-                            : "✗ No recogido"}
+                            : "– No recogido"}
                         </span>
                       </td>
                       <td className="px-5 py-3.5">
@@ -482,22 +483,22 @@ export default function AdminPassengersPage({ role, onLogout }) {
                 ))}
               </select>
             </label>
-            <label className="text-xs font-medium text-gray-600">
-              Parada intermedia
-              <input
-                className="mt-1 block w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                value={form.pickupAddress}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    pickupAddress: e.target.value,
-                    pickupLat: null,
-                    pickupLng: null,
-                  }))
-                }
-                placeholder="ej. Bellavista, Buenaventura"
-              />
-            </label>
+            <LocationAutocomplete
+              label="Parada intermedia"
+              value={form.pickupAddress}
+              onChange={(text) =>
+                setForm((f) => ({ ...f, pickupAddress: text, pickupLat: null, pickupLng: null }))
+              }
+              onSelect={(place) =>
+                setForm((f) => ({
+                  ...f,
+                  pickupAddress: place.address,
+                  pickupLat: place.lat,
+                  pickupLng: place.lng,
+                }))
+              }
+              placeholder="ej. Bellavista, Buenaventura"
+            />
             <p className="text-[11px] text-gray-400">
               Si defines una parada, se geocodifica y se usa como waypoint real
               de la ruta.

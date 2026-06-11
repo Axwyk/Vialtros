@@ -35,6 +35,11 @@ export function isLocalAccessToken(token) {
   return token === LOCAL_ACCESS_TOKEN;
 }
 
+export function isAuthenticated() {
+  if (localStorage.getItem("access")) return true;
+  return ensureLocalAccessSession();
+}
+
 function buildLocalUser() {
   return {
     username: localStorage.getItem("username") || LOCAL_DEFAULT_USERNAME,

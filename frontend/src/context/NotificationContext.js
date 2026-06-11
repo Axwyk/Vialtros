@@ -18,11 +18,13 @@ export function useNotifications() {
 }
 
 const ACTIVE_ROLES = ["user", "driver"];
+const PROXIMITY_TYPES = new Set(["driver_near_stop", "driver_near_destination"]);
 
 export function NotificationProvider({ children, isAuth, role }) {
   const [notifications, setNotifications] = useState([]);
   const [toastQueue, setToastQueue] = useState([]);
   const wsRef = useRef(null);
+  const proximityListenerRef = useRef(null);
 
   const isActive = isAuth && ACTIVE_ROLES.includes(role);
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -55,6 +57,14 @@ export function NotificationProvider({ children, isAuth, role }) {
           return exists ? prev : [notif, ...prev];
         });
         setToastQueue((prev) => [...prev, { ...notif, _toastId: Date.now() + Math.random() }]);
+        // Notificar al listener de proximidad del conductor si corresponde
+        if (PROXIMITY_TYPES.has(notif.type) && proximityListenerRef.current) {
+          try {
+            proximityListenerRef.current(notif);
+          } catch {
+            // ignorar errores del listener externo
+          }
+        }
       },
     });
     wsRef.current = ws;
@@ -63,6 +73,14 @@ export function NotificationProvider({ children, isAuth, role }) {
       wsRef.current = null;
     };
   }, [isActive]);
+
+  const registerProximityListener = useCallback((fn) => {
+    proximityListenerRef.current = fn;
+  }, []);
+
+  const unregisterProximityListener = useCallback(() => {
+    proximityListenerRef.current = null;
+  }, []);
 
   const markRead = useCallback((id) => {
     api.post(`/notifications/${id}/mark_read/`).catch(() => {});
@@ -89,6 +107,8 @@ export function NotificationProvider({ children, isAuth, role }) {
         markRead,
         markAllRead,
         dismissToast,
+        registerProximityListener,
+        unregisterProximityListener,
       }}
     >
       {children}

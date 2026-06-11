@@ -130,7 +130,7 @@
   min-width: 16px;
   height: 16px;
   border-radius: 99px;
-  background: #ef4444;
+  background: #2563eb;
   color: #fff;
   font-size: 9px;
   font-weight: 700;
@@ -642,45 +642,49 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
-  background: linear-gradient(90deg, #0f172a, #1e3a5f);
-  color: #7dd3fc;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
+  padding: 7px 14px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid #dbeafe;
 }
 
 .gps-reenter-btn {
   margin-left: auto;
-  border: 1px solid rgba(125, 211, 252, 0.5);
-  background: rgba(125, 211, 252, 0.12);
-  color: #7dd3fc;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  background: #2563eb;
+  color: #ffffff;
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  padding: 4px 10px;
-  border-radius: 20px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 3px 10px;
+  border-radius: 6px;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s;
+  font-family: var(--sidebar-font);
 }
-
 .gps-reenter-btn:hover {
-  background: rgba(125, 211, 252, 0.25);
-  color: #e0f2fe;
+  background: #1d4ed8;
 }
 
 .gps-mode-dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: #22d3ee;
-  box-shadow: 0 0 0 3px rgba(34,211,238,.3);
+  background: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34,197,94,.22);
   animation: gps-pulse 1.4s ease-in-out infinite;
+  flex-shrink: 0;
 }
 
 @keyframes gps-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(34,211,238,.4); }
-  50%       { box-shadow: 0 0 0 6px rgba(34,211,238,.0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,.45); }
+  50%       { box-shadow: 0 0 0 5px rgba(34,197,94,.0); }
 }
 
 /* ── Paradas de ruta ─────────────────────────────────────── */
@@ -953,6 +957,23 @@
   border: 1px solid #93c5fd;
 }
 
+/* ── Admin: filas de ruta clicables para enfocar en el mapa ─ */
+.admin-map-mode .admin-route-row {
+  cursor: pointer;
+  transition: background 0.13s, border-color 0.13s, box-shadow 0.13s;
+}
+
+.admin-map-mode .admin-route-row:hover {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.admin-map-mode .admin-route-row.focused {
+  background: #dbeafe;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1.5px rgba(37, 99, 235, 0.2);
+}
+
 /* ── Mapa ────────────────────────────────────────────────── */
 .map-container-wrapper {
   position: relative;
@@ -1132,16 +1153,16 @@
 .vt-route-title-group { flex: 1; min-width: 0; }
 
 .vt-route-eyebrow {
-  font-size: 10px;
-  font-weight: 500;
+  font-size: 9px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--vt-muted);
-  margin-bottom: 2px;
+  letter-spacing: 0.12em;
+  color: #94a3b8;
+  margin-bottom: 3px;
 }
 
 .vt-route-name {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--vt-ink);
   line-height: 1.3;
@@ -1241,20 +1262,20 @@
 }
 
 .vt-progress-text {
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--vt-muted);
+  font-size: 10px;
+  font-weight: 500;
+  color: #94a3b8;
 }
 
 .vt-progress-pct-pill {
   font-size: 11px;
-  font-weight: 600;
-  color: var(--vt-ink);
+  font-weight: 700;
+  color: var(--vt-primary);
 }
 
 .vt-progress-track {
-  height: 4px;
-  background: var(--vt-border);
+  height: 5px;
+  background: #f1f5f9;
   border-radius: 99px;
   overflow: hidden;
 }
@@ -1291,6 +1312,29 @@
 .vt-route-status.active { color: var(--vt-ink); }
 
 /* ── Llegando al destino ──────────────────────────────── */
+.vt-next-stop-eta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 16px 4px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  color: #1E40AF;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.vt-next-stop-eta svg {
+  flex-shrink: 0;
+  color: #2563EB;
+}
+
+.vt-next-stop-eta strong {
+  font-weight: 700;
+}
+
 .vt-near-dest {
   display: flex;
   align-items: center;
@@ -1478,76 +1522,85 @@
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--vt-muted);
-  margin: 12px 0 6px;
+  color: #94a3b8;
+  margin: 10px 0 5px;
 }
 
 .drv-stats-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .drv-stat-card {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   background: var(--vt-surface-soft);
   border: 1px solid var(--vt-border);
   border-radius: 10px;
-  padding: 9px 10px;
+  padding: 10px 12px;
 }
 
 .drv-stat-title {
   font-size: 9px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--vt-muted);
+  letter-spacing: 0.09em;
+  color: #94a3b8;
 }
 
 .drv-stat-main {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 700;
   color: var(--vt-ink);
-  line-height: 1.2;
+  line-height: 1.15;
+  letter-spacing: -0.3px;
 }
 
 .drv-stat-sub {
   font-size: 10px;
-  color: var(--vt-muted);
+  color: #94a3b8;
 }
 
 /* ── Dark action buttons ─────────────────────────────────── */
 .drv-btn-primary {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
-  padding: 10px 14px;
+  padding: 11px 14px;
   border-radius: 10px;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   text-align: center;
   cursor: pointer;
   border: none;
   background: var(--vt-primary);
   color: #ffffff;
-  box-shadow: 0 4px 14px rgba(37,99,235,0.30);
-  transition: background 0.18s, box-shadow 0.18s;
+  box-shadow: 0 2px 8px rgba(37,99,235,0.24), 0 1px 3px rgba(37,99,235,0.14);
+  transition: background 0.15s, box-shadow 0.15s, transform 0.1s;
   font-family: var(--sidebar-font);
+  letter-spacing: 0.01em;
 }
 .drv-btn-primary:hover:not(:disabled) {
   background: var(--vt-primary-dark);
-  box-shadow: 0 6px 18px rgba(37,99,235,0.40);
+  box-shadow: 0 4px 12px rgba(37,99,235,0.34), 0 2px 6px rgba(37,99,235,0.18);
+}
+.drv-btn-primary:active:not(:disabled) {
+  transform: scale(0.99);
 }
 .drv-btn-primary:disabled {
-  opacity: 0.45;
+  opacity: 0.40;
   cursor: not-allowed;
   box-shadow: none;
 }
 
 .drv-btn-secondary {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
   padding: 10px 14px;
   border-radius: 10px;
@@ -1556,14 +1609,18 @@
   text-align: center;
   cursor: pointer;
   background: var(--vt-surface);
-  border: 1.5px solid #fca5a5;
-  color: #ef4444;
-  transition: background 0.18s, border-color 0.18s;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  transition: background 0.15s, border-color 0.15s;
   font-family: var(--sidebar-font);
+  letter-spacing: 0.01em;
 }
 .drv-btn-secondary:hover:not(:disabled) {
+  background: #fff5f5;
+  border-color: #fca5a5;
+}
+.drv-btn-secondary:active:not(:disabled) {
   background: #fef2f2;
-  border-color: #ef4444;
 }
 .drv-btn-secondary:disabled {
   opacity: 0.35;
@@ -1708,6 +1765,52 @@
 .drv-stopped-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+/* ── Notificacion de parada sobre el mapa (conductor) ─────── */
+
+/* Modo mapa normal: posicionada dentro del contenedor del mapa */
+.drv-map-stop-notif-wrap {
+  position: absolute;
+  bottom: 20px;
+  left: 16px;
+  right: 16px;
+  z-index: 380;
+  pointer-events: none;
+  display: flex;
+  justify-content: center;
+}
+
+/* Modo GPS pantalla completa: fija sobre el mapa fullscreen (z > 9999) */
+.drv-map-stop-notif-gps {
+  position: fixed;
+  bottom: 98px;   /* por encima del eta-panel (72px + 14px gap + 12px margen) */
+  left: 16px;
+  right: 16px;
+  z-index: 10001;
+  pointer-events: none;
+  display: flex;
+  justify-content: center;
+}
+
+.drv-map-stop-notif-wrap .gps-notif-item,
+.drv-map-stop-notif-gps .gps-notif-item {
+  pointer-events: all;
+  width: min(300px, 100%);
+  background: rgba(255, 255, 255, 0.97);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 24px rgba(15, 23, 42, 0.14), 0 1px 6px rgba(15, 23, 42, 0.06);
+  animation: drv-stop-notif-rise 0.22s ease-out;
+}
+
+@keyframes drv-stop-notif-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 520px) {
+  .drv-map-stop-notif-gps { bottom: 82px; }  /* eta-panel bottom: 10px en mobile */
 }
 
 /* ── Plate badge ─────────────────────────────────────────── */

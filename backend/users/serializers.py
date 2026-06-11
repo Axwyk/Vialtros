@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import User, Driver, Passenger, Route, Tracking, PickupStatus, RouteRating
+from .utils import normalize_name
 
 
 def build_route_intermediate_stops(passengers):
@@ -8,7 +9,11 @@ def build_route_intermediate_stops(passengers):
         if passenger.pickup_lat is None or passenger.pickup_lng is None:
             continue
 
-        label = passenger.user.username if getattr(passenger, 'user', None) else f'Parada {passenger.id}'
+        user = getattr(passenger, 'user', None)
+        if user:
+            label = user.get_full_name() or user.username
+        else:
+            label = f'Parada {passenger.id}'
         stops.append({
             'id': passenger.id,
             'passenger_id': passenger.id,
@@ -26,6 +31,12 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = ('id', 'username', 'email', 'first_name', 'last_name', 'phone_number', 'role', 'is_active', 'is_staff')
         read_only_fields = ('is_active', 'is_staff')
+
+    def validate_first_name(self, value):
+        return normalize_name(value)
+
+    def validate_last_name(self, value):
+        return normalize_name(value)
 
 
 class RouteRatingSerializer(serializers.ModelSerializer):
@@ -46,12 +57,18 @@ class UserProfileSerializer(serializers.ModelSerializer):
         model = User
         fields = ('first_name', 'last_name', 'email', 'phone_number')
 
+    def validate_first_name(self, value):
+        return normalize_name(value)
+
+    def validate_last_name(self, value):
+        return normalize_name(value)
+
 
 class UserBasicSerializer(serializers.ModelSerializer):
     """Datos mínimos de usuario para anidar en Driver/Passenger."""
     class Meta:
         model = User
-        fields = ('id', 'username', 'email', 'role')
+        fields = ('id', 'username', 'first_name', 'last_name', 'email', 'role')
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
@@ -59,7 +76,13 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ('id', 'username', 'email', 'role', 'is_active', 'password')
+        fields = ('id', 'username', 'first_name', 'last_name', 'email', 'role', 'is_active', 'password')
+
+    def validate_first_name(self, value):
+        return normalize_name(value)
+
+    def validate_last_name(self, value):
+        return normalize_name(value)
 
     def validate_role(self, value):
         """Validar que no se cree más de un administrador."""

@@ -6,6 +6,13 @@ const OSRM_BASE = "https://router.project-osrm.org/route/v1/driving";
 const OSRM_MATCH_BASE = "https://router.project-osrm.org/match/v1/driving";
 const OSRM_NEAREST_BASE = "https://router.project-osrm.org/nearest/v1/driving";
 const NOMINATIM_BASE = "https://nominatim.openstreetmap.org";
+const GOOGLE_ROUTES_BASE = "https://routes.googleapis.com/directions/v2:computeRoutes";
+const GOOGLE_ROADS_BASE = "https://roads.googleapis.com/v1/snapToRoads";
+const GOOGLE_ROADS_MAX_POINTS = 100;
+const GOOGLE_ROUTES_API_KEY =
+  process.env.REACT_APP_GOOGLE_ROUTES_API_KEY ||
+  process.env.REACT_APP_GOOGLE_MAPS_API_KEY ||
+  "";
 
 // Buenaventura viewbox: minLng,minLat,maxLng,maxLat
 const BVA_VIEWBOX = "-77.18,3.72,-76.85,4.02";
@@ -396,8 +403,19 @@ function mergePolylineSegments(segments) {
   return merged;
 }
 
+function createAbortSignal(timeoutMs) {
+  if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
+    return AbortSignal.timeout(timeoutMs);
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  controller.signal.addEventListener("abort", () => clearTimeout(timer), { once: true });
+  return controller.signal;
+}
+
 async function fetchJson(url, timeoutMs = 12000) {
-  const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+  const response = await fetch(url, { signal: createAbortSignal(timeoutMs) });
   if (!response.ok) return null;
   return response.json();
 }
@@ -412,7 +430,7 @@ async function fetchPostJson(url, body, timeoutMs = 12000) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: serializedBody,
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: createAbortSignal(timeoutMs),
       });
 
       if (response.status === 429) {
@@ -422,7 +440,20 @@ async function fetchPostJson(url, body, timeoutMs = 12000) {
         continue;
       }
 
-      if (!response.ok) return null;
+      if (!response.ok) {
+        // Leer el cuerpo del error para identificar la causa exacta
+        let errorBody = "(sin cuerpo)";
+        try {
+          const rawError = await response.text();
+          try {
+            errorBody = JSON.stringify(JSON.parse(rawError), null, 2);
+          } catch {
+            errorBody = rawError;
+          }
+        } catch { /* no se pudo leer el cuerpo */ }
+
+        return null;
+      }
       return response.json();
     } catch (err) {
       if (attempt >= maxRetries - 1) return null;
@@ -431,6 +462,70 @@ async function fetchPostJson(url, body, timeoutMs = 12000) {
     }
   }
   return null;
+}
+
+// Google Routes API v2 requires the X-Goog-FieldMask header — omitting it causes HTTP 400.
+// The field mask includes legs.steps to extract turn-by-turn navigation instructions.
+async function fetchGoogleRoutesJson(url, body, timeoutMs = 18000) {
+  const serializedBody = JSON.stringify(body);
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-FieldMask": [
+          "routes.polyline.encodedPolyline",
+          "routes.distanceMeters",
+          "routes.duration",
+          "routes.legs.steps.navigationInstruction",
+          "routes.legs.steps.distanceMeters",
+          "routes.legs.steps.endLocation.latLng",
+        ].join(","),
+      },
+      body: serializedBody,
+      signal: createAbortSignal(timeoutMs),
+    });
+    if (!response.ok) return null;
+    return response.json();
+  } catch {
+    return null;
+  }
+}
+
+function decodePolyline(encoded) {
+  const coordinates = [];
+  let index = 0;
+  let lat = 0;
+  let lng = 0;
+
+  while (index < encoded.length) {
+    let b;
+    let shift = 0;
+    let result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+
+    const deltaLat = result & 1 ? ~(result >> 1) : result >> 1;
+    lat += deltaLat;
+
+    shift = 0;
+    result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+
+    const deltaLng = result & 1 ? ~(result >> 1) : result >> 1;
+    lng += deltaLng;
+
+    coordinates.push([lat / 1e5, lng / 1e5]);
+  }
+
+  return coordinates;
 }
 
 async function fetchJsonWithRetry(url, retries = 1, timeoutMs = 12000) {
@@ -655,17 +750,37 @@ async function valhallaTraceRoute(points, timeoutMs = 12000) {
   if (!Array.isArray(points) || points.length < 2) return null;
 
   return enqueueValhallaRequest(async () => {
-    const shape = points.map((p) => ({
-      lat: Array.isArray(p) ? p[0] : p.latitude,
-      lon: Array.isArray(p) ? p[1] : p.longitude,
-    }));
+    const shape = points
+      .map((p) => ({
+        lat: Array.isArray(p) ? p[0] : p.latitude,
+        lon: Array.isArray(p) ? p[1] : p.longitude,
+      }))
+      .filter(
+        (pt) =>
+          Number.isFinite(pt.lat) &&
+          Number.isFinite(pt.lon) &&
+          pt.lat >= -90 && pt.lat <= 90 &&
+          pt.lon >= -180 && pt.lon <= 180,
+      );
+
+    if (shape.length < 2) return null;
 
     const body = {
       shape,
       costing: "auto",
-      costing_options: VALHALLA_COSTING_OPTIONS,
+      costing_options: {
+        auto: {
+          use_highways: 1.0,
+          use_living_streets: 0.0,
+          use_ferry: 0.0,
+        },
+      },
       shape_match: "map_snap",
-      search_radius: 150,
+      trace_options: {
+        search_radius: 50,
+        gps_accuracy: 10,
+        breakage_distance: 2000,
+      },
     };
 
     const data = await fetchPostJson(
@@ -702,8 +817,18 @@ async function valhallaRouteWaypoints(waypoints, timeoutMs = 15000) {
   if (!Array.isArray(waypoints) || waypoints.length < 2) return null;
 
   return enqueueValhallaRequest(async () => {
+    const validWaypoints = waypoints.filter(
+      (p) =>
+        Array.isArray(p) &&
+        Number.isFinite(p[0]) &&
+        Number.isFinite(p[1]) &&
+        p[0] >= -90 && p[0] <= 90 &&
+        p[1] >= -180 && p[1] <= 180,
+    );
+    if (validWaypoints.length < 2) return null;
+
     const body = {
-      locations: waypoints.map((p) => ({
+      locations: validWaypoints.map((p) => ({
         lat: p[0],
         lon: p[1],
         type: "through",
@@ -787,8 +912,8 @@ function trimAccessRoadLoops(coordinates, from, to) {
     return routePoints;
   }
 
-  const accessThresholdKm = 0.45;
-  const scanLimit = Math.min(routePoints.length - 2, 18);
+  const accessThresholdKm = 0.25;
+  const scanLimit = Math.min(routePoints.length - 2, 8);
 
   let startIndex = 0;
   let bestStartScore = Number.POSITIVE_INFINITY;
@@ -828,10 +953,63 @@ function trimAccessRoadLoops(coordinates, from, to) {
   return routePoints.slice(startIndex, endIndex + 1);
 }
 
+// Google Roads — snap single point to nearest road segment.
+async function snapWithGoogleRoads(coords) {
+  if (!GOOGLE_ROUTES_API_KEY) return null;
+  const [lat, lng] = coords;
+  const url = `${GOOGLE_ROADS_BASE}?path=${lat},${lng}&key=${encodeURIComponent(GOOGLE_ROUTES_API_KEY)}`;
+  try {
+    const data = await fetchJson(url, 8000);
+    const pt = data?.snappedPoints?.[0]?.location;
+    if (!Number.isFinite(pt?.latitude) || !Number.isFinite(pt?.longitude)) return null;
+    return sanitizeBuenaventuraCoords([pt.latitude, pt.longitude], coords);
+  } catch {
+    return null;
+  }
+}
+
+// Google Roads — snap up to GOOGLE_ROADS_MAX_POINTS at once.
+// interpolate=true asks Google to insert intermediate road-aligned points
+// between the input positions, producing a much smoother path.
+// interpolate=false preserves the original point count (use for map-matching).
+async function snapBatchWithGoogleRoads(coordsArray, interpolate = false) {
+  if (!GOOGLE_ROUTES_API_KEY) return null;
+  const pts = Array.isArray(coordsArray) ? coordsArray : [];
+  if (pts.length === 0 || pts.length > GOOGLE_ROADS_MAX_POINTS) return null;
+
+  const path = pts.map(([lat, lng]) => `${lat},${lng}`).join("|");
+  const url = `${GOOGLE_ROADS_BASE}?path=${encodeURIComponent(path)}&interpolate=${interpolate}&key=${encodeURIComponent(GOOGLE_ROUTES_API_KEY)}`;
+  try {
+    const data = await fetchJson(url, 12000);
+    if (!Array.isArray(data?.snappedPoints) || data.snappedPoints.length < 2) return null;
+
+    return data.snappedPoints
+      .map((sp) => {
+        const { latitude, longitude } = sp.location || {};
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+        // include originalIndex so callers can correlate back to input points
+        return { coords: [latitude, longitude], originalIndex: sp.originalIndex ?? null };
+      })
+      .filter(Boolean);
+  } catch {
+    return null;
+  }
+}
+
 async function snapToNearestRoad(coords) {
   if (!Array.isArray(coords) || coords.length !== 2) return null;
 
-  // 1. Primary: Valhalla locate
+  // 1. Primary: Google Roads API (highest accuracy on real road network)
+  if (GOOGLE_ROUTES_API_KEY) {
+    try {
+      const snapped = await snapWithGoogleRoads(coords);
+      if (snapped) return snapped;
+    } catch {
+      // Google Roads failed, fall through
+    }
+  }
+
+  // 2. Valhalla locate
   try {
     const snapped = await valhallaLocate(coords);
     if (snapped) return snapped;
@@ -839,7 +1017,7 @@ async function snapToNearestRoad(coords) {
     // Valhalla failed, try OSRM
   }
 
-  // 2. Fallback: OSRM nearest
+  // 3. OSRM nearest
   const [lat, lng] = coords;
   try {
     const data = await fetchJson(`${OSRM_NEAREST_BASE}/${lng},${lat}?number=1`);
@@ -852,17 +1030,167 @@ async function snapToNearestRoad(coords) {
 }
 
 async function snapPathToRoad(points) {
+  const validPoints = Array.isArray(points) ? points : [];
+  if (validPoints.length === 0) return [];
+
+  // Google Roads batch snap — preserves point count (interpolate=false) so
+  // timestamps and bearings arrays stay aligned with the original input.
+  if (GOOGLE_ROUTES_API_KEY && validPoints.length <= GOOGLE_ROADS_MAX_POINTS) {
+    try {
+      const coordsArray = validPoints.map((p) => p.coords);
+      const batchResult = await snapBatchWithGoogleRoads(coordsArray, false);
+      if (Array.isArray(batchResult) && batchResult.length > 0) {
+        // Build a lookup by originalIndex to remap each input point.
+        const byIndex = {};
+        batchResult.forEach((sp) => {
+          if (sp.originalIndex != null) byIndex[sp.originalIndex] = sp.coords;
+        });
+        const snapped = validPoints.map((p, i) => ({
+          ...p,
+          coords: byIndex[i] ?? p.coords,
+        }));
+        return dedupeConsecutiveTrackMatchPoints(normalizeTrackMatchPoints(snapped));
+      }
+    } catch {
+      // Google Roads batch failed — fall through to per-point snap
+    }
+  }
+
+  // Per-point fallback (Valhalla → OSRM)
   const snapped = await Promise.all(
-    (Array.isArray(points) ? points : []).map(async (point) => {
+    validPoints.map(async (point) => {
       const snappedCoords = await snapToNearestRoad(point.coords);
-      return {
-        ...point,
-        coords: snappedCoords || point.coords,
-      };
+      return { ...point, coords: snappedCoords || point.coords };
     }),
   );
 
   return dedupeConsecutiveTrackMatchPoints(normalizeTrackMatchPoints(snapped));
+}
+
+async function requestGoogleRoute(points, maxDistance = 60000) {
+  if (!GOOGLE_ROUTES_API_KEY || !Array.isArray(points) || points.length < 2) {
+    return null;
+  }
+
+  const origin = points[0];
+  const destination = points[points.length - 1];
+  if (!Array.isArray(origin) || !Array.isArray(destination)) return null;
+
+  const intermediates = points
+    .slice(1, -1)
+    .filter(
+      (point) =>
+        Array.isArray(point) &&
+        point.length === 2 &&
+        Number.isFinite(point[0]) &&
+        Number.isFinite(point[1]),
+    );
+
+  const body = {
+    origin: {
+      location: {
+        latLng: {
+          latitude: Number(origin[0]),
+          longitude: Number(origin[1]),
+        },
+      },
+    },
+    destination: {
+      location: {
+        latLng: {
+          latitude: Number(destination[0]),
+          longitude: Number(destination[1]),
+        },
+      },
+    },
+    travelMode: "DRIVE",
+    routingPreference: "TRAFFIC_AWARE_OPTIMAL",
+    computeAlternativeRoutes: false,
+    polylineQuality: "HIGH_QUALITY",
+  };
+
+  if (intermediates.length) {
+    body.intermediates = intermediates.map(([lat, lng]) => ({
+      location: {
+        latLng: {
+          latitude: Number(lat),
+          longitude: Number(lng),
+        },
+      },
+    }));
+  }
+
+  const url = `${GOOGLE_ROUTES_BASE}?key=${encodeURIComponent(
+    GOOGLE_ROUTES_API_KEY,
+  )}`;
+  const data = await fetchGoogleRoutesJson(url, body, 18000);
+  if (!data?.routes?.length) return null;
+
+  const route = data.routes[0];
+  const encodedPolyline = route.polyline?.encodedPolyline;
+  if (!encodedPolyline || typeof encodedPolyline !== "string") return null;
+
+  const coordinates = decodePolyline(encodedPolyline);
+  if (coordinates.length < 2) return null;
+
+  // route.duration is a Duration proto string like "123s"; parse the numeric part.
+  const durationSec = Number(
+    String(route.duration || "0").replace(/[^0-9]/g, ""),
+  );
+
+  // Parse turn-by-turn navigation steps from Google Routes API response.
+  // maneuver values: TURN_LEFT, TURN_RIGHT, TURN_SLIGHT_LEFT, TURN_SHARP_RIGHT,
+  // UTURN_LEFT, UTURN_RIGHT, STRAIGHT, DEPART, ARRIVE, RAMP_LEFT, RAMP_RIGHT, etc.
+  const GOOGLE_MANEUVER_MAP = {
+    TURN_LEFT: "left",
+    TURN_SHARP_LEFT: "sharp left",
+    TURN_SLIGHT_LEFT: "slight left",
+    TURN_RIGHT: "right",
+    TURN_SHARP_RIGHT: "sharp right",
+    TURN_SLIGHT_RIGHT: "slight right",
+    UTURN_LEFT: "uturn",
+    UTURN_RIGHT: "uturn",
+    RAMP_LEFT: "slight left",
+    RAMP_RIGHT: "slight right",
+    MERGE: "straight",
+    FORK_LEFT: "slight left",
+    FORK_RIGHT: "slight right",
+    FERRY: "straight",
+    FERRY_TRAIN: "straight",
+    ROUNDABOUT_LEFT: "left",
+    ROUNDABOUT_RIGHT: "right",
+    STRAIGHT: "straight",
+    ARRIVE: "arrive",
+    DEPART: null,
+    HEAD: null,
+  };
+
+  const rawSteps = route.legs?.[0]?.steps || [];
+  const parsedSteps = rawSteps
+    .map((step) => {
+      const instr = step.navigationInstruction;
+      if (!instr) return null;
+      const maneuverKey = (instr.maneuver || "STRAIGHT").toUpperCase();
+      const modifier = GOOGLE_MANEUVER_MAP[maneuverKey];
+      if (modifier === null) return null; // skip DEPART / HEAD
+      const loc = step.endLocation?.latLng;
+      if (!Number.isFinite(loc?.latitude) || !Number.isFinite(loc?.longitude)) return null;
+      return {
+        location: [loc.latitude, loc.longitude],
+        distance: step.distanceMeters || 0,
+        name: instr.instructions || "",
+        type: modifier === "arrive" ? "arrive" : "turn",
+        modifier: modifier || "straight",
+      };
+    })
+    .filter(Boolean);
+
+  return {
+    coordinates,
+    duration: durationSec,
+    distance: Number(route.distanceMeters || 0),
+    steps: parsedSteps.length > 0 ? parsedSteps : null,
+  };
 }
 
 async function requestStreetRoute(points, maxDistance = 60000) {
@@ -870,6 +1198,26 @@ async function requestStreetRoute(points, maxDistance = 60000) {
   const cacheKey = `osrm|${coordinates}|${maxDistance}`;
   if (routeCache.has(cacheKey)) {
     return routeCache.get(cacheKey);
+  }
+
+  if (GOOGLE_ROUTES_API_KEY) {
+    const googleCacheKey = `google|${coordinates}|${maxDistance}`;
+    if (routeCache.has(googleCacheKey)) {
+      return routeCache.get(googleCacheKey);
+    }
+
+    try {
+      const googleRoute = await requestGoogleRoute(points, maxDistance);
+      if (
+        googleRoute?.coordinates?.length > 1 &&
+        googleRoute.distance < maxDistance
+      ) {
+        routeCache.set(googleCacheKey, googleRoute);
+        return googleRoute;
+      }
+    } catch {
+      // Google Routes request failed, fall back to OSRM/Valhalla.
+    }
   }
 
   try {
@@ -894,6 +1242,23 @@ async function requestStreetRoute(points, maxDistance = 60000) {
     // OSRM failed, try Valhalla for simple two-point trips.
   }
 
+  // Valhalla: multi-waypoint route
+  if (Array.isArray(points) && points.length > 2) {
+    try {
+      const valResult = await valhallaRouteWaypoints(points, 20000);
+      if (
+        valResult?.coordinates?.length > 1 &&
+        valResult.distance < maxDistance
+      ) {
+        routeCache.set(cacheKey, valResult);
+        return valResult;
+      }
+    } catch {
+      // Valhalla multi-waypoint failed.
+    }
+  }
+
+  // Valhalla: two-point route
   if (Array.isArray(points) && points.length === 2) {
     try {
       const valResult = await valhallaRoute(points[0], points[1], 20000);

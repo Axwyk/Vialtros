@@ -5,6 +5,15 @@ import { getCurrentUser, updateCurrentUser, getUserCache, saveUserCache } from "
 const DEFAULT_AVATAR =
   "https://ui-avatars.com/api/?name=Usuario&background=2563eb&color=fff&size=128&rounded=true";
 
+function normalizeName(value) {
+  if (!value) return "";
+  return value.trim().replace(/\s+/g, " ")
+    .split(" ")
+    .map((word) => word ? word.charAt(0).toUpperCase() + word.slice(1).toLowerCase() : "")
+    .filter(Boolean)
+    .join(" ");
+}
+
 export default function ProfileScreen() {
   const [avatar, setAvatar] = useState(DEFAULT_AVATAR);
   const [photoSavedMsg, setPhotoSavedMsg] = useState("");
@@ -99,12 +108,15 @@ export default function ProfileScreen() {
     setSaveError("");
     setSaveSuccess(false);
     try {
+      const normalizedFirst = normalizeName(editData.first_name || "");
+      const normalizedLast = normalizeName(editData.last_name || "");
       await updateCurrentUser({
-        first_name: editData.first_name || "",
-        last_name: editData.last_name || "",
+        first_name: normalizedFirst,
+        last_name: normalizedLast,
         email: editData.email || "",
         phone_number: editData.phone_number || "",
       });
+      setEditData((ed) => ({ ...ed, first_name: normalizedFirst, last_name: normalizedLast }));
       setUser({ ...editData });
       saveUserCache({ ...editData });
       setEditMode(false);

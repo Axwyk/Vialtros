@@ -20,8 +20,8 @@
   height: 42px;
   border-radius: 50%;
   background: #fff;
-  border: 1px solid rgba(0, 0, 0, 0.795);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.629), 0 2px 10px rgba(0,0,0,0.1);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18), 0 2px 10px rgba(0,0,0,0.1);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -406,7 +406,7 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 50;
+  z-index: 600;   /* debe superar .map-legend y .route-metrics-panel (500) */
   --gps-dark:    #0f172a;
   --gps-navy:    #1e293b;
   --gps-blue:    #1a56db;
@@ -782,8 +782,7 @@
   color: #94a3b8 !important;
 }
 
-.gps-menu-wrapper,
-.gps-topbar-menu {
+.gps-menu-wrapper {
   position: relative;
 }
 
@@ -849,6 +848,7 @@
   width: 56px;
   height: 56px;
   filter: drop-shadow(0 3px 8px rgba(15, 36, 68, 0.5));
+  will-change: filter;
   animation: gpsArrowPulse 2.4s ease-in-out infinite;
 }
 
@@ -928,7 +928,10 @@
   border-radius: 50%;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%);
+  margin-top: -19px;
+  margin-left: -19px;
+  transform-origin: center;
+  will-change: transform, opacity;
   animation: vt-point-pulse 2s ease-out infinite;
 }
 
@@ -943,6 +946,7 @@
   place-items: center;
   width: 28px;
   height: 28px;
+  pointer-events: auto;
 }
 
 .vt-route-stop-ring {
@@ -969,19 +973,61 @@
   font-weight: 800;
   line-height: 1;
   box-shadow: 0 2px 6px rgba(37, 99, 235, 0.2);
+  transition: border-color 0.15s;
+}
+
+.vt-route-stop-marker--active .vt-route-stop-core {
+  border-color: #1D4ED8;
+  background: #EFF6FF;
+  box-shadow: 0 2px 10px rgba(29, 78, 216, 0.35);
+}
+
+.vt-stop-tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: #ffffff;
+  border: 1px solid #DBEAFE;
+  border-radius: 8px;
+  padding: 6px 10px;
+  white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(29, 78, 216, 0.14);
+  pointer-events: none;
+  z-index: 10;
+  min-width: 120px;
+}
+
+.vt-stop-tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #ffffff;
+}
+
+.vt-stop-tooltip-name {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #1E40AF;
+  line-height: 1.3;
+}
+
+.vt-stop-tooltip-addr {
+  font-size: 10px;
+  font-weight: 400;
+  color: #64748B;
+  line-height: 1.3;
 }
 
 @keyframes vt-point-pulse {
-  0% {
-    width: 36px;
-    height: 36px;
-    opacity: 0.8;
-  }
-  100% {
-    width: 56px;
-    height: 56px;
-    opacity: 0;
-  }
+  0%   { transform: scale(1);   opacity: 0.7; }
+  100% { transform: scale(1.6); opacity: 0;   }
 }
 
 
@@ -1003,28 +1049,30 @@
 .vt-vehicle-chip {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   border-radius: 999px;
-  padding: 4px 10px 4px 8px;
-  border: 2px solid #ffffff;
-  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.2);
+  padding: 4px 10px 4px 7px;
+  border: 1.5px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.28), 0 2px 6px rgba(15, 23, 42, 0.14);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.02em;
+  will-change: transform, opacity;
   animation: vt-vehicle-in 0.32s ease-out;
 }
 
 .vt-vehicle-chip-moving {
-  background: linear-gradient(135deg, #1D4ED8, #2563EB);
+  background: linear-gradient(135deg, #1e40af, #2563EB);
   color: #ffffff;
 }
 
 .vt-vehicle-chip-idle {
-  background: linear-gradient(135deg, #64748b, #475569);
+  background: linear-gradient(135deg, #475569, #64748b);
   color: #ffffff;
 }
 
 .vt-current-point-ring {
+  will-change: opacity;
   animation: vt-current-point-pulse 1.8s ease-out infinite;
 }
 
@@ -1088,6 +1136,279 @@
   .vt-vehicle-icon,
   .vt-current-point-ring,
   .vt-gps-nav-arrow {
+    animation: none !important;
+  }
+}
+
+/* =======================================================
+   Marcador de vehículo moderno — GPS Navigation Style
+   Niveles de detalle: dot / arrow / vehicle-icon
+   ======================================================= */
+
+.vt-marker-root {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* ---- Nivel 1: Punto GPS (zoom <= 12) ---- */
+.vt-marker-dot-wrap {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vt-marker-dot-halo {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(37, 99, 235, 0.35);
+}
+
+.vt-marker-dot-halo::before {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  border-radius: 50%;
+  border: 2px solid rgba(37, 99, 235, 0.55);
+  will-change: transform, opacity;
+  animation: vt-dot-ripple 2s ease-out infinite;
+}
+
+.vt-marker-dot-halo-idle {
+  border-color: rgba(100, 116, 139, 0.35);
+}
+
+.vt-marker-dot-halo-idle::before {
+  border-color: rgba(100, 116, 139, 0.5);
+  animation: vt-dot-ripple 2s ease-out infinite;
+}
+
+.vt-marker-dot-core {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #2563eb;
+  border: 2.5px solid #ffffff;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.5);
+  position: relative;
+  z-index: 1;
+}
+
+.vt-marker-dot-core-idle {
+  background: #64748b;
+  box-shadow: 0 2px 6px rgba(100, 116, 139, 0.4);
+}
+
+@keyframes vt-dot-ripple {
+  0%   { transform: scale(0.75); opacity: 0.7; }
+  100% { transform: scale(1.85); opacity: 0; }
+}
+
+/* ---- Nivel 2: Flecha de navegación (zoom 13-15) ---- */
+.vt-marker-arrow-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  will-change: transform;
+  filter: drop-shadow(0 2px 6px rgba(15, 36, 68, 0.38));
+  transition: filter 0.18s;
+}
+
+.vt-marker-arrow-wrap:hover {
+  filter: drop-shadow(0 3px 10px rgba(37, 99, 235, 0.6));
+}
+
+.vt-marker-arrow-svg {
+  width: 28px;
+  height: 28px;
+}
+
+/* ---- Nivel 3: Icono de vehículo (zoom >= 16) ---- */
+.vt-marker-vehicle-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vt-marker-vehicle-halo {
+  position: absolute;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 2px solid rgba(37, 99, 235, 0.22);
+  background: rgba(37, 99, 235, 0.06);
+  animation: vt-vehicle-halo-pulse 2.2s ease-in-out infinite;
+}
+
+.vt-marker-vehicle-halo-idle {
+  border-color: rgba(100, 116, 139, 0.22);
+  background: rgba(100, 116, 139, 0.05);
+  animation: none;
+}
+
+.vt-marker-vehicle-icon {
+  position: relative;
+  z-index: 1;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2.5px solid #ffffff;
+  will-change: transform;
+  transition: transform 0.28s ease;
+}
+
+.vt-marker-vehicle-icon svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.vt-marker-vehicle-icon-moving {
+  background: linear-gradient(145deg, #2563eb, #1d4ed8);
+  box-shadow: 0 3px 12px rgba(37, 99, 235, 0.45), 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.vt-marker-vehicle-icon-idle {
+  background: linear-gradient(145deg, #475569, #64748b);
+  box-shadow: 0 3px 10px rgba(100, 116, 139, 0.35);
+}
+
+@keyframes vt-vehicle-halo-pulse {
+  0%, 100% { transform: scale(1);    opacity: 0.7; }
+  50%       { transform: scale(1.18); opacity: 0.2; }
+}
+
+/* ---- GPS mode: punto azul con cuña de heading ---- */
+.vt-marker-gps-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 3px 10px rgba(15, 36, 68, 0.42));
+}
+
+.vt-marker-gps-wrap::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 2px solid rgba(37, 99, 235, 0.5);
+  transform: translate(-50%, -50%) scale(0.75);
+  will-change: transform, opacity;
+  animation: vt-bluedot-ripple 2.4s ease-out infinite;
+  pointer-events: none;
+}
+
+/* Halo ripple para dots en niveles no-GPS */
+.vt-marker-arrow-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 2px 6px rgba(15, 36, 68, 0.3));
+  transition: filter 0.18s;
+}
+
+.vt-marker-vehicle-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@keyframes vt-bluedot-ripple {
+  0%   { transform: translate(-50%, -50%) scale(0.75); opacity: 0.7; }
+  100% { transform: translate(-50%, -50%) scale(1.6);  opacity: 0; }
+}
+
+/* ---- Tooltip de placa (aparece al hacer click) ---- */
+.vt-vehicle-tooltip {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 8px 14px;
+  box-shadow:
+    0 4px 18px rgba(15, 23, 42, 0.18),
+    0 0 0 1px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 100;
+  animation: vt-tooltip-in 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.vt-vehicle-tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 7px solid transparent;
+  border-top-color: #ffffff;
+  filter: drop-shadow(0 2px 2px rgba(0,0,0,0.05));
+}
+
+.vt-vehicle-tooltip-plate {
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.vt-vehicle-tooltip-status {
+  font-size: 10px;
+  font-weight: 600;
+  color: #64748b;
+  letter-spacing: 0.03em;
+}
+
+@keyframes vt-tooltip-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(5px) scale(0.95); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+
+/* ---- Pin de destino — navegación estilo Google Maps ---- */
+.vt-dest-pin {
+  filter: drop-shadow(0 3px 8px rgba(15, 23, 42, 0.38));
+  will-change: transform;
+  animation: vt-dest-bounce 3s ease-in-out infinite;
+}
+
+@keyframes vt-dest-bounce {
+  0%, 100% { transform: translateY(0);    }
+  50%       { transform: translateY(-4px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vt-marker-dot-halo,
+  .vt-marker-dot-halo-idle,
+  .vt-marker-vehicle-halo,
+  .vt-marker-gps-wrap::before,
+  .vt-vehicle-tooltip,
+  .vt-dest-pin {
     animation: none !important;
   }
 }

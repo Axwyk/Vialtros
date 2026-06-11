@@ -11,11 +11,8 @@ import {
   getDrivers,
   getPassengers,
 } from "../services/admin";
-import {
-  searchBuenaventuraPlaces,
-  geocodeAddress,
-  snapPointToRoad,
-} from "../services/routing";
+import { geocodeAddress, snapPointToRoad } from "../services/routing";
+import LocationAutocomplete from "../components/LocationAutocomplete";
 
 const EMPTY_FORM = {
   name: "",
@@ -43,16 +40,6 @@ export default function AdminRoutesPage({ role, onLogout }) {
   const [passengerListRoute, setPassengerListRoute] = useState(null);
   const [sortCol, setSortCol] = useState(null);
   const [sortDir, setSortDir] = useState("asc");
-  const [originSuggestions, setOriginSuggestions] = useState([]);
-  const [originSuggestionsOpen, setOriginSuggestionsOpen] = useState(false);
-  const [originSuggestionsEnabled, setOriginSuggestionsEnabled] =
-    useState(false);
-  const [destinationSuggestions, setDestinationSuggestions] = useState([]);
-  const [destinationSuggestionsOpen, setDestinationSuggestionsOpen] =
-    useState(false);
-  const [destinationSuggestionsEnabled, setDestinationSuggestionsEnabled] =
-    useState(false);
-
   const [search, setSearch] = useState("");
   const debounceRef = useRef(null);
 
@@ -83,12 +70,6 @@ export default function AdminRoutesPage({ role, onLogout }) {
   const openCreate = () => {
     setForm(EMPTY_FORM);
     setFormError("");
-    setOriginSuggestions([]);
-    setOriginSuggestionsOpen(false);
-    setOriginSuggestionsEnabled(false);
-    setDestinationSuggestions([]);
-    setDestinationSuggestionsOpen(false);
-    setDestinationSuggestionsEnabled(false);
     setModal("create");
   };
   const openEdit = (r) => {
@@ -104,80 +85,8 @@ export default function AdminRoutesPage({ role, onLogout }) {
       destination_lng: r.destination_lng ?? null,
     });
     setFormError("");
-    setOriginSuggestions([]);
-    setOriginSuggestionsOpen(false);
-    setOriginSuggestionsEnabled(false);
-    setDestinationSuggestions([]);
-    setDestinationSuggestionsOpen(false);
-    setDestinationSuggestionsEnabled(false);
     setModal(r);
   };
-
-  useEffect(() => {
-    if (!modal || !originSuggestionsEnabled) return undefined;
-
-    const originValue = form.origin?.trim() || "";
-    if (originValue.length < 2) {
-      setOriginSuggestions([]);
-      setOriginSuggestionsOpen(false);
-      return undefined;
-    }
-
-    let cancelled = false;
-    const timerId = setTimeout(() => {
-      searchBuenaventuraPlaces(originValue)
-        .then((results) => {
-          if (!cancelled) {
-            setOriginSuggestions(results);
-            setOriginSuggestionsOpen(results.length > 0);
-          }
-        })
-        .catch(() => {
-          if (!cancelled) {
-            setOriginSuggestions([]);
-            setOriginSuggestionsOpen(false);
-          }
-        });
-    }, 220);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timerId);
-    };
-  }, [form.origin, modal, originSuggestionsEnabled]);
-
-  useEffect(() => {
-    if (!modal || !destinationSuggestionsEnabled) return undefined;
-
-    const destinationValue = form.destination?.trim() || "";
-    if (destinationValue.length < 2) {
-      setDestinationSuggestions([]);
-      setDestinationSuggestionsOpen(false);
-      return undefined;
-    }
-
-    let cancelled = false;
-    const timerId = setTimeout(() => {
-      searchBuenaventuraPlaces(destinationValue)
-        .then((results) => {
-          if (!cancelled) {
-            setDestinationSuggestions(results);
-            setDestinationSuggestionsOpen(results.length > 0);
-          }
-        })
-        .catch(() => {
-          if (!cancelled) {
-            setDestinationSuggestions([]);
-            setDestinationSuggestionsOpen(false);
-          }
-        });
-    }, 220);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timerId);
-    };
-  }, [form.destination, modal, destinationSuggestionsEnabled]);
 
   const handleSave = async () => {
     if (!form.name.trim()) {
@@ -455,7 +364,6 @@ export default function AdminRoutesPage({ role, onLogout }) {
                     </span>
                   </th>
                   <th className="text-left px-5 py-3 font-medium">Pasajeros</th>
-                  <th className="text-left px-5 py-3 font-medium">Resumen</th>
                   <th className="px-5 py-3" />
                 </tr>
               </thead>
@@ -481,24 +389,6 @@ export default function AdminRoutesPage({ role, onLogout }) {
                       <span className="text-xs font-medium bg-blue-50 text-blue-600 px-2.5 py-0.5 rounded-full">
                         {r.passenger_count ?? 0}
                       </span>
-                    </td>
-                    <td className="px-5 py-3.5 text-gray-500">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="text-gray-500 truncate max-w-[190px]"
-                          title={getPassengerPreview(r)}
-                        >
-                          {getPassengerPreview(r)}
-                        </span>
-                        {r.passenger_details?.length > 0 && (
-                          <button
-                            onClick={() => setPassengerListRoute(r)}
-                            className="text-xs font-medium text-blue-600 hover:text-blue-800 transition"
-                          >
-                            Ver lista
-                          </button>
-                        )}
-                      </div>
                     </td>
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-2 justify-end">
@@ -551,115 +441,40 @@ export default function AdminRoutesPage({ role, onLogout }) {
                 placeholder="ej. Ruta Norte #1"
               />
             </label>
-            <label className="text-xs font-medium text-gray-600">
-              Origen *
-              <div className="relative mt-1">
-                <input
-                  className="block w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                  value={form.origin}
-                  onChange={(e) => {
-                    setForm((f) => ({
-                      ...f,
-                      origin: e.target.value,
-                      origin_lat: null,
-                      origin_lng: null,
-                    }));
-                    setOriginSuggestionsEnabled(true);
-                  }}
-                  placeholder="ej. Colegio Central"
-                  autoComplete="off"
-                />
-                {originSuggestionsOpen && originSuggestions.length > 0 && (
-                  <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-blue-100 bg-white shadow-xl shadow-blue-100/70">
-                    {originSuggestions.map((suggestion) => (
-                      <button
-                        key={`${suggestion.source}-${suggestion.label}`}
-                        type="button"
-                        onMouseDown={(event) => event.preventDefault()}
-                        onClick={() => {
-                          setForm((current) => ({
-                            ...current,
-                            origin: suggestion.label,
-                            origin_lat: suggestion.coords?.[0] ?? null,
-                            origin_lng: suggestion.coords?.[1] ?? null,
-                          }));
-                          setOriginSuggestionsEnabled(false);
-                          setOriginSuggestionsOpen(false);
-                        }}
-                        className="flex w-full items-start justify-between gap-3 border-b border-blue-50 px-3 py-2.5 text-left transition last:border-b-0 hover:bg-blue-50"
-                      >
-                        <span>
-                          <span className="block text-sm font-semibold text-slate-800">
-                            {suggestion.label}
-                          </span>
-                          <span className="mt-0.5 block text-xs text-slate-500">
-                            {suggestion.subtitle}
-                          </span>
-                        </span>
-                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-blue-700">
-                          {suggestion.source === "local" ? "Local" : "Mapa"}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </label>
-            <label className="text-xs font-medium text-gray-600">
-              Destino *
-              <div className="relative mt-1">
-                <input
-                  className="block w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                  value={form.destination}
-                  onChange={(e) => {
-                    setForm((f) => ({
-                      ...f,
-                      destination: e.target.value,
-                      destination_lat: null,
-                      destination_lng: null,
-                    }));
-                    setDestinationSuggestionsEnabled(true);
-                  }}
-                  placeholder="ej. Sector Los Pinos"
-                  autoComplete="off"
-                />
-                {destinationSuggestionsOpen &&
-                  destinationSuggestions.length > 0 && (
-                    <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-blue-100 bg-white shadow-xl shadow-blue-100/70">
-                      {destinationSuggestions.map((suggestion) => (
-                        <button
-                          key={`${suggestion.source}-${suggestion.label}`}
-                          type="button"
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => {
-                            setForm((current) => ({
-                              ...current,
-                              destination: suggestion.label,
-                              destination_lat: suggestion.coords?.[0] ?? null,
-                              destination_lng: suggestion.coords?.[1] ?? null,
-                            }));
-                            setDestinationSuggestionsEnabled(false);
-                            setDestinationSuggestionsOpen(false);
-                          }}
-                          className="flex w-full items-start justify-between gap-3 border-b border-blue-50 px-3 py-2.5 text-left transition last:border-b-0 hover:bg-blue-50"
-                        >
-                          <span>
-                            <span className="block text-sm font-semibold text-slate-800">
-                              {suggestion.label}
-                            </span>
-                            <span className="mt-0.5 block text-xs text-slate-500">
-                              {suggestion.subtitle}
-                            </span>
-                          </span>
-                          <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-blue-700">
-                            {suggestion.source === "local" ? "Local" : "Mapa"}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-              </div>
-            </label>
+            <LocationAutocomplete
+              label="Origen"
+              required
+              value={form.origin}
+              onChange={(text) =>
+                setForm((f) => ({ ...f, origin: text, origin_lat: null, origin_lng: null }))
+              }
+              onSelect={(place) =>
+                setForm((f) => ({
+                  ...f,
+                  origin: place.address,
+                  origin_lat: place.lat,
+                  origin_lng: place.lng,
+                }))
+              }
+              placeholder="ej. Colegio Central, Buenaventura"
+            />
+            <LocationAutocomplete
+              label="Destino"
+              required
+              value={form.destination}
+              onChange={(text) =>
+                setForm((f) => ({ ...f, destination: text, destination_lat: null, destination_lng: null }))
+              }
+              onSelect={(place) =>
+                setForm((f) => ({
+                  ...f,
+                  destination: place.address,
+                  destination_lat: place.lat,
+                  destination_lng: place.lng,
+                }))
+              }
+              placeholder="ej. Sector Los Pinos, Buenaventura"
+            />
             <label className="text-xs font-medium text-gray-600">
               Conductor (opcional)
               <select

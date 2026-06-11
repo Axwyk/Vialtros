@@ -18,6 +18,7 @@ export function connectNotificationWS(handlers = {}) {
 
   let socket = null;
   let closedManually = false;
+  let wasConnected = false;
   let reconnectAttempts = 0;
   let reconnectTimer = null;
 
@@ -28,6 +29,7 @@ export function connectNotificationWS(handlers = {}) {
     socket = new WebSocket(url);
 
     socket.onopen = () => {
+      wasConnected = true;
       reconnectAttempts = 0;
       if (onOpen) onOpen();
     };
@@ -41,16 +43,16 @@ export function connectNotificationWS(handlers = {}) {
       }
     };
 
-    socket.onerror = (event) => {
-      console.warn("[notificationWs] WebSocket error", event);
-    };
+    socket.onerror = () => {};
 
     socket.onclose = () => {
       if (closedManually) return;
       if (onClose) onClose();
-      if (reconnectAttempts >= maxReconnectAttempts) return;
+      const effectiveMax = wasConnected ? maxReconnectAttempts : 5;
+      if (reconnectAttempts >= effectiveMax) return;
       reconnectAttempts += 1;
-      reconnectTimer = setTimeout(connect, reconnectDelayMs);
+      const delay = Math.min(reconnectDelayMs * 2 ** reconnectAttempts, 30000);
+      reconnectTimer = setTimeout(connect, delay);
     };
   };
 

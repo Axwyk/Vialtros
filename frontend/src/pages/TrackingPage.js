@@ -29,6 +29,7 @@ import {
 import "./TrackingPage.css";
 import NotificationCenter from "../components/notifications/NotificationCenter";
 import { MdWarning, MdInfo, MdError, MdNotificationsActive, MdClose, MdArrowForward } from "react-icons/md";
+import { useNotifications } from "../context/NotificationContext";
 
 
 const LIVE_WINDOW_MINUTES = 20;
@@ -963,6 +964,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const selectedRouteId = rawRouteId != null ? Number(rawRouteId) : Number.NaN;
   const currentRole = localStorage.getItem("role") || "user";
   const isAdminView = currentRole === "admin";
+  const { registerProximityListener, unregisterProximityListener } = useNotifications();
   const [driverRoutes, setDriverRoutes] = useState([]);
   const [sharing, setSharing] = useState(false);
   const sharingWatchIdRef = useRef(null);
@@ -1020,6 +1022,7 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const [userCoords, setUserCoords] = useState(null);
   const [eta, setEta] = useState(null);
   const [etaUpdated, setEtaUpdated] = useState(null);
+  const [nextStopEta, setNextStopEta] = useState(null);
   const [loading, setLoading] = useState(true);
   const [wsStatus, setWsStatus] = useState("connecting");
   const [forceBuenaventuraDemo, setForceBuenaventuraDemo] = useState(false);
@@ -1098,6 +1101,13 @@ export default function TrackingPage({ routeId: routeIdProp }) {
   const wsStatusRef = useRef(wsStatus);
   const trackingsRef = useRef(trackings);
   const lastSnapTimeRef = useRef(0);
+  const lastNextStopEtaRequestRef = useRef({ stopId: null, point: null });
+  // Dedup de notificaciones de proximidad: evita duplicar local+WS para el mismo umbral
+  const notifiedStopThresholdsRef = useRef(new Set());  // "stopId:threshold"
+  const stopNotifShownAtRef = useRef({});               // { stopId: timestamp }
+  const displayIntermediateStopsRef = useRef([]);
+  const guidedRouteRunningRef = useRef(false);
+  const sharingRef = useRef(false);
 
   useEffect(() => {
     trackingsCountRef.current = trackings.length;
@@ -1132,8 +1142,10 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     setRouteFinishedAt(null);
     setShowStopModal(false);
     setForceRouteFinished(false);
+    setNextStopEta(null);
     hasStartedOnceRef.current = false;
     routeCompletedRef.current = false;
+    lastNextStopEtaRequestRef.current = { stopId: null, point: null };
   }, [selectedRouteId]);
 
   // Marcar ruta como completada cuando el conductor la finaliza manualmente
@@ -1546,6 +1558,8 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           setRouteGeometryMode("pending");
           setForceBuenaventuraDemo(true);
         }
+      } catch (err) {
+        console.error("TrackingPage loadData error:", err);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -1562,6 +1576,8 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     routeEndNotifiedRef.current = false;
     notifiedStopsRef.current = new Set();
     earlyNotifStopsRef.current = new Set();
+    notifiedStopThresholdsRef.current = new Set();
+    stopNotifShownAtRef.current = {};
     setNextRouteCountdown(null);
     setStopNotification(null);
     if (nextRouteCountdownRef.current) {
@@ -1991,6 +2007,12 @@ export default function TrackingPage({ routeId: routeIdProp }) {
         : [],
     [showRouteContext, routeInfo],
   );
+
+  // Sincronizar refs estables para efectos que no deben re-ejecutarse al cambiar estos valores
+  useEffect(() => { displayIntermediateStopsRef.current = displayIntermediateStops; }, [displayIntermediateStops]);
+  useEffect(() => { guidedRouteRunningRef.current = guidedRouteRunning; }, [guidedRouteRunning]);
+  useEffect(() => { sharingRef.current = sharing; }, [sharing]);
+
   const displayPlannedRoutePolyline =
     showRouteContext && Array.isArray(routePolyline) && routePolyline.length > 1
       ? routePolyline
@@ -2259,20 +2281,20 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       return {
         className: "verified",
         label: "Trazado verificado",
-        statusLabel: "Trazada",
+        statusLabel: "Pendiente de iniciar",
       };
     }
     if (routeGeometryMode === "alternate") {
       return {
         className: "alternate",
         label: "Modo alterno",
-        statusLabel: "Alterna",
+        statusLabel: "Pendiente de iniciar",
       };
     }
     return {
       className: "pending",
       label: "Pendiente de ubicar",
-      statusLabel: "Buscando",
+      statusLabel: "Buscando ruta",
     };
   }, [routeGeometryMode, routeIsLive, routeState]);
 
@@ -2902,9 +2924,11 @@ export default function TrackingPage({ routeId: routeIdProp }) {
     };
   }, [nearDestination, routeState]);
 
-  // Detectar proximidad a paradas intermedias en modo GPS y notificar
+  // Detectar proximidad a paradas intermedias (modo GPS guiado y transmision en vivo)
   useEffect(() => {
-    if (!guidedRouteRunning || !vehiclePosition) return undefined;
+    if (currentRole !== "driver") return undefined;
+    if (!vehiclePosition) return undefined;
+    if (!guidedRouteRunning && !sharing) return undefined;
     const vLat = Number(vehiclePosition.latitude);
     const vLng = Number(vehiclePosition.longitude);
     if (!Number.isFinite(vLat) || !Number.isFinite(vLng)) return undefined;
@@ -2928,7 +2952,9 @@ export default function TrackingPage({ routeId: routeIdProp }) {
       ) {
         earlyNotifStopsRef.current.add(stop.id);
         const etaMin = Math.max(1, Math.round((d / GUIDED_ROUTE_SPEED_KMH) * 60));
-        setStopNotification({ label: stop.label, etaMin, arriving: false, early: true });
+        const distM = Math.round(d * 1000);
+        setStopNotification({ label: stop.label, etaMin, arriving: false, early: true, distM });
+        stopNotifShownAtRef.current[stop.id] = Date.now();
         if (stopNotifTimerRef.current) clearTimeout(stopNotifTimerRef.current);
         stopNotifTimerRef.current = setTimeout(() => setStopNotification(null), 15000);
         break;
@@ -2939,21 +2965,124 @@ export default function TrackingPage({ routeId: routeIdProp }) {
         notifiedStopsRef.current.add(stop.id);
         const arriving = d <= ARRIVING_KM;
         const etaMin = arriving ? null : Math.max(1, Math.round((d / GUIDED_ROUTE_SPEED_KMH) * 60));
-        setStopNotification({ label: stop.label, etaMin, arriving });
+        const distM = Math.round(d * 1000);
+        setStopNotification({ label: stop.label, etaMin, arriving, distM });
+        stopNotifShownAtRef.current[stop.id] = Date.now();
         if (stopNotifTimerRef.current) clearTimeout(stopNotifTimerRef.current);
         stopNotifTimerRef.current = setTimeout(() => setStopNotification(null), 7000);
         break;
       }
     }
     return undefined;
+  }, [currentRole, guidedRouteRunning, sharing, vehiclePosition, displayIntermediateStops]);
+
+  // Escuchar notificaciones de proximidad WS (modo transmision en vivo sin GPS guiado)
+  useEffect(() => {
+    if (currentRole !== "driver") return undefined;
+    registerProximityListener((notif) => {
+      if (guidedRouteRunningRef.current) return; // deteccion local maneja el modo guiado
+      const meta = notif.metadata || {};
+      const distM = meta.distance_meters;
+      const etaMin = meta.eta_minutes;
+      const studentName = meta.student_name || "estudiante";
+      const threshold = meta.threshold || "";
+
+      const stop = displayIntermediateStopsRef.current.find(
+        (s) => s.passenger_id != null && String(s.passenger_id) === String(meta.passenger_id),
+      );
+      const stopId = stop?.id;
+      if (stopId) {
+        const threshKey = `${stopId}:ws:${threshold}`;
+        if (notifiedStopThresholdsRef.current.has(threshKey)) return;
+        // Ventana corta (5s) solo para evitar duplicado inmediato local+WS en el mismo evento.
+        // No se usa 30s para no bloquear la progresion de umbrales (300m→150m→50m).
+        const lastShown = stopNotifShownAtRef.current[stopId];
+        if (lastShown && Date.now() - lastShown < 5000) return;
+        notifiedStopThresholdsRef.current.add(threshKey);
+        stopNotifShownAtRef.current[stopId] = Date.now();
+      }
+
+      if (notif.type === "driver_near_stop") {
+        const arriving = distM != null && distM <= 60;
+        setStopNotification({
+          label: studentName,
+          etaMin: arriving ? null : (etaMin ?? null),
+          arriving,
+          distM: distM ?? null,
+        });
+        if (stopNotifTimerRef.current) clearTimeout(stopNotifTimerRef.current);
+        stopNotifTimerRef.current = setTimeout(
+          () => setStopNotification(null),
+          arriving ? 7000 : 10000,
+        );
+      } else if (notif.type === "driver_near_destination") {
+        if (!arrivalNotifiedRef.current) {
+          arrivalNotifiedRef.current = true;
+          setShowArrivalNotif(true);
+          if (arrivalNotifTimerRef.current) clearTimeout(arrivalNotifTimerRef.current);
+          arrivalNotifTimerRef.current = setTimeout(() => setShowArrivalNotif(false), 10000);
+        }
+      }
+    });
+    return () => unregisterProximityListener();
+  }, [currentRole, registerProximityListener, unregisterProximityListener]);
+
+  // Calcular ETA continuo a la próxima parada pendiente para el conductor
+  useEffect(() => {
+    if (!guidedRouteRunning || !vehiclePosition || displayIntermediateStops.length === 0) {
+      setNextStopEta(null);
+      return;
+    }
+    const vLat = Number(vehiclePosition.latitude);
+    const vLng = Number(vehiclePosition.longitude);
+    if (!Number.isFinite(vLat) || !Number.isFinite(vLng)) return;
+
+    const ARRIVED_KM = 0.07;
+    let nextStop = null;
+    let minDist = Number.POSITIVE_INFINITY;
+    for (const stop of displayIntermediateStops) {
+      if (!stop.coords) continue;
+      const [sLat, sLng] = stop.coords;
+      if (!Number.isFinite(sLat) || !Number.isFinite(sLng)) continue;
+      const d = distanceKm(vLat, vLng, sLat, sLng);
+      if (d > ARRIVED_KM && d < minDist) {
+        minDist = d;
+        nextStop = stop;
+      }
+    }
+
+    if (!nextStop) {
+      setNextStopEta(null);
+      return;
+    }
+
+    const prev = lastNextStopEtaRequestRef.current;
+    if (
+      prev.stopId === nextStop.id &&
+      Array.isArray(prev.point) &&
+      distanceKm(prev.point[0], prev.point[1], vLat, vLng) < ETA_REFRESH_DISTANCE_KM
+    ) {
+      return;
+    }
+
+    lastNextStopEtaRequestRef.current = { stopId: nextStop.id, point: [vLat, vLng] };
+    getETAMinutes([vLat, vLng], nextStop.coords)
+      .then((minutes) => {
+        if (minutes !== null) setNextStopEta({ label: nextStop.label, minutes });
+      })
+      .catch(() => {});
   }, [guidedRouteRunning, vehiclePosition, displayIntermediateStops]);
 
   useEffect(() => {
     if (currentRole === "driver" && routeState === "finalizada" && !routeFinishedAt) {
       setRouteFinishedAt(Date.now());
       setShowStopModal(false);
+      if (!routeCompletedRef.current && Number.isFinite(selectedRouteId)) {
+        routeCompletedRef.current = true;
+        completeRoute(selectedRouteId).catch(() => {});
+      }
     }
-  }, [currentRole, routeState, routeFinishedAt]);
+  }, [currentRole, routeState, routeFinishedAt, selectedRouteId]);
 
   // Nota: no marcar la ruta como iniciada automáticamente cuando haya datos
   // en vivo. `routeStartedAt` se establece explícitamente cuando el
@@ -3058,24 +3187,9 @@ export default function TrackingPage({ routeId: routeIdProp }) {
             duration={10000}
           />
         )}
-        {guidedRouteRunning && stopNotification && (
-          <GpsNotif
-            type={stopNotification.arriving ? "arriving" : stopNotification.early ? "early" : "stop"}
-            title={stopNotification.label}
-            sub={
-              stopNotification.arriving
-                ? null
-                : stopNotification.etaMin !== null
-                  ? `${stopNotification.early ? `Aprox. ${stopNotification.etaMin} min` : `~${stopNotification.etaMin} min`}${eta !== null ? ` · destino en ${eta} min` : ""}`
-                  : null
-            }
-            onClose={() => setStopNotification(null)}
-            duration={stopNotification.early ? 15000 : 7000}
-          />
-        )}
       </div>
 
-      <div className="tracking-dashboard">
+      <div className={`tracking-dashboard${isAdminView ? " admin-map-mode" : ""}`}>
         {/* ======================================================
             SIDEBAR
         ====================================================== */}
@@ -3222,7 +3336,18 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                     ) : (
                       <div className="admin-route-list" role="list">
                         {filteredAdminRouteSummaries.map((route) => (
-                          <article key={route.id} className="admin-route-row" role="listitem">
+                          <article
+                            key={route.id}
+                            className={`admin-route-row${normalizedAdminRouteFilterIds.includes(Number(route.id)) ? " focused" : ""}`}
+                            role="listitem"
+                            title={route.is_live ? "Clic para enfocar en el mapa" : route.name}
+                            onClick={() => {
+                              const id = Number(route.id);
+                              setAdminRouteFilterIds((prev) =>
+                                prev.map(Number).includes(id) ? [] : [id],
+                              );
+                            }}
+                          >
                             <div className="admin-route-row-head">
                               <span className={`admin-route-dot ${route.is_live ? "live" : "idle"}`} />
                               <div className="admin-route-row-info">
@@ -3285,9 +3410,10 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                       type="button"
                       className="gps-reenter-btn"
                       onClick={() => setGpsOverlayVisible(true)}
-                      aria-label="Volver al GPS"
+                      aria-label="Abrir vista GPS"
                     >
-                      Ver GPS
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+                      GPS
                     </button>
                   )}
                 </div>
@@ -3389,6 +3515,18 @@ export default function TrackingPage({ routeId: routeIdProp }) {
                 </button>
               </div>
 
+              {nextStopEta && !nearDestination && (
+                <div className="vt-next-stop-eta">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                    <circle cx="12" cy="10" r="3" stroke="currentColor" strokeWidth="1.8"/>
+                  </svg>
+                  <span>
+                    Parada de <strong>{nextStopEta.label}</strong> en ~{nextStopEta.minutes} min
+                  </span>
+                </div>
+              )}
+
               {nearDestination && (
                 <div className="vt-near-dest">
                   <div className="vt-near-dest-icon">&#9873;</div>
@@ -3464,9 +3602,9 @@ export default function TrackingPage({ routeId: routeIdProp }) {
           <div className="map-frame">
             <MapView
               trackings={displayTrackings}
-              plannedRoutePolyline={displayPlannedRoutePolyline}
-              remainingRoutePolyline={routeProgressSegments.remaining}
-              traveledRoutePolyline={displayTraveledRoutePolyline}
+              plannedRoutePolyline={guidedRouteRunning ? displayPlannedRoutePolyline : routePolyline}
+              remainingRoutePolyline={guidedRouteRunning ? routeProgressSegments.remaining : null}
+              traveledRoutePolyline={guidedRouteRunning ? displayTraveledRoutePolyline : null}
               originCoords={displayOriginCoords}
               destinationCoords={displayDestinationCoords}
               originName={routeInfo?.origin || "Centro"}
@@ -3492,6 +3630,29 @@ export default function TrackingPage({ routeId: routeIdProp }) {
               darkMode={false}
             />
           </div>
+
+          {/* Notificacion de parada proxima sobre el mapa (solo conductor, solo durante navegacion) */}
+          {currentRole === "driver" && stopNotification && !showStopModal && (
+            <div className={
+              guidedRouteRunning && gpsOverlayVisible
+                ? "drv-map-stop-notif-gps"
+                : "drv-map-stop-notif-wrap"
+            }>
+              <GpsNotif
+                type={stopNotification.arriving ? "arriving" : stopNotification.early ? "early" : "stop"}
+                title={stopNotification.label}
+                sub={
+                  stopNotification.arriving
+                    ? (stopNotification.distM != null ? `${stopNotification.distM} m` : null)
+                    : stopNotification.etaMin !== null
+                      ? `${stopNotification.distM != null ? `${stopNotification.distM} m · ` : ""}${stopNotification.early ? `Aprox. ${stopNotification.etaMin} min` : `~${stopNotification.etaMin} min`}${eta !== null ? ` · destino en ${eta} min` : ""}`
+                      : (stopNotification.distM != null ? `${stopNotification.distM} m` : null)
+                }
+                onClose={() => setStopNotification(null)}
+                duration={stopNotification.early ? 15000 : 7000}
+              />
+            </div>
+          )}
 
           {/* VIALTROS: modal detener */}
           {currentRole === "driver" && showStopModal && (

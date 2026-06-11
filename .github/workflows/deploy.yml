@@ -29,13 +29,23 @@ jobs:
         run: npm ci
         working-directory: frontend
 
+      - name: Verify Google Maps env vars
+        run: |
+          [ -n "$REACT_APP_GOOGLE_MAPS_API_KEY" ] && echo "REACT_APP_GOOGLE_MAPS_API_KEY: SET" || echo "REACT_APP_GOOGLE_MAPS_API_KEY: MISSING"
+          [ -n "$REACT_APP_GOOGLE_MAPS_MAP_ID" ]  && echo "REACT_APP_GOOGLE_MAPS_MAP_ID: SET"  || echo "REACT_APP_GOOGLE_MAPS_MAP_ID: MISSING"
+        env:
+          REACT_APP_GOOGLE_MAPS_API_KEY: ${{ secrets.REACT_APP_GOOGLE_MAPS_API_KEY }}
+          REACT_APP_GOOGLE_MAPS_MAP_ID: ${{ secrets.REACT_APP_GOOGLE_MAPS_MAP_ID }}
+
       - name: Build
         run: npm run build
         working-directory: frontend
         env:
           CI: false
           REACT_APP_API_URL: ${{ secrets.REACT_APP_API_URL }}
+          REACT_APP_WS_URL: ${{ secrets.REACT_APP_WS_URL }}
           REACT_APP_GOOGLE_MAPS_API_KEY: ${{ secrets.REACT_APP_GOOGLE_MAPS_API_KEY }}
+          REACT_APP_GOOGLE_MAPS_MAP_ID: ${{ secrets.REACT_APP_GOOGLE_MAPS_MAP_ID }}
 
       - name: Configure Pages
         uses: actions/configure-pages@v4

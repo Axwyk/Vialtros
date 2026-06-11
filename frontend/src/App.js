@@ -7,6 +7,7 @@ import {
   isLocalAccessEnabled,
 } from "./services/auth";
 import { NotificationProvider } from "./context/NotificationContext";
+import { GoogleMapsProvider } from "./context/GoogleMapsContext";
 import NotificationToast from "./components/notifications/NotificationToast";
 import {
   BrowserRouter as Router,
@@ -89,6 +90,7 @@ function App() {
   };
 
   return (
+    <GoogleMapsProvider>
     <NotificationProvider isAuth={isAuth} role={role}>
     <Router>
       <div className="bg-gray-100 h-screen flex flex-col overflow-hidden">
@@ -241,6 +243,7 @@ function App() {
     </Router>
     {role !== "admin" && <NotificationToast />}
     </NotificationProvider>
+    </GoogleMapsProvider>
   );
 }
 
