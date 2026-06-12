@@ -31,7 +31,7 @@ jobs:
           node-version: '20'
 
       # =========================================
-      # VALIDACIÓN LOCAL DEL FRONTEND
+      # FRONTEND - BUILD EN EL RUNNER (con secrets)
       # =========================================
 
       - name: Install frontend dependencies
@@ -56,7 +56,7 @@ jobs:
           REACT_APP_API_URL: ${{ secrets.REACT_APP_API_URL }}
           REACT_APP_GOOGLE_MAPS_API_KEY: ${{ secrets.REACT_APP_GOOGLE_MAPS_API_KEY }}
           REACT_APP_GOOGLE_MAPS_MAP_ID: ${{ secrets.REACT_APP_GOOGLE_MAPS_MAP_ID }}
-    
+
       # =========================================
       # VALIDACIÓN LOCAL DEL BACKEND
       # =========================================
@@ -66,6 +66,21 @@ jobs:
           cd backend
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+
+      # =========================================
+      # COPIAR BUILD AL SERVIDOR VIA SCP
+      # =========================================
+
+      - name: Copy frontend build to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_SSH_PORT }}
+          source: "frontend/build/*"
+          target: "/var/www/ds1/Vialtros/frontend/build/"
+          strip_components: 2
 
       # =========================================
       # DEPLOY VPS
@@ -101,15 +116,15 @@ jobs:
             fi
 
             # =========================================
-            # ACTUALIZAR REPO
+            # ACTUALIZAR REPO (solo backend y configs)
             # =========================================
 
             echo "Pulling latest changes..."
 
-            git reset --hard
-            git clean -fd
+            git fetch origin master
 
-            git pull origin master
+            # Preservar el build que ya copiamos antes de hacer pull
+            git checkout origin/master -- backend/ etc/
 
             # =========================================
             # VERIFICAR ESTRUCTURA
@@ -118,38 +133,11 @@ jobs:
             echo "Project structure:"
             ls -la
 
-            echo "Frontend structure:"
-            ls -la frontend || exit 1
+            echo "Frontend build:"
+            ls -la frontend/build || { echo "Frontend build missing!"; exit 1; }
 
             echo "Backend structure:"
             ls -la backend || exit 1
-
-            # =========================================
-            # FRONTEND
-            # =========================================
-
-            echo "Installing frontend dependencies..."
-
-            cd frontend || exit 1
-
-            npm ci
-
-            echo "Building frontend..."
-
-            export CI=false
-            export REACT_APP_API_URL="${{ secrets.REACT_APP_API_URL }}"
-            export REACT_APP_GOOGLE_MAPS_API_KEY="${{ secrets.REACT_APP_GOOGLE_MAPS_API_KEY }}"
-            export REACT_APP_GOOGLE_MAPS_MAP_ID="${{ secrets.REACT_APP_GOOGLE_MAPS_MAP_ID }}"
-
-            npm run build
-
-            # Verificar build
-            if [ ! -d "build" ]; then
-              echo "Frontend build failed!"
-              exit 1
-            fi
-
-            echo "Frontend build completed!"
 
             # =========================================
             # BACKEND
@@ -157,7 +145,7 @@ jobs:
 
             echo "Installing backend dependencies..."
 
-            cd ../backend || exit 1
+            cd $APP_DIR/backend || exit 1
 
             # Crear venv si no existe
             if [ ! -d "venv" ]; then
@@ -203,16 +191,13 @@ jobs:
 
             echo "Updating Apache config..."
 
-            # Habilitar modulos necesarios (WebSocket, rewrite, headers)
             sudo a2enmod proxy_wstunnel proxy_http rewrite headers
 
-            # Copiar config de Apache desde el repo
             sudo cp $APP_DIR/etc/apache2/vialtros.conf /etc/apache2/sites-available/vialtros.conf
             sudo a2ensite vialtros
 
             echo "Updating systemd service..."
 
-            # Copiar el unit file de Daphne desde el repo
             sudo cp $APP_DIR/etc/systemd/vialtros-django.service /etc/systemd/system/vialtros-django.service
 
             # =========================================
@@ -238,4 +223,3 @@ jobs:
             echo "================================="
             echo "Deployment completed successfully!"
             echo "================================="
-            # asda
