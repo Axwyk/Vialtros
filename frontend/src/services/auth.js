@@ -68,6 +68,7 @@ export function clearSession() {
   localStorage.removeItem("cached_user");
 }
 
+
 export async function updateCurrentUser(data) {
   const res = await api.patch("/users/me/", data);
   return res.data;

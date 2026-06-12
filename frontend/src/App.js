@@ -92,7 +92,7 @@ function App() {
   return (
     <GoogleMapsProvider>
     <NotificationProvider isAuth={isAuth} role={role}>
-    <Router>
+    <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <div className="bg-gray-100 h-screen flex flex-col overflow-hidden">
         {isAuth && (
           <nav className="bg-blue-800 text-white px-8 py-3.5 flex justify-between items-center shadow-lg flex-shrink-0 z-20">
