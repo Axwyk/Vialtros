@@ -78,6 +78,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_SSH_PORT }}
+          debug: true
           script: |
             sudo rm -rf /var/www/ds1/Vialtros/frontend/build/
             mkdir -p /var/www/ds1/Vialtros/frontend/build/
