@@ -10,4 +10,3 @@ python-dotenv
 django-cors-headers
 pyserial
 pynmea2
-gunicorn

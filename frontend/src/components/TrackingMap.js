@@ -64,7 +64,7 @@ function normalizeRouteCoordinates(routeCoordinates = []) {
 
 function resolveMapboxToken() {
   return (
-    process.env.REACT_APP_MAPBOX_TOKEN || process.env.VITE_MAPBOX_TOKEN || ""
+    process.env.REACT_APP_MAPBOX_TOKEN || ""
   );
 }
 
@@ -90,7 +90,6 @@ export default function TrackingMap({
 
   function injectSamplePois() {
     setPois(samplePois);
-    console.debug("Injected sample POIs", samplePois);
   }
 
   // Resuelve el estilo: Mapbox si hay token, sino usa OpenStreetMap gratuito
@@ -242,7 +241,6 @@ out center;`;
       )}`;
 
       const res = await fetch(url);
-      console.debug("Overpass request:", url);
       if (!res.ok) {
         console.warn("Overpass response not ok", res.status, res.statusText);
         return;
@@ -257,7 +255,6 @@ out center;`;
       }));
 
       setPois(parsed);
-      console.debug("Fetched POIs:", parsed.length, parsed.slice(0, 6));
     } catch (err) {
       // Silencioso: no bloquear la experiencia por fallos en Overpass
       console.warn("Error fetching POIs:", err);

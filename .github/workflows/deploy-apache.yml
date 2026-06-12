@@ -18,15 +18,15 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Set up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
 
@@ -54,10 +54,9 @@ jobs:
         env:
           CI: false
           REACT_APP_API_URL: ${{ secrets.REACT_APP_API_URL }}
-          REACT_APP_WS_URL: ${{ secrets.REACT_APP_WS_URL }}
           REACT_APP_GOOGLE_MAPS_API_KEY: ${{ secrets.REACT_APP_GOOGLE_MAPS_API_KEY }}
           REACT_APP_GOOGLE_MAPS_MAP_ID: ${{ secrets.REACT_APP_GOOGLE_MAPS_MAP_ID }}
-
+    
       # =========================================
       # VALIDACIÓN LOCAL DEL BACKEND
       # =========================================
@@ -73,7 +72,7 @@ jobs:
       # =========================================
 
       - name: Deploy via SSH
-        uses: appleboy/ssh-action@master
+        uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
@@ -139,15 +138,8 @@ jobs:
 
             export CI=false
             export REACT_APP_API_URL="${{ secrets.REACT_APP_API_URL }}"
-            export REACT_APP_WS_URL="${{ secrets.REACT_APP_WS_URL }}"
             export REACT_APP_GOOGLE_MAPS_API_KEY="${{ secrets.REACT_APP_GOOGLE_MAPS_API_KEY }}"
             export REACT_APP_GOOGLE_MAPS_MAP_ID="${{ secrets.REACT_APP_GOOGLE_MAPS_MAP_ID }}"
-
-            echo "API URL length:"
-            echo ${#REACT_APP_API_URL}
-
-            echo "MAPS KEY length:"
-            echo ${#REACT_APP_GOOGLE_MAPS_API_KEY}
 
             npm run build
 
@@ -199,7 +191,7 @@ jobs:
 
             echo "Running migrations..."
 
-            python manage.py migrate
+            python manage.py migrate || { echo "Migrations failed!"; exit 1; }
 
             echo "Collecting static files..."
 

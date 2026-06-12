@@ -1,8 +1,18 @@
 // Google Routes API - Reemplaza Valhalla/OSRM para mejor precisión
 // Documentación: https://developers.google.com/maps/documentation/routes
 
-const GOOGLE_ROUTES_API_KEY = process.env.REACT_APP_GOOGLE_ROUTES_API_KEY;
+const GOOGLE_ROUTES_API_KEY =
+  process.env.REACT_APP_GOOGLE_ROUTES_API_KEY ||
+  process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
 const GOOGLE_ROUTES_BASE = "https://routes.googleapis.com/directions/v2:computeRoutes";
+
+// X-Goog-FieldMask es obligatorio en Routes API v2; sin el header la API devuelve 400
+const FIELD_MASK_FULL =
+  "routes.polyline.encodedPolyline,routes.duration,routes.distanceMeters," +
+  "routes.legs.steps.startLocation,routes.legs.steps.navigationInstruction," +
+  "routes.legs.steps.distanceMeters,routes.legs.steps.staticDuration";
+const FIELD_MASK_BASIC =
+  "routes.polyline.encodedPolyline,routes.duration,routes.distanceMeters";
 
 // Cache para rutas
 const routeCache = new Map();
@@ -121,16 +131,19 @@ export async function getStreetRoute(origin, destination, options = {}) {
       units: "METRIC",
     };
 
-    const response = await fetch(`${GOOGLE_ROUTES_BASE}?key=${GOOGLE_ROUTES_API_KEY}`, {
+    const response = await fetch(GOOGLE_ROUTES_BASE, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "X-Goog-Api-Key": GOOGLE_ROUTES_API_KEY,
+        "X-Goog-FieldMask": FIELD_MASK_FULL,
       },
       body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
-      throw new Error(`Google Routes API error: ${response.status}`);
+      const errBody = await response.text().catch(() => "");
+      throw new Error(`Google Routes API error: ${response.status} ${errBody}`);
     }
 
     const data = await response.json();
@@ -237,16 +250,19 @@ export async function getStreetRouteThroughPoints(waypoints, options = {}) {
       units: "METRIC",
     };
 
-    const response = await fetch(`${GOOGLE_ROUTES_BASE}?key=${GOOGLE_ROUTES_API_KEY}`, {
+    const response = await fetch(GOOGLE_ROUTES_BASE, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "X-Goog-Api-Key": GOOGLE_ROUTES_API_KEY,
+        "X-Goog-FieldMask": FIELD_MASK_BASIC,
       },
       body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
-      throw new Error(`Google Routes API error: ${response.status}`);
+      const errBody = await response.text().catch(() => "");
+      throw new Error(`Google Routes API error: ${response.status} ${errBody}`);
     }
 
     const data = await response.json();
@@ -291,28 +307,6 @@ export async function snapPointToRoad(coords) {
   // Para implementar: usar Google Roads API (roadSnapping endpoint)
   // Requiere habilitación adicional en Google Cloud
   return coords;
-}
-
-/**
- * Route Optimization API - Para optimizar múltiples paradas
- * (Requiere habilitación adicional y puede tener costos diferentes)
- * @param {Object[]} locations
- * @param {Object[]} vehicles
- */
-export async function optimizeRoute(locations, vehicles = []) {
-  if (!GOOGLE_ROUTES_API_KEY) {
-    console.error("Google Routes API key not configured");
-    return null;
-  }
-
-  // Esta es la Route Optimization API (diferente endpoint)
-  // Documentación: https://developers.google.com/optimization/routing/start/overview
-  
-  const OPTIMIZATION_BASE = "https://routeoptimization.googleapis.com/v1/projects";
-  
-  // Implementación pendiente - requiere project ID
-  console.warn("Route Optimization API not yet implemented");
-  return null;
 }
 
 export function clearCache() {

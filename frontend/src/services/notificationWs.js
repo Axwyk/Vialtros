@@ -43,7 +43,7 @@ export function connectNotificationWS(handlers = {}) {
       }
     };
 
-    socket.onerror = () => {};
+    socket.onerror = (err) => { console.warn("NotificationWS error:", err); };
 
     socket.onclose = () => {
       if (closedManually) return;

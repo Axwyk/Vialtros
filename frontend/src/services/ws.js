@@ -18,11 +18,10 @@ export function resolveWsBaseUrl() {
 
   if (typeof window !== "undefined") {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = window.location.hostname;
-    return `${protocol}//${host}:8000/ws`;
+    return `${protocol}//${window.location.host}/ws`;
   }
 
-  return "ws://localhost:8000/ws";
+  return "ws://localhost/ws";
 }
 
 function parseIncomingMessage(rawText) {

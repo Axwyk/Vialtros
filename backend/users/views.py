@@ -33,15 +33,6 @@ RECENT_ACTIVITY_LIMIT = 8
 RECENT_ACTIVITY_WINDOW_DAYS = 7
 
 
-def calculate_distance_km(start, end):
-    if not start or not end:
-        return 0
-
-    delta_lat = end[0] - start[0]
-    delta_lng = end[1] - start[1]
-    return ((delta_lat * delta_lat) + (delta_lng * delta_lng)) ** 0.5 * 111
-
-
 def estimate_speed_kmh(previous_tracking, latest_tracking):
     if not previous_tracking or not latest_tracking:
         return 0
@@ -52,9 +43,9 @@ def estimate_speed_kmh(previous_tracking, latest_tracking):
     if elapsed_hours <= 0:
         return 0
 
-    distance_km = calculate_distance_km(
-        (previous_tracking.latitude, previous_tracking.longitude),
-        (latest_tracking.latitude, latest_tracking.longitude),
+    distance_km = haversine_km(
+        previous_tracking.latitude, previous_tracking.longitude,
+        latest_tracking.latitude, latest_tracking.longitude,
     )
     return max(0, round(distance_km / elapsed_hours))
 

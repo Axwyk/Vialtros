@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 import { useJsApiLoader } from "@react-google-maps/api";
 
 const GOOGLE_MAPS_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "";
@@ -10,10 +10,12 @@ const GOOGLE_MAPS_LIBRARIES = ["places"];
 const GoogleMapsContext = createContext({ isLoaded: false, loadError: null, authError: false });
 
 export function GoogleMapsProvider({ children }) {
-  const [authError, setAuthError] = useState(() => {
+  const [authError, setAuthError] = useState(false);
+
+  useEffect(() => {
     window.gm_authFailure = () => setAuthError(true);
-    return false;
-  });
+    return () => { delete window.gm_authFailure; };
+  }, []);
 
   const { isLoaded, loadError } = useJsApiLoader({
     id: "vialtros-google-map",
