@@ -142,6 +142,13 @@ jobs:
             export REACT_APP_WS_URL="${{ secrets.REACT_APP_WS_URL }}"
             export REACT_APP_GOOGLE_MAPS_API_KEY="${{ secrets.REACT_APP_GOOGLE_MAPS_API_KEY }}"
             export REACT_APP_GOOGLE_MAPS_MAP_ID="${{ secrets.REACT_APP_GOOGLE_MAPS_MAP_ID }}"
+
+            echo "API URL length:"
+            echo ${#REACT_APP_API_URL}
+
+            echo "MAPS KEY length:"
+            echo ${#REACT_APP_GOOGLE_MAPS_API_KEY}
+
             npm run build
 
             # Verificar build
@@ -239,3 +246,4 @@ jobs:
             echo "================================="
             echo "Deployment completed successfully!"
             echo "================================="
+            # asda

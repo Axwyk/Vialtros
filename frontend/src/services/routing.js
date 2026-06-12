@@ -1,10 +1,19 @@
-// Servicio de enrutamiento real por calles usando Valhalla (FOSSGIS) como primario
-// y OSRM como fallback. Geocodificación con Nominatim (OpenStreetMap).
+// Servicio de enrutamiento real por calles usando Google Routes API
+// y Nominatim para geocodificación
+// NOTA: Valhalla/OSRM reemplazados por Google Routes API (mejor precisión en Buenaventura)
 
-const VALHALLA_BASE = "https://valhalla1.openstreetmap.de";
-const OSRM_BASE = "https://router.project-osrm.org/route/v1/driving";
+import {
+  getStreetRoute as googleGetStreetRoute,
+  getStreetRouteThroughPoints as googleGetStreetRouteThroughPoints,
+  snapPointToRoad as googleSnapPointToRoad,
+  clearCache as googleClearCache,
+} from "./googleRoutesApi";
+
+const GOOGLE_ROUTES_API_KEY = process.env.REACT_APP_GOOGLE_ROUTES_API_KEY;
 const OSRM_MATCH_BASE = "https://router.project-osrm.org/match/v1/driving";
 const OSRM_NEAREST_BASE = "https://router.project-osrm.org/nearest/v1/driving";
+const OSRM_BASE = "https://router.project-osrm.org/route/v1/driving"; // Legacy - not used
+const VALHALLA_BASE = ""; // Legacy - not used
 const NOMINATIM_BASE = "https://nominatim.openstreetmap.org";
 const GOOGLE_ROUTES_BASE = "https://routes.googleapis.com/directions/v2:computeRoutes";
 const GOOGLE_ROADS_BASE = "https://roads.googleapis.com/v1/snapToRoads";
@@ -1309,71 +1318,35 @@ export async function getStreetRouteThroughPoints(points, options = {}) {
   const maxDistance = Number.isFinite(options.maxDistance)
     ? Number(options.maxDistance)
     : 60000 * Math.max(1, validPoints.length - 1);
-  const shouldSnapWaypoints = options.snapWaypoints !== false;
 
-  const snappedWaypoints = shouldSnapWaypoints
-    ? dedupeConsecutivePoints(
-        await Promise.all(
-          validPoints.map(async (point) =>
-            snapPointToRoad(point).catch(() => point),
-          ),
-        ),
-      )
-    : validPoints;
-
-  const routeCacheKey = `route-through|${snappedWaypoints.map((point) => point.join(",")).join("->")}|${maxDistance}`;
-  if (routeCache.has(routeCacheKey)) {
-    const cached = routeCache.get(routeCacheKey);
-    if (cached?.coordinates?.length > 1) {
-      return {
-        ...cached,
-        coordinates: anchorRouteEndpoints(
-          cached.coordinates,
-          validPoints[0],
-          validPoints[validPoints.length - 1],
-        ),
-      };
+  try {
+    // Usar Google Routes API para múltiples puntos
+    const googleRoute = await googleGetStreetRouteThroughPoints(validPoints, {
+      maxDistance,
+    });
+    if (googleRoute?.coordinates?.length > 1) {
+      return googleRoute;
     }
+  } catch (error) {
+    console.warn("Google Routes API multi-point failed, using segments:", error.message);
   }
 
-  const directRoute = await requestStreetRoute(
-    snappedWaypoints,
-    maxDistance,
-  ).catch(() => null);
-  if (directRoute?.coordinates?.length > 1) {
-    const resolved = {
-      ...directRoute,
-      coordinates: anchorRouteEndpoints(
-        trimAccessRoadLoops(
-          directRoute.coordinates,
-          validPoints[0],
-          validPoints[validPoints.length - 1],
-        ),
-        validPoints[0],
-        validPoints[validPoints.length - 1],
-      ),
-    };
-    routeCache.set(routeCacheKey, resolved);
-    return resolved;
-  }
-
+  // Fallback: construir ruta por segmentos
   const segmentRoutes = await Promise.all(
-    snappedWaypoints.slice(1).map(async (to, index) => {
-      const from = snappedWaypoints[index];
-      const segment = await requestStreetRoute([from, to], 60000).catch(
-        () => null,
-      );
-      if (segment?.coordinates?.length > 1) {
-        return {
-          ...segment,
-          coordinates: anchorRouteEndpoints(
-            segment.coordinates,
-            validPoints[index],
-            validPoints[index + 1],
-          ),
-        };
+    validPoints.slice(1).map(async (to, index) => {
+      const from = validPoints[index];
+      try {
+        const segment = await googleGetStreetRoute(from, to);
+        if (segment?.coordinates?.length > 1) {
+          return {
+            ...segment,
+            coordinates: anchorRouteEndpoints(segment.coordinates, from, to),
+          };
+        }
+      } catch (error) {
+        console.warn(`Segment route failed from ${from} to ${to}:`, error.message);
       }
-      return straightLineRoute(validPoints[index], validPoints[index + 1]);
+      return straightLineRoute(from, to);
     }),
   );
 
@@ -1397,9 +1370,6 @@ export async function getStreetRouteThroughPoints(points, options = {}) {
       ),
       isStraightLine: segmentRoutes.every((segment) => segment?.isStraightLine),
     };
-    if (!resolved.isStraightLine) {
-      routeCache.set(routeCacheKey, resolved);
-    }
     return resolved;
   }
 
@@ -1466,7 +1436,7 @@ export async function geocodeAddress(address, options = {}) {
   // Snap geocoded coordinate to nearest road for precision
   if (resolved) {
     try {
-      const snapped = await valhallaLocate(resolved);
+      const snapped = await googleSnapPointToRoad(resolved);
       if (snapped) {
         geocodeCache.set(cacheKey, snapped);
         return snapped;
@@ -1513,8 +1483,8 @@ function straightLineRoute(from, to) {
 }
 
 /**
- * Obtiene la ruta real por calles entre dos puntos usando OSRM.
- * Si OSRM falla o devuelve una ruta irreal (> 60 km), usa polyline recta.
+ * Obtiene la ruta real por calles entre dos puntos usando Google Routes API.
+ * Si Google Routes falla, usa polyline recta.
  * @param {[number, number]} from  - [lat, lng]
  * @param {[number, number]} to    - [lat, lng]
  * @returns {Promise<{ coordinates: [number, number][], duration: number, distance: number, isStraightLine?: boolean }>}
@@ -1525,10 +1495,18 @@ export async function getStreetRoute(from, to) {
   const safeFrom = sanitizeBuenaventuraCoords(from) || from;
   const safeTo = sanitizeBuenaventuraCoords(to, safeFrom) || to;
 
-  const routed = await getStreetRouteThroughPoints([safeFrom, safeTo], {
-    maxDistance: 60000,
-  });
-  return routed || straightLineRoute(safeFrom, safeTo);
+  // Usar Google Routes API
+  try {
+    const googleRoute = await googleGetStreetRoute(safeFrom, safeTo);
+    if (googleRoute?.coordinates?.length > 1) {
+      return googleRoute;
+    }
+  } catch (error) {
+    console.warn("Google Routes API failed, using fallback:", error.message);
+  }
+
+  // Fallback: línea recta
+  return straightLineRoute(safeFrom, safeTo);
 }
 
 /**
@@ -1546,77 +1524,32 @@ export async function getTrackedStreetRoute(points) {
   const sampled = sampleTrackMatchPoints(normalized, 35);
   const sampledCoords = sampled.map((p) => p.coords);
 
-  // 1. Primary: Valhalla trace_route (map matching)
+  // 1. Primary: Google Routes API multi-point route
   try {
-    const traceResult = await valhallaTraceRoute(sampledCoords);
-    if (traceResult?.coordinates?.length > 1) return traceResult;
+    const googleResult = await googleGetStreetRouteThroughPoints(sampledCoords);
+    if (googleResult?.coordinates?.length > 1) return googleResult;
   } catch {
-    // Valhalla trace failed, try waypoints route
+    // Google Routes failed, try segment-by-segment
   }
 
-  // 2. Valhalla route with waypoints
-  try {
-    const waypointResult = await valhallaRouteWaypoints(sampledCoords);
-    if (waypointResult?.coordinates?.length > 1) return waypointResult;
-  } catch {
-    // Valhalla waypoints failed, try OSRM
-  }
-
-  // 3. Fallback: OSRM Match
-  try {
-    const snappedSampled = await snapPathToRoad(sampled);
-    const roadAnchoredPoints =
-      snappedSampled.length > 1 ? snappedSampled : sampled;
-    const sampledCoordinates = buildOsrmCoordinates(
-      roadAnchoredPoints.map((point) => point.coords),
-    );
-    const { radiuses, timestamps } = buildMatchParams(roadAnchoredPoints);
-
-    const matchUrl = `${OSRM_MATCH_BASE}/${sampledCoordinates}?geometries=geojson&overview=full&tidy=true&gaps=split&annotations=false&radiuses=${radiuses}&timestamps=${timestamps}`;
-    const data = await fetchJson(matchUrl);
-    if (
-      data?.code === "Ok" &&
-      Array.isArray(data.matchings) &&
-      data.matchings.length > 0
-    ) {
-      const coordinates = mergePolylineSegments(
-        data.matchings.map(
-          (matching) =>
-            matching.geometry?.coordinates?.map(([lng, lat]) => [lat, lng]) ||
-            [],
-        ),
-      );
-      if (coordinates.length > 1) {
-        return {
-          coordinates,
-          duration: data.matchings.reduce(
-            (sum, matching) => sum + (matching.duration || 0),
-            0,
-          ),
-          distance: data.matchings.reduce(
-            (sum, matching) => sum + (matching.distance || 0),
-            0,
-          ),
-        };
-      }
-    }
-  } catch {
-    // OSRM Match failed
-  }
-
-  // 4. Segment-by-segment via getStreetRoute (already Valhalla-primary)
+  // 2. Fallback: Segment-by-segment via getStreetRoute
   const segmentRoutes = await Promise.all(
     sampledCoords.slice(1).map(async (to, index) => {
       const from = sampledCoords[index];
-      return getStreetRoute(from, to);
+      try {
+        return await getStreetRoute(from, to);
+      } catch {
+        return straightLineRoute(from, to);
+      }
     }),
   );
-  const coordinates = mergePolylineSegments(
+
+  const mergedCoordinates = mergePolylineSegments(
     segmentRoutes.map((segment) => segment?.coordinates || []),
   );
-  if (coordinates.length > 1) {
+  if (mergedCoordinates.length > 1) {
     return {
-      coordinates,
+      coordinates: mergedCoordinates,
       duration: segmentRoutes.reduce(
         (sum, segment) => sum + (segment?.duration || 0),
         0,
@@ -1625,20 +1558,11 @@ export async function getTrackedStreetRoute(points) {
         (sum, segment) => sum + (segment?.distance || 0),
         0,
       ),
-      isStraightLine: segmentRoutes.every((segment) => segment?.isStraightLine),
     };
   }
 
-  if (sampledCoords.length > 1) {
-    return {
-      coordinates: sampledCoords,
-      duration: 0,
-      distance: 0,
-      isStraightLine: false,
-    };
-  }
-
-  return null;
+  // 3. Last resort: straight line
+  return straightLineRoute(sampledCoords[0], sampledCoords[sampledCoords.length - 1]);
 }
 
 /**
@@ -1671,7 +1595,8 @@ export async function snapPointToRoad(coords) {
   if (snapCache.has(cacheKey)) return snapCache.get(cacheKey);
 
   try {
-    const snapped = await snapToNearestRoad(coords);
+    // Usar Google Routes API snap
+    const snapped = await googleSnapPointToRoad(coords);
     const result = snapped || coords;
     if (snapCache.size >= SNAP_CACHE_MAX) {
       const firstKey = snapCache.keys().next().value;

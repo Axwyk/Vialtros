@@ -1,0 +1,983 @@
+================================================================================
+                         VIALTROS - DOCUMENTACIÓN DEL PROYECTO
+                          Plataforma SaaS de Gestión de Rutas
+                             Versión 1.0-beta (Mayo 2026)
+================================================================================
+
+¿QUÉ ES VIALTROS?
+================================================================================
+
+Vialtros es una plataforma SaaS (Software as a Service) moderna de gestión de 
+rutas de transporte con seguimiento GPS en tiempo real. Es un sistema completo 
+que permite a empresas de transporte administrar sus rutas, conductores, 
+pasajeros y realizar rastreo en vivo de ubicaciones.
+
+La plataforma está diseñada con roles diferenciados (Administrador, Conductor, 
+Pasajero) y proporciona un panel administrativo profesional con estadísticas, 
+gráficos y CRUD completo de recursos.
+
+
+¿PARA QUÉ SIRVE?
+================================================================================
+
+Vialtros resuelve los siguientes problemas en la gestión de transporte:
+
+1. ADMINISTRACIÓN CENTRALIZADA
+   - Crear y gestionar rutas de transporte
+   - Asignar conductores a rutas
+   - Registrar pasajeros en el sistema
+   - CRUD completo de usuarios y perfiles
+
+2. SEGUIMIENTO EN TIEMPO REAL
+   - Rastrear ubicación GPS de conductores
+   - Actualización en tiempo real mediante WebSocket
+   - Visualización de posiciones en mapas interactivos
+   - Historial de recorridos
+
+3. CONTROL DE PASAJEROS
+   - Registrar estado de recogida (recogido/no recogido)
+   - Asignar múltiples pasajeros a una ruta
+   - Ver datos de conductores y rutas en tiempo real
+   - Notificaciones de cambios de estado
+
+4. AUTENTICACIÓN Y SEGURIDAD
+   - Sistema de autenticación JWT (JSON Web Tokens)
+   - Roles diferenciados con permisos específicos
+   - Protección de rutas con autenticación
+   - Datos encriptados y seguros
+
+5. ANÁLISIS Y ESTADÍSTICAS
+   - Dashboard con métricas de uso
+   - Gráficos de actividad y rutas
+   - Estadísticas de conductores y pasajeros
+
+
+🎯 CARACTERÍSTICAS PRINCIPALES
+================================================================================
+
+✓ Autenticación JWT con 3 roles (Admin, Driver, User)
+✓ Dashboard SaaS con estadísticas y gráficos en tiempo real
+✓ WebSocket para tracking GPS en tiempo real
+✓ CRUD completo de usuarios, conductores, rutas y pasajeros
+✓ Interfaz moderna y responsive con Tailwind CSS
+✓ Diseño split-screen profesional
+✓ Mapas interactivos con Leaflet
+✓ Iconografía SVG profesional (sin dependencias externas)
+✓ API REST completamente documentada
+✓ Sistema de permisos basado en roles
+✓ Base de datos relacional (SQLite desarrollo / PostgreSQL producción)
+✓ CI/CD con GitHub Actions
+
+
+🛠️ STACK TECNOLÓGICO
+================================================================================
+
+BACKEND (Python/Django):
+  - Django 6.x: Framework web de Python
+  - Django REST Framework: API REST profesional
+  - SimpleJWT: Autenticación con JSON Web Tokens
+  - Django Channels + Daphne: WebSocket y tiempo real
+  - SQLite (desarrollo) / PostgreSQL (producción)
+
+FRONTEND (React):
+  - React 19: Librería de UI modernas
+  - Tailwind CSS 3: Estilos CSS utilitarios
+  - React Router v7: Enrutamiento en la SPA
+  - Leaflet + react-leaflet: Mapas interactivos
+  - Axios: Cliente HTTP con JWT automatizado
+  - SVG inline: Iconografía profesional
+
+INFRAESTRUCTURA:
+  - Node.js: Entorno de ejecución JavaScript
+  - npm: Gestor de paquetes JavaScript
+  - Python 3.9+: Lenguaje backend
+  - Git: Control de versiones
+  - GitHub Actions: CI/CD automatizado
+
+
+📁 ESTRUCTURA DEL PROYECTO
+================================================================================
+
+Vialtros/
+├── backend/                    # Aplicación Django (API REST + WebSocket)
+│   ├── core/                   # Configuración principal de Django
+│   │   ├── settings.py         # Configuración de Django (DB, CORS, auth)
+│   │   ├── urls.py             # Rutas principales de la API
+│   │   ├── asgi.py             # Punto de entrada ASGI (HTTP + WebSocket)
+│   │   ├── wsgi.py             # Punto de entrada WSGI
+│   │   └── email_backend.py    # Backend de email personalizado
+│   ├── users/                  # App principal de usuarios y rutas
+│   │   ├── models.py           # Modelos: User, Driver, Passenger, Route, Tracking
+│   │   ├── serializers.py      # Serializadores DRF
+│   │   ├── views.py            # ViewSets y endpoints
+│   │   ├── permissions.py      # Clases de permisos por rol
+│   │   ├── admin.py            # Panel admin de Django
+│   │   └── migrations/         # Historial de migraciones de BD
+│   ├── tracking/               # App de WebSocket en tiempo real
+│   │   ├── consumers.py        # TrackingConsumer (WebSocket)
+│   │   └── routing.py          # Enrutamiento de protocolos
+│   ├── staticfiles/            # Archivos estáticos (CSS, JS, imágenes)
+│   ├── db.sqlite3              # Base de datos SQLite (desarrollo)
+│   ├── manage.py               # Herramienta CLI de Django
+│   ├── requirements.txt        # Dependencias Python
+│   └── start_backend.bat       # Script para iniciar backend en Windows
+│
+├── frontend/                   # Aplicación React (SPA)
+│   ├── public/                 # Archivos estáticos públicos
+│   │   ├── index.html          # Página HTML principal (SEO, meta tags)
+│   │   ├── manifest.json       # Manifest para PWA
+│   │   ├── pois.json           # Datos de puntos de interés
+│   │   └── robots.txt          # Instrucciones para motores de búsqueda
+│   ├── src/
+│   │   ├── App.js              # Componente raíz de la aplicación
+│   │   ├── App.css             # Estilos globales
+│   │   ├── index.js            # Punto de entrada React
+│   │   ├── index.css           # Estilos base
+│   │   ├── pages/              # Páginas/vistas principales
+│   │   │   ├── LandingPage.js              # Página inicial (landing)
+│   │   │   ├── LoginPage.js                # Página de login
+│   │   │   ├── ForgotPasswordPage.js       # Recuperar contraseña
+│   │   │   ├── ResetPasswordPage.js        # Resetear contraseña
+│   │   │   ├── DashboardPage.js            # Dashboard principal (admin)
+│   │   │   ├── TrackingPage.js             # Rastreo GPS en tiempo real
+│   │   │   ├── ActivityPage.js             # Página de actividad
+│   │   │   ├── ProfileScreen.js            # Perfil del usuario
+│   │   │   ├── AdminUsersPage.js           # Gestión de usuarios (admin)
+│   │   │   ├── AdminDriversPage.js         # Gestión de conductores (admin)
+│   │   │   ├── AdminPassengersPage.js      # Gestión de pasajeros (admin)
+│   │   │   ├── AdminRoutesPage.js          # Gestión de rutas (admin)
+│   │   │   ├── DriverRoutesPage.js         # Rutas del conductor
+│   │   │   ├── DriverLocationPage.js       # Ubicación del conductor
+│   │   │   ├── UserRoutePage.js            # Vista de pasajero
+│   │   │   ├── PrivacyPage.js              # Política de privacidad
+│   │   │   ├── TermsPage.js                # Términos de servicio
+│   │   │   └── SupportPage.js              # Página de soporte
+│   │   ├── components/         # Componentes reutilizables
+│   │   │   ├── Logo.js                 # Componente del logo
+│   │   │   ├── Footer.js                # Pie de página
+│   │   │   ├── Modal.js                 # Componente modal genérico
+│   │   │   ├── PrivateRoute.js          # Protección de rutas
+│   │   │   ├── TransportBar.js          # Barra de herramientas
+│   │   │   ├── MapView.js               # Visualización de mapas
+│   │   │   ├── TrackingMap.js           # Mapa de rastreo en tiempo real
+│   │   │   ├── map-styles.css           # Estilos del mapa
+│   │   │   ├── tracking-map.css         # Estilos mapa rastreo
+│   │   │   ├── dashboard/               # Componentes del dashboard
+│   │   │   └── tracking/                # Componentes de rastreo
+│   │   └── services/           # Servicios/utilidades
+│   │       ├── api.js                  # Cliente HTTP con Axios + JWT
+│   │       ├── auth.js                 # Funciones de autenticación
+│   │       ├── admin.js                # Servicios CRUD de admin
+│   │       ├── dashboard.js            # Servicios del dashboard
+│   │       └── ws.js                   # Conexión WebSocket
+│   ├── build/                  # Archivos compilados (producción)
+│   ├── package.json            # Dependencias npm
+│   ├── tailwind.config.js      # Configuración de Tailwind CSS
+│   ├── postcss.config.js       # Configuración de PostCSS
+│   └── README.md               # Documentación del frontend
+│
+├── docs/                       # Documentación del proyecto
+│   ├── README.md               # Índice de documentación
+│   ├── api.md                  # Documentación de la API REST
+│   ├── arquitectura.md         # Arquitectura del sistema
+│   ├── modelos.md              # Modelos de datos
+│   ├── despliegue.md           # Guía de despliegue
+│   └── frontend.md             # Documentación del frontend
+│
+├── etc/                        # Archivos de configuración del servidor
+│   ├── apache2/                # Configuración Apache
+│   │   └── vialtros.conf       # VirtualHost de Apache
+│   └── systemd/                # Servicios systemd
+│       └── vialtros-django.service # Servicio Django para Linux
+│
+├── textos/                     # Documentación interna en texto
+│   ├── estado_proyecto.txt     # Estado actual del proyecto
+│   ├── CHECKLIST_DESPLIEGUE.txt
+│   ├── GUIA_DESPLIEGUE_APACHE.txt
+│   └── RESUMEN_PREPARACION.txt
+│
+├── run_vialtros.bat            # Script para iniciar todo en Windows
+├── quick-setup.sh              # Script de configuración rápida
+├── deploy.sh                   # Script de despliegue
+├── package.json                # Metadatos del proyecto
+├── README.md                   # Documentación principal
+└── DESCRIPCION_PROYECTO.txt    # Este archivo
+
+
+👥 ROLES Y PERMISOS
+================================================================================
+
+ADMINISTRADOR (Admin):
+  - Acceso a todas las funciones del sistema
+  - CRUD completo de usuarios (crear, leer, actualizar, eliminar)
+  - CRUD completo de conductores
+  - CRUD completo de pasajeros
+  - CRUD completo de rutas
+  - Ver dashboard con estadísticas
+  - Ver todos los rastreos GPS
+  - Acceso al panel administrativo (/admin/*)
+
+CONDUCTOR (Driver):
+  - Ver sus rutas asignadas
+  - Actualizar su ubicación GPS
+  - Marcar pasajeros como recogidos/no recogidos
+  - Ver datos de pasajeros en su ruta
+  - Acceso limitado a su perfil
+  - Acceso a /driver/routes
+
+PASAJERO (User):
+  - Ver su ruta asignada
+  - Ver ubicación en tiempo real del conductor
+  - Ver datos del conductor
+  - Ver estado de recogida
+  - Acceso limitado a su perfil
+  - Acceso a /user/route/<routeId>
+
+
+🔐 AUTENTICACIÓN Y SEGURIDAD
+================================================================================
+
+FLUJO DE AUTENTICACIÓN:
+  1. Usuario envía credenciales (usuario/contraseña) a POST /api/token/
+  2. Backend valida las credenciales
+  3. Devuelve access_token y refresh_token (JWT)
+  4. Frontend almacena tokens en localStorage
+  5. Cada request REST incluye: Authorization: Bearer <access_token>
+  6. Al iniciar la app, valida el token con GET /api/users/me/
+  7. Si el token ha expirado, usa refresh_token para obtener uno nuevo
+
+SEGURIDAD:
+  - Contraseñas hasheadas con algoritmo PBKDF2
+  - Tokens JWT con firma digital
+  - CORS configurado para aceptar solo frontend autorizado
+  - Permisos validados en backend (no solo en frontend)
+  - Protección contra ataques CSRF
+  - Variables de entorno para credenciales sensibles
+
+
+📡 COMUNICACIÓN EN TIEMPO REAL (WebSocket)
+================================================================================
+
+El sistema usa WebSocket para actualizar ubicaciones GPS en tiempo real sin 
+necesidad de hacer polling constante.
+
+CONEXIÓN:
+  URL: ws://localhost:8000/ws/tracking/<route_id>/
+  Se abre cuando el usuario entra en TrackingPage
+
+FLUJO DE DATOS:
+  1. Frontend abre conexión WebSocket a una ruta específica
+  2. Django Channels recibe la conexión en TrackingConsumer
+  3. Conductor envia su ubicación: {latitude, longitude, status}
+  4. Backend retransmite a todos los clientes conectados a esa ruta
+  5. Frontend actualiza el mapa Leaflet en tiempo real
+
+VENTAJAS:
+  - Actualizaciones instantáneas sin latencia
+  - Reduce carga del servidor vs polling
+  - Experiencia de usuario mejorada
+  - Rastreo fluido y natural
+
+
+================================================================================
+                          DESCRIPCIÓN DETALLADA DE PÁGINAS
+================================================================================
+
+A continuación se describe cada página del proyecto, su propósito, funcionalidad
+y a quién está dirigida.
+
+
+📄 PÁGINAS PÚBLICAS (Accesibles sin autenticación)
+================================================================================
+
+1. LANDING PAGE (LandingPage.js)
+   ─────────────────────────────
+   Ruta: /
+   Acceso: Público (no requiere login)
+   
+   Descripción:
+   - Página de inicio del proyecto
+   - Diseño split-screen profesional
+   - Contiene:
+     * Hero section con valor propuesto
+     * Información sobre características
+     * Call-to-action para login/registro
+     * SVG abstracto profesional (sin emojis)
+     * Fondo con gradiente suave
+   
+   Funcionalidades:
+   - Navegación a login
+   - Información general del proyecto
+   - Ejemplos de casos de uso
+   
+   Usuario objetivo: Visitantes nuevos
+
+
+2. LOGIN PAGE (LoginPage.js)
+   ─────────────────────────
+   Ruta: /login
+   Acceso: Público (no requiere login)
+   
+   Descripción:
+   - Formulario de autenticación
+   - Diseño split-screen (logo + formulario)
+   - Profesional y moderno con Tailwind CSS
+   
+   Funcionalidades:
+   - Campo de usuario/email
+   - Campo de contraseña
+   - Botón "Olvidé mi contraseña" → ForgotPasswordPage
+   - Validación en tiempo real
+   - Mensajes de error claros
+   - Redirección automática según rol:
+     * Admin → /admin/dashboard
+     * Driver → /driver/routes
+     * User → /user/routes
+   
+   Credenciales de prueba:
+   - Usuario: admin
+   - Contraseña: admin123
+   
+   Usuario objetivo: Todos
+
+
+3. FORGOT PASSWORD PAGE (ForgotPasswordPage.js)
+   ─────────────────────────────────────────────
+   Ruta: /forgot-password
+   Acceso: Público
+   
+   Descripción:
+   - Permite solicitar recuperación de contraseña
+   - Solicita email del usuario
+   
+   Funcionalidades:
+   - Campo de email
+   - Botón para enviar email de recuperación
+   - Validación de email
+   - Redirección a ResetPasswordPage tras éxito
+   - Enlace para volver a login
+   
+   Usuario objetivo: Usuarios que olvidaron su contraseña
+
+
+4. RESET PASSWORD PAGE (ResetPasswordPage.js)
+   ──────────────────────────────────────────
+   Ruta: /reset-password
+   Acceso: Público (con token válido)
+   
+   Descripción:
+   - Permite establecer nueva contraseña
+   - Requiere token de recuperación válido
+   
+   Funcionalidades:
+   - Campo de nueva contraseña
+   - Campo de confirmación de contraseña
+   - Validación de coincidencia de contraseñas
+   - Botón para confirmar cambio
+   - Redirección a login tras éxito
+   
+   Usuario objetivo: Usuarios con token válido
+
+
+5. PRIVACY PAGE (PrivacyPage.js)
+   ────────────────────────────
+   Ruta: /privacy
+   Acceso: Público
+   
+   Descripción:
+   - Política de privacidad del sistema
+   - Información sobre uso de datos
+   
+   Funcionalidades:
+   - Texto de política de privacidad
+   - Cumplimiento con GDPR/regulaciones
+   - Enlaces a términos de servicio
+   
+   Usuario objetivo: Visitantes, cumplimiento legal
+
+
+6. TERMS PAGE (TermsPage.js)
+   ────────────────────────
+   Ruta: /terms
+   Acceso: Público
+   
+   Descripción:
+   - Términos y condiciones del servicio
+   
+   Funcionalidades:
+   - Texto de términos y condiciones
+   - Regulaciones de uso
+   - Enlaces a política de privacidad
+   
+   Usuario objetivo: Visitantes, cumplimiento legal
+
+
+7. SUPPORT PAGE (SupportPage.js)
+   ───────────────────────────
+   Ruta: /support
+   Acceso: Público
+   
+   Descripción:
+   - Página de soporte y ayuda
+   - Contacto con el equipo de soporte
+   
+   Funcionalidades:
+   - Formulario de contacto
+   - Preguntas frecuentes (FAQ)
+   - Información de contacto
+   - Enlaces a documentación
+   - Chat de soporte (si aplica)
+   
+   Usuario objetivo: Usuarios con dudas o problemas
+
+
+================================================================================
+
+🔐 PÁGINAS PROTEGIDAS (Requieren autenticación)
+================================================================================
+
+8. DASHBOARD PAGE (DashboardPage.js)
+   ────────────────────────────────
+   Ruta: /admin/dashboard (después de login)
+   Acceso: Solo ADMIN
+   Protección: PrivateRoute + verificación de rol
+   
+   Descripción:
+   - Panel de control central para administradores
+   - Visualización de estadísticas y métricas
+   - Vista general del sistema
+   
+   Funcionalidades:
+   - Gráficos de actividad
+   - Estadísticas de rutas activas
+   - Número de conductores y pasajeros
+   - Actividad reciente
+   - Botones de acceso rápido a otras páginas admin
+   - Widgets con información en tiempo real
+   
+   Datos mostrados:
+   - Total de usuarios
+   - Total de conductores
+   - Total de rutas activas
+   - Rastreos en tiempo real
+   - Gráficos de uso
+   - Estadísticas de conductores top
+   
+   Usuario objetivo: Administradores
+
+
+9. ADMIN USERS PAGE (AdminUsersPage.js)
+   ──────────────────────────────────────
+   Ruta: /admin/users
+   Acceso: Solo ADMIN
+   Protección: PrivateRoute + verificación de rol
+   
+   Descripción:
+   - Panel de gestión completo de usuarios
+   - CRUD de usuarios del sistema
+   
+   Funcionalidades:
+   - Tabla de usuarios con filtros y búsqueda
+   - Crear nuevo usuario (formulario modal)
+   - Editar usuario existente
+   - Eliminar usuario
+   - Ver detalles del usuario
+   - Cambiar rol de usuario (admin/driver/user)
+   - Activar/desactivar usuario
+   - Paginación
+   - Ordenamiento por columnas
+   
+   Campos del usuario:
+   - ID
+   - Nombre de usuario
+   - Email
+   - Rol (admin/driver/user)
+   - Estado (activo/inactivo)
+   - Fecha de creación
+   - Acciones (editar/eliminar)
+   
+   Usuario objetivo: Administradores
+
+
+10. ADMIN DRIVERS PAGE (AdminDriversPage.js)
+    ─────────────────────────────────────────
+    Ruta: /admin/drivers
+    Acceso: Solo ADMIN
+    Protección: PrivateRoute + verificación de rol
+    
+    Descripción:
+    - Gestión de conductores en el sistema
+    - Administración completa de perfiles de conductores
+    
+    Funcionalidades:
+    - Tabla de conductores con información
+    - Crear nuevo conductor (vinculado a usuario)
+    - Editar información de conductor
+    - Eliminar conductor
+    - Ver detalles extendidos
+    - Asignar/reasignar rutas
+    - Ver historial de rutas
+    - Ver ubicación actual (si está en línea)
+    - Paginación y búsqueda
+    
+    Campos del conductor:
+    - ID
+    - Nombre (del usuario)
+    - Número de licencia
+    - Email
+    - Teléfono
+    - Rutas asignadas
+    - Estado (activo/inactivo)
+    - Última ubicación
+    - Acciones (editar/eliminar)
+    
+    Usuario objetivo: Administradores
+
+
+11. ADMIN PASSENGERS PAGE (AdminPassengersPage.js)
+    ───────────────────────────────────────────────
+    Ruta: /admin/passengers
+    Acceso: Solo ADMIN
+    Protección: PrivateRoute + verificación de rol
+    
+    Descripción:
+    - Gestión de pasajeros en el sistema
+    - Administración de perfiles de pasajeros
+    
+    Funcionalidades:
+    - Tabla de pasajeros
+    - Crear nuevo pasajero
+    - Editar información de pasajero
+    - Eliminar pasajero
+    - Ver detalles del pasajero
+    - Asignar a rutas
+    - Ver rutas asignadas
+    - Paginación y búsqueda
+    
+    Campos del pasajero:
+    - ID
+    - Nombre (del usuario)
+    - Teléfono
+    - Email
+    - Rutas asignadas
+    - Estado (activo/inactivo)
+    - Fecha de registro
+    - Acciones (editar/eliminar)
+    
+    Usuario objetivo: Administradores
+
+
+12. ADMIN ROUTES PAGE (AdminRoutesPage.js)
+    ──────────────────────────────────────
+    Ruta: /admin/routes
+    Acceso: Solo ADMIN
+    Protección: PrivateRoute + verificación de rol
+    
+    Descripción:
+    - Gestión completa de rutas de transporte
+    - CRUD de rutas del sistema
+    
+    Funcionalidades:
+    - Tabla de rutas con detalles
+    - Crear nueva ruta
+    - Editar ruta existente
+    - Eliminar ruta
+    - Asignar conductor a ruta
+    - Asignar pasajeros múltiples
+    - Ver detalles extendidos de ruta
+    - Ver mapa de ruta (coordenadas origen/destino)
+    - Ver rastreo en tiempo real
+    - Filtrar por estado (activa/inactiva)
+    - Búsqueda y paginación
+    
+    Campos de la ruta:
+    - ID
+    - Nombre
+    - Origen
+    - Destino
+    - Conductor asignado
+    - Número de pasajeros
+    - Estado (activa/inactiva)
+    - Fecha de creación
+    - Acciones (ver/editar/eliminar/rastrear)
+    
+    Usuario objetivo: Administradores
+
+
+13. TRACKING PAGE (TrackingPage.js)
+    ──────────────────────────────
+    Ruta: /tracking/:routeId (o /user/route/:routeId)
+    Acceso: ADMIN, DRIVER, USER
+    Protección: PrivateRoute
+    
+    Descripción:
+    - Página de rastreo GPS en tiempo real
+    - Visualización de ubicación en mapa
+    - Actualizaciones instantáneas vía WebSocket
+    
+    Funcionalidades:
+    - Mapa interactivo Leaflet
+    - Marca de conductor (icono/color diferente)
+    - Marcas de pasajeros
+    - Línea de ruta
+    - Información de posición (lat/lng/velocidad)
+    - Panel de información lateral
+    - Estado de recogida de pasajeros
+    - Historial de posiciones (timeline)
+    - Zoom y pan del mapa
+    - Recarga automática de datos
+    - Conexión WebSocket en tiempo real
+    
+    Datos mostrados:
+    - Ubicación actual del conductor
+    - Ubicación de pasajeros
+    - Ruta actual
+    - Estado de recogida
+    - Velocidad actual (si disponible)
+    - Timestamp de última actualización
+    - Información del conductor
+    - Información de pasajeros
+    
+    Usuario objetivo: Administradores, Conductores, Pasajeros
+
+
+14. DRIVER ROUTES PAGE (DriverRoutesPage.js)
+    ────────────────────────────────────────
+    Ruta: /driver/routes
+    Acceso: Solo DRIVER
+    Protección: PrivateRoute + verificación de rol
+    
+    Descripción:
+    - Lista de rutas asignadas al conductor actual
+    - Vista de las rutas de trabajo del conductor
+    
+    Funcionalidades:
+    - Tabla/lista de rutas asignadas
+    - Ver detalles de cada ruta
+    - Iniciar ruta (cambiar estado)
+    - Finalizar ruta
+    - Ver pasajeros de la ruta
+    - Marcar pasajeros como recogidos
+    - Ver ubicación actual
+    - Acceder a rastreo GPS
+    - Notificaciones de cambios
+    
+    Campos mostrados:
+    - Nombre de ruta
+    - Origen y destino
+    - Pasajeros asignados
+    - Estado (pendiente/en progreso/completada)
+    - Hora de inicio/fin
+    - Acciones (ver/iniciar/finalizar)
+    
+    Usuario objetivo: Conductores
+
+
+15. DRIVER LOCATION PAGE (DriverLocationPage.js)
+    ────────────────────────────────────────────
+    Ruta: /driver/location
+    Acceso: Solo DRIVER
+    Protección: PrivateRoute + verificación de rol
+    
+    Descripción:
+    - Página para que conductor comparta su ubicación
+    - Actualización de posición GPS
+    
+    Funcionalidades:
+    - Mapa mostrando ubicación actual
+    - Botón para iniciar/detener compartir ubicación
+    - Actualización automática de posición
+    - Información de precisión GPS
+    - Velocidad actual
+    - Altitud (si disponible)
+    - Envío de ubicación a backend
+    - Estado de conexión WebSocket
+    
+    Datos enviados:
+    - Latitud
+    - Longitud
+    - Velocidad
+    - Timestamp
+    - Precisión
+    
+    Usuario objetivo: Conductores
+
+
+16. USER ROUTE PAGE (UserRoutePage.js)
+    ──────────────────────────────────
+    Ruta: /user/routes o /user/route/:routeId
+    Acceso: Solo USER (pasajero)
+    Protección: PrivateRoute + verificación de rol
+    
+    Descripción:
+    - Vista del pasajero de su ruta y ubicación del conductor
+    - Seguimiento en tiempo real del conductor
+    
+    Funcionalidades:
+    - Mapa con ubicación actual del conductor
+    - Información del conductor
+    - Ruta origen-destino
+    - Estado de recogida (recogido/no recogido)
+    - Tiempo estimado de llegada (si disponible)
+    - Información de contacto del conductor
+    - Calificación del conductor
+    - Chat/mensajes (si implementado)
+    - Número de ruta
+    - Otros pasajeros en la ruta
+    
+    Usuario objetivo: Pasajeros
+
+
+17. ACTIVITY PAGE (ActivityPage.js)
+    ─────────────────────────────
+    Ruta: /activity
+    Acceso: ADMIN, DRIVER, USER (según su rol)
+    Protección: PrivateRoute
+    
+    Descripción:
+    - Historial de actividad del usuario/sistema
+    - Log de eventos y acciones
+    
+    Funcionalidades:
+    - Timeline de eventos
+    - Filtros por tipo de evento
+    - Búsqueda por rango de fecha
+    - Ver detalles de evento
+    - Exportar actividad (si aplica)
+    - Paginación
+    
+    Eventos registrados:
+    - Inicio/fin de ruta
+    - Recogida de pasajero
+    - Cambio de ubicación
+    - Login/logout
+    - Cambios de datos
+    - Acciones administrativas
+    
+    Usuario objetivo: Todos los usuarios autenticados
+
+
+18. PROFILE SCREEN (ProfileScreen.js)
+    ─────────────────────────────────
+    Ruta: /profile
+    Acceso: Todos los usuarios autenticados
+    Protección: PrivateRoute
+    
+    Descripción:
+    - Gestión de perfil del usuario actual
+    - Edición de información personal
+    
+    Funcionalidades:
+    - Ver información del perfil
+    - Editar nombre y email
+    - Cambiar foto de perfil (si aplica)
+    - Cambiar contraseña
+    - Ver rol actual
+    - Ver información de cuenta
+    - Opciones de privacidad
+    - Eliminar cuenta (si aplica)
+    - Cerrar sesión
+    - Historial de sesiones
+    
+    Campos editables:
+    - Nombre completo
+    - Email
+    - Teléfono (si aplica)
+    - Foto de perfil
+    - Contraseña
+    - Preferencias de privacidad
+    
+    Usuario objetivo: Todos los usuarios autenticados
+
+
+================================================================================
+
+🛠️ COMPONENTES REUTILIZABLES
+================================================================================
+
+Estos componentes se utilizan en múltiples páginas:
+
+- LOGO (Logo.js): Muestra el logo de la aplicación
+- FOOTER (Footer.js): Pie de página con enlaces
+- MODAL (Modal.js): Componente modal genérico para formularios/confirmaciones
+- PRIVATE ROUTE (PrivateRoute.js): Protege rutas requiriendo autenticación
+- TRANSPORT BAR (TransportBar.js): Barra de herramientas de transporte
+- MAP VIEW (MapView.js): Visualizador de mapas genérico
+- TRACKING MAP (TrackingMap.js): Mapa especializado para rastreo GPS
+
+
+================================================================================
+
+📡 SERVICIOS Y COMUNICACIÓN
+================================================================================
+
+SERVICIOS PRINCIPALES:
+
+1. api.js
+   - Cliente HTTP con Axios
+   - Interceptores para JWT automático
+   - Funciones CRUD genéricas
+   - Manejo de errores centralizado
+
+2. auth.js
+   - Login y logout
+   - Obtener usuario actual
+   - Almacenamiento de tokens en localStorage
+   - Validación de sesión
+
+3. admin.js
+   - CRUD de usuarios
+   - CRUD de conductores
+   - CRUD de pasajeros
+   - CRUD de rutas
+   - Operaciones batch
+
+4. dashboard.js
+   - Obtener estadísticas
+   - Datos para gráficos
+   - Métricas en tiempo real
+
+5. ws.js
+   - Conexión WebSocket
+   - Envío/recepción de datos en tiempo real
+   - Reconexión automática
+   - Gestión de eventos
+
+
+================================================================================
+
+🚀 FLUJOS PRINCIPALES
+================================================================================
+
+FLUJO DE LOGIN:
+1. Usuario accede a /login
+2. Ingresa credenciales
+3. Frontend envía POST /api/token/
+4. Backend devuelve access_token y refresh_token
+5. Frontend almacena tokens en localStorage
+6. Se valida el rol del usuario
+7. Se redirige a la página correspondiente según rol:
+   - Admin → /admin/dashboard
+   - Driver → /driver/routes
+   - User → /user/routes
+
+FLUJO DE RASTREO GPS EN TIEMPO REAL:
+1. Admin/Conductor/Pasajero accede a página de rastreo
+2. Frontend abre conexión WebSocket
+3. Conductor comparte su ubicación
+4. Backend recibe y transmite a todos conectados
+5. Frontend actualiza mapa instantáneamente
+6. Sin retrasos ni polling
+
+FLUJO DE GESTIÓN DE RUTAS (Admin):
+1. Admin va a /admin/routes
+2. Ve lista de rutas existentes
+3. Puede crear nueva ruta:
+   - Ingresa nombre, origen, destino
+   - Asigna conductor
+   - Asigna pasajeros
+   - Guarda
+4. Puede editar ruta:
+   - Modifica información
+   - Cambia asignaciones
+   - Guarda cambios
+5. Puede eliminar ruta (con confirmación)
+6. Puede rastrear ruta en tiempo real
+
+FLUJO DE CREACIÓN DE USUARIO:
+1. Admin va a /admin/users
+2. Hace click en "Crear usuario"
+3. Completa formulario:
+   - Username
+   - Email
+   - Contraseña
+   - Rol (admin/driver/user)
+   - Estado (activo/inactivo)
+4. Envía formulario
+5. Backend valida y crea usuario
+6. Frontend muestra confirmación
+7. Usuario aparece en tabla
+
+
+================================================================================
+
+📊 ESTADÍSTICAS Y MÉTRICAS
+================================================================================
+
+El dashboard muestra:
+
+- Total de usuarios registrados
+- Total de conductores activos
+- Total de rutas completadas
+- Rutas en progreso
+- Pasajeros en el sistema
+- Kilometraje total
+- Tiempo promedio de ruta
+- Conductores con más rutas
+- Rutas con más pasajeros
+- Actividad por hora
+- Tasa de puntualidad
+- Satisfacción de pasajeros (si aplica)
+
+
+================================================================================
+
+🔒 SEGURIDAD Y PERMISOS
+================================================================================
+
+VERIFICACIÓN DE PERMISOS:
+
+Frontend:
+- PrivateRoute valida que haya token
+- Verifica el rol del usuario
+- Solo muestra opciones permitidas
+- Oculta páginas no autorizadas
+
+Backend:
+- Cada endpoint valida el token JWT
+- Cada ViewSet verifica permisos del usuario
+- Solo devuelve datos que el usuario puede ver
+- Registra acciones para auditoría
+
+PROTECCIÓN DE DATOS:
+- Contraseñas hasheadas
+- Tokens con expiración
+- CORS restringido
+- Validación de entrada en backend
+- SQL injection prevención (ORM de Django)
+- XSS prevention (escape de datos)
+
+
+================================================================================
+
+📝 NOTAS FINALES
+================================================================================
+
+Este proyecto es una solución completa para gestión de transporte con:
+- Arquitectura moderna (React + Django)
+- Seguridad de nivel profesional
+- Escalabilidad (puede usar PostgreSQL en producción)
+- Facilidad de uso (interfaz intuitiva)
+- Rendimiento (WebSocket para tiempo real)
+
+El proyecto está en versión 1.0-beta (Mayo 2026) y está siendo mejorado 
+continuamente. Se pueden agregar nuevas características como:
+- Sistema de pagos
+- Calificaciones y reviews
+- Notificaciones push
+- Chat integrado
+- Reportes avanzados
+- Analytics mejorado
+
+================================================================================
+
+Para más información, consulta:
+- README.md - Documentación principal
+- docs/arquitectura.md - Detalles técnicos
+- docs/api.md - Documentación de API
+- docs/modelos.md - Esquema de base de datos
+- docs/despliegue.md - Guía de despliegue
+
+================================================================================
+                            FIN DEL DOCUMENTO
+================================================================================
