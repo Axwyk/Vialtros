@@ -130,6 +130,13 @@ jobs:
             export CI=false
             export REACT_APP_API_URL="${{ secrets.REACT_APP_API_URL }}"
             export REACT_APP_GOOGLE_MAPS_API_KEY="${{ secrets.REACT_APP_GOOGLE_MAPS_API_KEY }}"
+
+            echo "API URL length:"
+            echo ${#REACT_APP_API_URL}
+            
+            echo "MAPS KEY length:"
+            echo ${#REACT_APP_GOOGLE_MAPS_API_KEY}
+            
             npm run build
 
             # Verificar build
