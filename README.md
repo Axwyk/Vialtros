@@ -1,4 +1,4 @@
-# Vialtros — Plataforma SaaS de Gestión de Rutas 🚗
+# Vialtros — Plataforma SaaS de Gestión de Rutas
 
 **Versión:** 1.0-beta | **Última actualización:** 21 de mayo de 2026
 
@@ -6,10 +6,10 @@
 
 ## Enlaces útiles
 
-- 📍 **Repositorio:** [github.com/Axwyk/Vialtros](https://github.com/Axwyk/Vialtros)
-- 📋 **Trello:** [Vialtros board](https://trello.com/b/Uu3eBPav/vialtros)
-- 🤝 **Reuniones:** Miércoles, Jueves y Domingo — 12:00 pm
-- 📞 **Meet:** [meet.google.com/yfp-zmkq-buk](https://meet.google.com/yfp-zmkq-buk)
+-  **Repositorio:** [github.com/Axwyk/Vialtros](https://github.com/Axwyk/Vialtros)
+-  **Trello:** [Vialtros board](https://trello.com/b/Uu3eBPav/vialtros)
+-  **Reuniones:** Miércoles, Jueves y Domingo — 12:00 pm
+-  **Meet:** [meet.google.com/yfp-zmkq-buk](https://meet.google.com/yfp-zmkq-buk)
 
 Plataforma SaaS de gestión de rutas con seguimiento GPS en tiempo real, roles diferenciados y panel administrativo profesional.
 
@@ -22,20 +22,20 @@ Plataforma SaaS de gestión de rutas con seguimiento GPS en tiempo real, roles d
 - ✓ Interfaz moderna con Tailwind CSS y diseño split-screen
 - ✓ Iconografía SVG profesional (sin dependencias externas)
 
-## 📊 Estado actual
+## Estado actual
 
 **V1 con funcionalidades core completadas.** El proyecto incluye:
-- ✅ Autenticación JWT con roles (Admin, Driver, User)
-- ✅ Backend con API REST y WebSockets en tiempo real
-- ✅ Frontend SaaS moderno con React 19 y Tailwind CSS
-- ✅ Panel administrativo completo (CRUD de usuarios, conductores, rutas)
-- ✅ CI/CD Pipeline (GitHub Actions + Deploy automático)
-- 🔄 Sistema de notificaciones (en desarrollo)
-- 🔄 Mejoras en mapas y tracking (en progreso)
+-  Autenticación JWT con roles (Admin, Driver, User)
+-  Backend con API REST y WebSockets en tiempo real
+-  Frontend SaaS moderno con React 19 y Tailwind CSS
+-  Panel administrativo completo (CRUD de usuarios, conductores, rutas)
+-  CI/CD Pipeline (GitHub Actions + Deploy automático)
+-  Sistema de notificaciones (en desarrollo)
+-  Mejoras en mapas y tracking (en progreso)
 
 Ver [**estado_proyecto.txt**](estado_proyecto.txt) para detalles completos de funcionalidades implementadas, pendientes y bugs resueltos.
 
-## 🚀 Inicio rápido
+##  Inicio rápido
 
 ### Windows (recomendado)
 
@@ -63,7 +63,7 @@ Ver [**docs/despliegue.md**](docs/despliegue.md) para instalación paso a paso.
 
 
 
-## 🛠️ Stack Tecnológico
+##  Stack Tecnológico
 
 | Capa | Tecnología |
 | --- | --- |
@@ -74,7 +74,7 @@ Ver [**docs/despliegue.md**](docs/despliegue.md) para instalación paso a paso.
 | **Autenticación** | SimpleJWT · Permisos por rol |
 | **DevOps** | GitHub Actions · SSH Deploy |
 
-## 👥 Roles y Permisos
+##  Roles y Permisos
 
 | Rol | Permisos | Acceso |
 | --- | --- | --- |
@@ -82,7 +82,7 @@ Ver [**docs/despliegue.md**](docs/despliegue.md) para instalación paso a paso.
 | **Driver** | Ver rutas asignadas, marcar pasajeros recogidos | `/driver/routes` |
 | **User** (Pasajero) | Visualizar ubicación en tiempo real | `/user/route` |
 
-## 📁 Estructura del Proyecto
+##  Estructura del Proyecto
 
 ```text
 Vialtros/
@@ -119,20 +119,20 @@ Vialtros/
 │   ├── frontend.md        # Páginas, componentes, env
 │   └── despliegue.md      # Instalación, producción, CI/CD
 │
-├── estado_proyecto.txt    # ✅ Checklist de features
+├── estado_proyecto.txt    # Checklist de features
 ├── README.md              # Este archivo
 ├── package.json           # Dependencias proyecto (npm)
-└── run_vialtros.bat       # 🚀 Script arranque rápido
+└── run_vialtros.bat       # Script arranque rápido
 ```
 
-## 📦 Requisitos
+## Requisitos
 
 - **Python** 3.10+ (backend)
 - **Node.js** 18+ (frontend)
 - **PostgreSQL** (recomendado para producción)
 - **Git** (para clonar repositorio)
 
-## 📖 Documentación
+## Documentación
 
 Para guías detalladas, consulta la carpeta [**docs/**](docs/):
 
@@ -142,25 +142,25 @@ Para guías detalladas, consulta la carpeta [**docs/**](docs/):
 - [**frontend.md**](docs/frontend.md) — Páginas, componentes, variables de entorno
 - [**despliegue.md**](docs/despliegue.md) — Instalación, configuración de desarrollo/producción, CI/CD
 
-## 🔐 Seguridad
+##  Seguridad
 
-- ✅ Autenticación JWT con refresh token
-- ✅ CORS configurado
-- ✅ Validación de permisos por rol en backend
-- ✅ Passwords hasheados (bcrypt via Django)
-- ⚠️ **Producción:** Cambiar `SECRET_KEY`, activar HTTPS, usar PostgreSQL
+-  Autenticación JWT con refresh token
+-  CORS configurado
+-  Validación de permisos por rol en backend
+-  Passwords hasheados (bcrypt via Django)
+-  **Producción:** Cambiar `SECRET_KEY`, activar HTTPS, usar PostgreSQL
 
-## 🐛 Reportar Bugs
+##  Reportar Bugs
 
 En [estado_proyecto.txt](estado_proyecto.txt) encontrarás el histórico de bugs resueltos.
 
 Para reportar nuevos issues, crea un [issue en GitHub](https://github.com/Axwyk/Vialtros/issues).
 
-## 📝 Licencia
+##  Licencia
 
 Proyecto privado — contacta al equipo para más información.
 
-## 👨‍💻 Equipo
+##  Equipo
 
 Equipo de desarrollo de Vialtros. Reuniones: Miércoles, Jueves y Domingo a las 12:00 pm.
 
