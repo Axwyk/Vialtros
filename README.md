@@ -4,6 +4,13 @@
 
 > Plataforma moderna de gestión de rutas con seguimiento GPS en tiempo real, roles diferenciados y panel administrativo profesional.
 
+## Integrantes
+
+MARQUEZ YANCES JOHAN PATRICK
+COMETA ALOMIA FRANCY ESTEFANI
+LURDUY PEREA LUIS ANGEL
+GOMEZ CAMARGO ANA SOFIA
+
 ## Enlaces útiles
 
 -  **Repositorio:** [github.com/Axwyk/Vialtros](https://github.com/Axwyk/Vialtros)
