@@ -13,10 +13,11 @@
 
 ## Enlaces útiles
 
--  **Repositorio:** [github.com/Axwyk/Vialtros](https://github.com/Axwyk/Vialtros)
+-  **Repositorio:** [Github Vialtros](https://github.com/Axwyk/Vialtros)
 -  **Trello:** [Vialtros board](https://trello.com/b/Uu3eBPav/vialtros)
 -  **Reuniones:** Miércoles, Jueves y Domingo — 12:00 pm
 -  **Meet:** [meet.google.com/yfp-zmkq-buk](https://meet.google.com/yfp-zmkq-buk)
+-  **Servidor:** [Server host](http://ds1.eleueleo.com)
 
 Plataforma SaaS de gestión de rutas con seguimiento GPS en tiempo real, roles diferenciados y panel administrativo profesional.
 
