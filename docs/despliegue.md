@@ -17,7 +17,8 @@ El proyecto ha sido preparado para desplegar en Apache con las siguientes caract
 ## Archivos Importantes
 
 | Archivo | Descripción |
-|---------|------------|
+|---------|-------------|
+
 | **GUIA_DESPLIEGUE_APACHE.txt** | 📖 Guía completa (¡Lee esto!) |
 | **deploy.sh** | 🚀 Script de despliegue local |
 | **quick-setup.sh** | ⚡ Setup rápido en servidor |
@@ -91,6 +92,21 @@ Ver sección 4-5 de `GUIA_DESPLIEGUE_APACHE.txt` para instrucciones detalladas.
 - API: http://vialtros.ds1.eleueleo.com/api
 
 ⚠️ **En Producción**: Cambia esta contraseña inmediatamente
+
+### Variables de entorno del frontend (desarrollo)
+
+Crear `frontend/.env`:
+
+```env
+REACT_APP_API_URL=http://localhost:8000/api
+REACT_APP_WS_URL=ws://localhost:8000/ws
+```
+
+```bash
+npm start
+```
+
+> Por defecto React escucha en `http://localhost:3000`.
 
 ---
 
@@ -193,6 +209,12 @@ Para problemas comunes, ver sección 9: **TROUBLESHOOTING** en `GUIA_DESPLIEGUE_
 - Logs de Apache: `sudo tail -f /var/log/apache2/vialtros-error.log`
 - GitHub Actions: https://github.com/Axwyk/Vialtros/actions
 
+**Funcionalidades del admin Django:**
+
+- Gestión de todos los modelos (User, Driver, Passenger, Route, Tracking)
+- Visualización y edición de registros directamente en la base de datos
+- Solo accesible para usuarios con `is_staff=True`
+
 ---
 
 ## Contacto / Ayuda
@@ -208,3 +230,16 @@ Para más información, consulta:
 **Proyecto:** Vialtros
 **Dominio:** vialtros.ds1.eleueleo.com
 **BD:** Neon (hidden-mud-15767585)
+
+## Checklist antes de producción
+
+- [ ] `DEBUG = False`
+- [ ] `SECRET_KEY` no hardcodeada (variable de entorno)
+- [ ] `ALLOWED_HOSTS` configurado
+- [ ] Base de datos PostgreSQL configurada
+- [ ] Redis activo para Django Channels
+- [ ] CORS configurado solo con orígenes permitidos
+- [ ] HTTPS habilitado (certificado SSL)
+- [ ] Variables de entorno del frontend apuntan a URLs de producción (`https://` y `wss://`)
+- [ ] `npm run build` ejecutado para generar los estáticos
+- [ ] Archivos estáticos Django recolectados: `python manage.py collectstatic`

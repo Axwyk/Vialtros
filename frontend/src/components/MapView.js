@@ -665,6 +665,25 @@ export default function MapView({
     if (latestPoint || originCoords || destinationCoords || userCoords) return 14;
     return 2;
   }, [focusAllVehicles, latestPoint, originCoords, destinationCoords, userCoords]);
+
+  function resolvePoiCoords() {
+    if (Array.isArray(vehiclePoint)) {
+      return vehiclePoint;
+    }
+
+    if (mapRef?.getCenter) {
+      const mapCenter = mapRef.getCenter();
+      if (
+        Number.isFinite(mapCenter?.lat) &&
+        Number.isFinite(mapCenter?.lng)
+      ) {
+        return [mapCenter.lat, mapCenter.lng];
+      }
+    }
+
+    return Array.isArray(center) ? center : null;
+  }
+
   const loadLocalPois = useCallback(async () => {
     try {
       const res = await fetch("/pois.json");
@@ -883,7 +902,7 @@ out center;`;
 
   // Fetch POIs solo una vez por sesión, o si el vehículo se movió más de 500m
   useEffect(() => {
-    const coords = Array.isArray(vehiclePoint) ? vehiclePoint : null;
+    const coords = resolvePoiCoords();
     if (!coords) return undefined;
 
     const last = lastPoisFetchCoordsRef.current;
@@ -902,7 +921,7 @@ out center;`;
       fetchPOIs(coords[0], coords[1], radius);
     }, 5000);
     return () => { if (poisTimerRef.current) clearTimeout(poisTimerRef.current); };
-  }, [vehiclePoint, mapRef, fetchPOIs]);
+  }, [vehiclePoint, mapRef, center, fetchPOIs]);
 
   // FitBounds: ajusta el viewport cuando cambian las coordenadas de la ruta
   useEffect(() => {
